@@ -5,8 +5,9 @@ project(BaSpaCho)
 set(CMAKE_CXX_STANDARD 17)
 
 
-# glog
 include(FetchContent)
+
+# glog
 FetchContent_Declare(
   glog
   URL https://github.com/google/glog/archive/refs/tags/v0.5.0.zip
@@ -21,14 +22,9 @@ set(glog_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glog)
 message("Glog Source = " ${glog_SOURCE_DIR})
 message("Glog Library Dir = " ${glog_BINARY_DIR})
-# message("Glog Include Directory = " ${GLOG_INCLUDE_DIR})
-
-# link_directories(${CMAKE_SOURCE_DIR}/lib)
-# include_directories(${glog_SOURCE_DIR}/include)
 
 
 # gtest
-include(FetchContent)
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
@@ -46,6 +42,23 @@ message("GTest Library Dir = " ${gtest_BINARY_DIR})
 message("GMock Source = " ${gmock_SOURCE_DIR})
 message("GMock Library Dir = " ${gmock_BINARY_DIR})
 include(GoogleTest)
+
+
+# eigen
+FetchContent_Declare(
+  eigen
+  URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip
+	)
+if(NOT eigen_POPULATED)
+  FetchContent_Populate(eigen)
+  set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE BOOL "")
+  add_subdirectory(${eigen_SOURCE_DIR} ${eigen_BINARY_DIR} EXCLUDE_FROM_ALL)
+  unset(CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
+endif()
+FetchContent_MakeAvailable(eigen)
+message("Eigen Source = " ${eigen_SOURCE_DIR})
+message("Eigen Library Dir = " ${eigen_BINARY_DIR})
+include_directories(${eigen_SOURCE_DIR})
 
 
 add_library(BaSpaCho BlockMatrix.cpp)

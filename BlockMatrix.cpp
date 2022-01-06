@@ -1,29 +1,11 @@
 
 #include <glog/logging.h>
+#include <iostream>
 #include "BlockMatrix.h"
 #include "Utils.h"
 
 using namespace std;
 
-#if 0
-std::vector<uint64_t> paramStart; // num_params + 1
-std::vector<uint64_t> paramToAggreg; // num_params
-std::vector<uint64_t> aggregStart; // num_aggregs + 1
-std::vector<uint64_t> aggregParamStart; // num_aggregs + 1
-
-// A matrix block is identified by a pair of param x aggreg
-std::vector<uint64_t> blockColDataPtr; // num_aggregs + 1
-std::vector<uint64_t> blockRowParam; // num_blocks
-std::vector<uint64_t> blockData; // num_blocks
-
-// We also need to know about the "gathered" blocks, where we have
-// grouped the consecutive row params into aggregates.
-// This is because we will process the colum of blocks taking not
-// one row at a time, but an aggregate of rows.
-std::vector<uint64_t> blockColGatheredDataPtr; // num_aggregs + 1
-std::vector<uint64_t> blockRowAggreg; // num_gathered_blocks
-std::vector<uint64_t> blockRowAggregParamPtr; // num_gathered_blocks
-#endif
 
 BlockMatrixSkel initBlockMatrixSkel(const vector<uint64_t>& paramStart,
                                     const vector<uint64_t>& aggregParamStart,
@@ -100,4 +82,48 @@ BlockMatrixSkel initBlockMatrixSkel(const vector<uint64_t>& paramStart,
    retv.blockData.push_back(dataPtr);
     
    return retv;
+}
+
+Eigen::MatrixXd densify(const BlockMatrixSkel& skel, const std::vector<double>& data) {
+    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    CHECK_EQ(totData, data.size());
+
+    uint64_t totSize = skel.paramStart[skel.paramStart.size() - 1];
+    Eigen::MatrixXd retv(totSize, totSize);
+
+    for(size_t a = 0; a < skel.blockColDataPtr.size() - 1; a++) {
+        uint64_t aggregStart = skel.aggregStart[a];
+        uint64_t aggregSize = skel.aggregStart[a+1] - aggregStart;
+        uint64_t colStart = skel.blockColDataPtr[a];
+        uint64_t colEnd = skel.blockColDataPtr[a+1];
+        for(uint64_t i = colStart; i < colEnd; i++) {
+            uint64_t p = skel.blockRowParam[i];
+            uint64_t paramStart = skel.paramStart[p];
+            uint64_t paramSize = skel.paramStart[p+1] - paramStart;
+            uint64_t dataPtr = skel.blockData[i];
+
+            retv.block(paramStart, aggregStart, paramSize, aggregSize) =
+                Eigen::Map<const MatRMaj<double>>(data.data() + dataPtr, paramSize, aggregSize);
+        }
+    }
+
+    return retv;
+}
+
+void damp(const BlockMatrixSkel& skel, std::vector<double>& data, double alpha, double beta) {
+    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    CHECK_EQ(totData, data.size());
+
+    uint64_t totSize = skel.paramStart[skel.paramStart.size() - 1];
+
+    for(size_t a = 0; a < skel.blockColDataPtr.size() - 1; a++) {
+        uint64_t aggregStart = skel.aggregStart[a];
+        uint64_t aggregSize = skel.aggregStart[a+1] - aggregStart;
+        uint64_t colStart = skel.blockColDataPtr[a];
+        uint64_t dataPtr = skel.blockData[colStart];
+
+        Eigen::Map<MatRMaj<double>> block(data.data() + dataPtr, aggregSize, aggregSize);
+        block.diagonal() *= (1 + alpha);
+        block.diagonal().array() += beta;
+    }
 }

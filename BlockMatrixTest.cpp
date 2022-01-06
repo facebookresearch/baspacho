@@ -1,7 +1,11 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <iostream>
+#include <numeric>
+#include <sstream>
 #include "BlockMatrix.h"
+#include <Eigen/Eigenvalues>
 
 
 #if 0
@@ -56,4 +60,86 @@ TEST(BlockMatrix, BasicAssertions) {
     ASSERT_THAT(skel.blockColGatheredDataPtr, ElementsAre(0, 4, 8, 11, 13, 15, 16));
     ASSERT_THAT(skel.blockRowAggreg, ElementsAre(0, 1, 3, 5,   1, 2, 4, 5,   2, 3, 5,   3, 5,   4, 5,   5));
     ASSERT_THAT(skel.blockRowAggregParamPtr, ElementsAre(0, 1, 3, 4,  0, 2, 3, 4,   0, 1, 3,   0, 2,   0, 1,   0));
+}
+
+
+TEST(BlockMatrix, Densify) {
+    vector<uint64_t> paramStart {0,   1, 2,   4,   5, 7,   9,   12, 14, 16};
+    vector<uint64_t> aggregParamStart {0, 1, 3, 4, 6, 7, 9};
+    vector<vector<uint64_t>> columnParams {
+        {0, 1, 2, 5, 8}, {1, 2, 3, 6, 7}, {3, 4, 5, 8}, {4, 5, 7}, {6, 8}, {7, 8} };
+    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart, columnParams);
+
+    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    vector<double> data(totData);
+    iota(data.begin(), data.end(), 13);
+    Eigen::MatrixXd mat = densify(skel, data);
+
+    std::stringstream ss;
+    ss << mat;
+    std::string expected = 
+        " 13   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0\n"
+        " 14  21  22  23   0   0   0   0   0   0   0   0   0   0   0   0\n"
+        " 15  24  25  26   0   0   0   0   0   0   0   0   0   0   0   0\n"
+        " 16  27  28  29   0   0   0   0   0   0   0   0   0   0   0   0\n"
+        "  0  30  31  32  48   0   0   0   0   0   0   0   0   0   0   0\n"
+        "  0   0   0   0  49  55  56  57  58   0   0   0   0   0   0   0\n"
+        "  0   0   0   0  50  59  60  61  62   0   0   0   0   0   0   0\n"
+        " 17   0   0   0  51  63  64  65  66   0   0   0   0   0   0   0\n"
+        " 18   0   0   0  52  67  68  69  70   0   0   0   0   0   0   0\n"
+        "  0  33  34  35   0   0   0   0   0  79  80  81   0   0   0   0\n"
+        "  0  36  37  38   0   0   0   0   0  82  83  84   0   0   0   0\n"
+        "  0  39  40  41   0   0   0   0   0  85  86  87   0   0   0   0\n"
+        "  0  42  43  44   0  71  72  73  74   0   0   0  94  95  96  97\n"
+        "  0  45  46  47   0  75  76  77  78   0   0   0  98  99 100 101\n"
+        " 19   0   0   0  53   0   0   0   0  88  89  90 102 103 104 105\n"
+        " 20   0   0   0  54   0   0   0   0  91  92  93 106 107 108 109";
+
+    ASSERT_EQ(ss.str(), expected);
+}
+
+
+TEST(BlockMatrix, Damp) {
+    vector<uint64_t> paramStart {0,   1, 2,   4,   5, 7,   9,   12, 14, 16};
+    vector<uint64_t> aggregParamStart {0, 1, 3, 4, 6, 7, 9};
+    vector<vector<uint64_t>> columnParams {
+        {0, 1, 2, 5, 8}, {1, 2, 3, 6, 7}, {3, 4, 5, 8}, {4, 5, 7}, {6, 8}, {7, 8} };
+    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart, columnParams);
+
+    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    vector<double> data(totData);
+    iota(data.begin(), data.end(), 13);
+
+    Eigen::MatrixXd mat = densify(skel, data);
+
+    double alpha = 2.0, beta = 100.0;
+    damp(skel, data, alpha, beta);
+    
+    Eigen::MatrixXd matDamped = densify(skel, data);
+
+    mat.diagonal() *= (1.0 + alpha);
+    mat.diagonal().array() += beta;
+    ASSERT_NEAR((mat - matDamped).norm(), 0, 1e-5);
+}
+
+
+TEST(BlockMatrix, Cholesky) {
+    vector<uint64_t> paramStart {0,   1, 2,   4,   5, 7,   9,   12, 14, 16};
+    vector<uint64_t> aggregParamStart {0, 1, 3, 4, 6, 7, 9};
+    vector<vector<uint64_t>> columnParams {
+        {0, 1, 2, 5, 8}, {1, 2, 3, 6, 7}, {3, 4, 5, 8}, {4, 5, 7}, {6, 8}, {7, 8} };
+    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart, columnParams);
+
+    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    vector<double> data(totData);
+    iota(data.begin(), data.end(), 13);
+
+    double alpha = 2.0, beta = 100.0;
+    damp(skel, data, alpha, beta);
+    
+    Eigen::MatrixXd matDamped = densify(skel, data);
+    std::cout << matDamped << std::endl;
+
+    Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(matDamped);
+    std::cout << matDamped << std::endl;
 }

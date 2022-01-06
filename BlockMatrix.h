@@ -4,8 +4,12 @@
 #include <unordered_map>
 #include <cstdint>
 #include <limits>
+#include <Eigen/Geometry>
 
 constexpr uint64_t kInvalid = std::numeric_limits<uint64_t>::max();
+
+template<typename T>
+using MatRMaj = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
 struct BlockMatrixSkel {
     std::vector<uint64_t> paramStart; // num_params + 1
@@ -30,3 +34,7 @@ struct BlockMatrixSkel {
 BlockMatrixSkel initBlockMatrixSkel(const std::vector<uint64_t>& paramStart,
                                     const std::vector<uint64_t>& aggregParamStart,
                                     const std::vector<std::vector<uint64_t>>& columnParams);
+
+Eigen::MatrixXd densify(const BlockMatrixSkel& skel, const std::vector<double>& data);
+
+void damp(const BlockMatrixSkel& skel, std::vector<double>& data, double alpha, double beta);
