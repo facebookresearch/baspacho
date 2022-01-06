@@ -3,6 +3,12 @@
 #include "BlockStructure.h"
 #include "Utils.h"
 
+BlockStructure::BlockStructure(const std::vector<uint64_t>& paramSize,
+                               const std::vector<std::set<uint64_t>>& colBlocks)
+	: paramSize(paramSize), colBlocks(colBlocks) {
+	CHECK_EQ(paramSize.size(), colBlocks.size());
+}
+
 // naive ATM, but shoud work. in the future, adapt simplicial cholesky algo.
 void BlockStructure::addBlocksForEliminationOfRange(uint64_t start, uint64_t end) {
 	for(int i = start; i < end; i++) {

@@ -20,14 +20,15 @@ struct BlockMatrixSkel {
     std::vector<uint64_t> blockColDataPtr; // num_aggregs + 1
     std::vector<uint64_t> blockRowParam; // num_blocks
     std::vector<uint64_t> blockData; // num_blocks + 1
+    std::vector<uint64_t> endBlockNumRowsAbove; // num_blocks
 
     // We also need to know about the "gathered" blocks, where we have
     // grouped the consecutive row params into aggregates.
     // This is because we will process the colum of blocks taking not
     // one row at a time, but an aggregate of rows.
     std::vector<uint64_t> blockColGatheredDataPtr; // num_aggregs + 1
-    std::vector<uint64_t> blockRowAggreg; // num_gathered_blocks
-    std::vector<uint64_t> blockRowAggregParamPtr; // num_gathered_blocks
+    std::vector<uint64_t> blockRowAggreg; // num_gathered_blocks + num_aggregs
+    std::vector<uint64_t> blockRowAggregParamPtr; // num_gathered_blocks + num_aggregs
 };
 
 BlockMatrixSkel initBlockMatrixSkel(const std::vector<uint64_t>& paramStart,

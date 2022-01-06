@@ -61,7 +61,7 @@ message("Eigen Library Dir = " ${eigen_BINARY_DIR})
 include_directories(${eigen_SOURCE_DIR})
 
 
-add_library(BaSpaCho BlockMatrix.cpp BlockStructure.cpp)
+add_library(BaSpaCho BlockMatrix.cpp BlockStructure.cpp Factor.cpp)
 target_link_libraries (BaSpaCho glog::glog)
 
 
@@ -71,11 +71,21 @@ add_executable(
   BlockMatrixTest
   BlockMatrixTest.cpp
 	)
-# target_include_directories(BlockMatrixTest INTERFACE ${gtest_SOURCE_DIR}/include)
+add_executable(
+  FactorTest
+  FactorTest.cpp
+	)
 target_link_libraries(
   BlockMatrixTest
 	BaSpaCho
   gtest_main
 	gmock
 )
+target_link_libraries(
+  FactorTest
+	BaSpaCho
+  gtest_main
+	gmock
+)
 gtest_discover_tests(BlockMatrixTest)
+gtest_discover_tests(FactorTest)

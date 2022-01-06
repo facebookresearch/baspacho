@@ -10,9 +10,7 @@ struct BlockStructure {
     std::vector<std::set<uint64_t>> colBlocks;
 
     BlockStructure(const std::vector<uint64_t>& paramSize,
-                   const std::vector<std::set<uint64_t>>& colBlocks)
-        : paramSize(paramSize), colBlocks(colBlocks) {
-    }
+                   const std::vector<std::set<uint64_t>>& colBlocks);
 
     void addBlocksForEliminationOfRange(uint64_t start, uint64_t end);
 };

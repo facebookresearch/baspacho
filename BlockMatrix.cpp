@@ -63,11 +63,14 @@ BlockMatrixSkel initBlockMatrixSkel(const vector<uint64_t>& paramStart,
         retv.blockColDataPtr[a] = retv.blockRowParam.size();
         retv.blockColGatheredDataPtr[a] = retv.blockRowAggreg.size();
         uint64_t currentRowAggreg = kInvalid;
+        uint64_t numRowsSkipped = 0;
         for(size_t i = 0; i < columnParams[a].size(); i++) {
             uint64_t p = columnParams[a][i];
             retv.blockRowParam.push_back(p);
             retv.blockData.push_back(dataPtr);
             dataPtr += aDataSize * (paramStart[p+1] - paramStart[p]);
+            numRowsSkipped += paramStart[p+1] - paramStart[p];
+            retv.endBlockNumRowsAbove.push_back(numRowsSkipped);
 
             uint64_t rowAggreg = retv.paramToAggreg[p];
             if(rowAggreg != currentRowAggreg) {
@@ -76,6 +79,8 @@ BlockMatrixSkel initBlockMatrixSkel(const vector<uint64_t>& paramStart,
                 retv.blockRowAggregParamPtr.push_back(i);
             }
         }
+        retv.blockRowAggreg.push_back(kInvalid);
+        retv.blockRowAggregParamPtr.push_back(columnParams[a].size());
    }
    retv.blockColDataPtr[numAggregs] = retv.blockRowParam.size();
    retv.blockColGatheredDataPtr[numAggregs] = retv.blockRowAggreg.size();

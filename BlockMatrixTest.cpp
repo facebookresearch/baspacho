@@ -57,10 +57,12 @@ TEST(BlockMatrix, BasicAssertions) {
     ASSERT_THAT(skel.blockRowParam, ElementsAre(0, 1, 2, 5, 8, 1, 2, 3, 6, 7, 3, 4, 5, 8, 4, 5, 7, 6, 8, 7, 8));
     // 1x{1, 1, 2, 2, 2}, 3x{1, 2, 1, 3, 2}, 1x{1, 2, 2, 2}, 4x{2, 2, 2}, 3x{3, 2}, 4x{2, 2}
     ASSERT_THAT(skel.blockData, ElementsAre(0, 1, 2, 4, 6, 8, 11, 17, 20, 29, 35, 36, 38, 40, 42, 50, 58, 66, 75, 81, 89, 97));
+    ASSERT_THAT(skel.endBlockNumRowsAbove, ElementsAre(1, 2, 4, 6, 8,  1, 3, 4, 7, 9, 1, 3, 5, 7, 2, 4, 6, 3, 5, 2, 4));
     
-    ASSERT_THAT(skel.blockColGatheredDataPtr, ElementsAre(0, 4, 8, 11, 13, 15, 16));
-    ASSERT_THAT(skel.blockRowAggreg, ElementsAre(0, 1, 3, 5,   1, 2, 4, 5,   2, 3, 5,   3, 5,   4, 5,   5));
-    ASSERT_THAT(skel.blockRowAggregParamPtr, ElementsAre(0, 1, 3, 4,  0, 2, 3, 4,   0, 1, 3,   0, 2,   0, 1,   0));
+    ASSERT_THAT(skel.blockColGatheredDataPtr, ElementsAre(0, 5, 10, 14, 17, 20, 22));
+    ASSERT_THAT(skel.blockRowAggreg, ElementsAre(0, 1, 3, 5, kInvalid,  1, 2, 4, 5, kInvalid,
+                                                 2, 3, 5, kInvalid,  3, 5, kInvalid,  4, 5, kInvalid,  5, kInvalid));
+    ASSERT_THAT(skel.blockRowAggregParamPtr, ElementsAre(0, 1, 3, 4, 5,   0, 2, 3, 4, 5,   0, 1, 3, 4,   0, 2, 3,   0, 1, 2,   0, 2));
 }
 
 
