@@ -61,7 +61,7 @@ message("Eigen Library Dir = " ${eigen_BINARY_DIR})
 include_directories(${eigen_SOURCE_DIR})
 
 
-add_library(BaSpaCho BlockMatrix.cpp)
+add_library(BaSpaCho BlockMatrix.cpp BlockStructure.cpp)
 target_link_libraries (BaSpaCho glog::glog)
 
 

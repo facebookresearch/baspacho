@@ -5,6 +5,7 @@
 #include <numeric>
 #include <sstream>
 #include "BlockMatrix.h"
+#include "BlockStructure.h"
 #include <Eigen/Eigenvalues>
 
 
@@ -123,23 +124,89 @@ TEST(BlockMatrix, Damp) {
 }
 
 
-TEST(BlockMatrix, Cholesky) {
-    vector<uint64_t> paramStart {0,   1, 2,   4,   5, 7,   9,   12, 14, 16};
-    vector<uint64_t> aggregParamStart {0, 1, 3, 4, 6, 7, 9};
-    vector<vector<uint64_t>> columnParams {
-        {0, 1, 2, 5, 8}, {1, 2, 3, 6, 7}, {3, 4, 5, 8}, {4, 5, 7}, {6, 8}, {7, 8} };
-    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart, columnParams);
+TEST(BlockMatrix, SymbolicCholeskyFillIn) {
+    vector<uint64_t> paramSize {1, 2, 1, 2, 1, 2, 3, 2, 3, 2, 3, 2};
+    vector<set<uint64_t>> colBlocks {
+        {0, 6, 7}, {1, 8, 11}, {2, 7, 10}, {3, 11}, {4, 7, 10}, {5, 9}, {6, 7}, {7}, {8}, {9}, {10}, {11}
+    };
+    BlockStructure blockStruct(paramSize, colBlocks);
 
-    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
-    vector<double> data(totData);
-    iota(data.begin(), data.end(), 13);
+    vector<uint64_t> aggregParamStart {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    Eigen::MatrixXd verifyMat, computeMat;
+    {
+        GroupedBlockStructure gbs(blockStruct, aggregParamStart);
+        BlockMatrixSkel skel = initBlockMatrixSkel(gbs.paramStart, gbs.aggregParamStart, gbs.columnParams);
+        uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+        vector<double> data(totData, 1);
+        
+        std::cout << "original:\n" << densify(skel, data) << std::endl;
 
-    double alpha = 2.0, beta = 100.0;
-    damp(skel, data, alpha, beta);
+        // for comparison compute (dense) cholesky with eigen, and put 1 where we have a nonzero
+        damp(skel, data, 0, 1000);
+        verifyMat = densify(skel, data);
+        Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
+        for(size_t i = 0; i < verifyMat.size(); i++) {
+            verifyMat.data()[i] = (verifyMat.data()[i] != 0);
+        }
+    }
     
-    Eigen::MatrixXd matDamped = densify(skel, data);
-    std::cout << matDamped << std::endl;
+    std::cout << "verification:\n" << verifyMat << std::endl;
+    
+    {
+        blockStruct.addBlocksForEliminationOfRange(0, paramSize.size());
+        GroupedBlockStructure gbs(blockStruct, aggregParamStart);
+        BlockMatrixSkel skel = initBlockMatrixSkel(gbs.paramStart, gbs.aggregParamStart, gbs.columnParams);
+        uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+        vector<double> data(totData, 1);
+        computeMat = densify(skel, data);
+    }
+    std::cout << "computed:\n" << computeMat << std::endl;
+    
+    ASSERT_NEAR((verifyMat - computeMat).norm(), 0, 1e-5);
+}
 
-    Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(matDamped);
-    std::cout << matDamped << std::endl;
+TEST(BlockMatrix, SymbolicCholeskyFillInGrouped) {
+    vector<uint64_t> paramSize {1, 2, 1, 2, 1, 2, 3, 2, 3, 2, 3, 2};
+    vector<set<uint64_t>> colBlocks {
+        {0, 6, 7}, {1, 8, 11}, {2, 7, 10}, {3, 11}, {4, 7, 10}, {5, 9}, {6, 7}, {7}, {8}, {9}, {10}, {11}
+    };
+    BlockStructure blockStruct(paramSize, colBlocks);
+
+    vector<uint64_t> aggregParamStart {0, 1, 2, 3, 4, 5, 6, 8, 10, 12};
+    blockStruct.addBlocksForEliminationOfRange(0, paramSize.size());
+    GroupedBlockStructure gbs(blockStruct, aggregParamStart);
+    BlockMatrixSkel skel = initBlockMatrixSkel(gbs.paramStart, gbs.aggregParamStart, gbs.columnParams);
+    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    vector<double> data(totData, 1);
+    
+    std::stringstream ss;
+    ss << densify(skel, data);
+    std::string expected =
+        "1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
+        "1 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
+        "1 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
+        "1 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
+        "1 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
+        "1 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
+        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
+        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
+        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
+        "0 0 0 0 0 0 0 1 1 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
+        "0 0 0 0 0 0 0 1 1 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
+        "0 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 1 1 1 1 1\n"
+        "0 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 1 1 1 1 1\n"
+        "0 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 1 1 1 1 1\n"
+        "0 1 1 0 1 1 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1\n"
+        "0 1 1 0 1 1 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1";
+
+    std::cout << "computed:\n" << ss.str() << std::endl;    
+    ASSERT_EQ(ss.str(), expected);
 }
