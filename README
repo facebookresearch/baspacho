@@ -2,3 +2,4 @@
 cmake -S . -B build
 cmake --build build
 (cd build && make && ctest -R BlockMatrix -V)
+(cd build && make && ctest -R Factor -V)
