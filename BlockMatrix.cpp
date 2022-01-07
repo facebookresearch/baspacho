@@ -95,6 +95,7 @@ Eigen::MatrixXd densify(const BlockMatrixSkel& skel, const std::vector<double>& 
 
     uint64_t totSize = skel.paramStart[skel.paramStart.size() - 1];
     Eigen::MatrixXd retv(totSize, totSize);
+    retv.setZero();
 
     for(size_t a = 0; a < skel.blockColDataPtr.size() - 1; a++) {
         uint64_t aggregStart = skel.aggregStart[a];
