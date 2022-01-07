@@ -5,6 +5,28 @@ project(BaSpaCho)
 set(CMAKE_CXX_STANDARD 17)
 
 
+# cholmod
+# find_path(CHOLMOD_INCLUDES NAMES cholmod.h
+#           PATHS $ENV{CHOLMODDIR} ${INCLUDE_INSTALL_DIR}
+#           PATH_SUFFIXES suitesparse ufsparse
+#           REQUIRED)
+# find_library(CHOLMOD_LIBRARIES cholmod
+#              PATHS $ENV{CHOLMODDIR} ${LIB_INSTALL_DIR}
+#              REQUIRED)
+# message("Cholmod Source = " ${CHOLMOD_INCLUDES})
+# message("Cholmod Library Dir = " ${CHOLMOD_LIBRARIES})
+
+# amd
+find_path(AMD_INCLUDES NAMES amd.h
+          PATHS $ENV{CHOLMODDIR} ${INCLUDE_INSTALL_DIR}
+          PATH_SUFFIXES suitesparse ufsparse
+          REQUIRED)
+find_library(AMD_LIBRARIES amd
+             PATHS $ENV{CHOLMODDIR} ${LIB_INSTALL_DIR}
+             REQUIRED)
+message("Amd Source = " ${AMD_INCLUDES})
+message("Amd Library Dir = " ${AMD_LIBRARIES})
+
 include(FetchContent)
 
 # glog
@@ -61,8 +83,34 @@ message("Eigen Library Dir = " ${eigen_BINARY_DIR})
 include_directories(${eigen_SOURCE_DIR})
 
 
+# sophus (for testing on BA problem)
+FetchContent_Declare(
+  sophus
+  GIT_REPOSITORY https://github.com/strasdat/Sophus.git
+  GIT_TAG 49a7e1286910019f74fb4f0bb3e213c909f8e1b7
+)
+if(NOT sophus_POPULATED)
+  FetchContent_Populate(sophus)
+  set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE BOOL "")
+  add_subdirectory(${sophus_SOURCE_DIR} ${sophus_BINARY_DIR} EXCLUDE_FROM_ALL)
+  unset(CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
+endif()
+FetchContent_MakeAvailable(sophus)
+message("Sophus Source = " ${sophus_SOURCE_DIR})
+message("Sophus Library Dir = " ${sophus_BINARY_DIR})
+include_directories(${sophus_SOURCE_DIR})
+add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
+
+
 add_library(BaSpaCho BlockMatrix.cpp BlockStructure.cpp Factor.cpp)
 target_link_libraries (BaSpaCho glog::glog)
+
+
+add_executable(BAL_test BaAtLarge.cpp BaAtLargeTest.cpp)
+target_link_libraries (BAL_test glog::glog)
+
+add_executable(AMD_test AmdTest.cpp)
+target_link_libraries (AMD_test amd)
 
 
 enable_testing()
