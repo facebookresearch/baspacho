@@ -103,11 +103,11 @@ add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 
 add_library(BaSpaCho BlockMatrix.cpp BlockStructure.cpp Factor.cpp)
-target_link_libraries (BaSpaCho glog::glog)
+target_link_libraries (BaSpaCho glog::glog amd)
 
 
 add_executable(BAL_test BaAtLarge.cpp BaAtLargeTest.cpp)
-target_link_libraries (BAL_test glog::glog)
+target_link_libraries (BAL_test glog::glog BaSpaCho)
 
 add_executable(AMD_test AmdTest.cpp)
 target_link_libraries (AMD_test amd)

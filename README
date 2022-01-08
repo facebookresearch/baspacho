@@ -1,5 +1,9 @@
 
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 (cd build && make && ctest -R BlockMatrix -V)
 (cd build && make && ctest -R Factor -V)
+
+(cd build && make BAL_test) && build/BAL_test ~/BAL/problem-871-527480-pre.txt
+(cd build && make BAL_test) && build/BAL_test ~/BAL/problem-3068-310854-pre.txt
+(cd build && make BAL_test) && build/BAL_test ~/BAL/problem-4585-1324582-pre.txt

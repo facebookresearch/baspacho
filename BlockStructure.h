@@ -13,6 +13,10 @@ struct BlockStructure {
     BlockStructure(const std::vector<uint64_t> &paramSize,
                    const std::vector<std::set<uint64_t>> &colBlocks);
 
+    void applyAmdFrom(uint64_t start);
+
+    uint64_t numBlocksInCols(uint64_t start, uint64_t end);
+
     void addBlocksForEliminationOfRange(uint64_t start, uint64_t end);
 };
 
