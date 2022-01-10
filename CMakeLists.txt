@@ -102,7 +102,11 @@ include_directories(${sophus_SOURCE_DIR})
 add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 
-add_library(BaSpaCho BlockMatrix.cpp BlockStructure.cpp Factor.cpp)
+add_library(BaSpaCho
+            BlockMatrix.cpp
+            BlockStructure.cpp
+            Factor.cpp
+            SparseStructure.cpp)
 target_link_libraries (BaSpaCho glog::glog amd)
 
 
@@ -123,6 +127,10 @@ add_executable(
   FactorTest
   FactorTest.cpp
 	)
+add_executable(
+  SparseStructureTest
+  SparseStructureTest.cpp
+  )
 target_link_libraries(
   BlockMatrixTest
 	BaSpaCho
@@ -135,5 +143,12 @@ target_link_libraries(
   gtest_main
 	gmock
 )
+target_link_libraries(
+  SparseStructureTest
+	BaSpaCho
+  gtest_main
+	gmock
+)
 gtest_discover_tests(BlockMatrixTest)
 gtest_discover_tests(FactorTest)
+gtest_discover_tests(SparseStructureTest)

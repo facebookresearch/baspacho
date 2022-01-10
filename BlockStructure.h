@@ -4,6 +4,14 @@
 #include <set>
 #include <vector>
 
+#include "SparseStructure.h"
+
+struct BlockStructure2 {
+    std::vector<uint64_t> paramSize;
+
+    SparseStructure structure;
+};
+
 // TODO: this can certainly be improved, and made to use no containers with
 // dynamic allocation
 struct BlockStructure {
