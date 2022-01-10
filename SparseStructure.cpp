@@ -125,3 +125,135 @@ SparseStructure SparseStructure::symmetricPermutation(
 
     return retv;
 }
+
+SparseStructure SparseStructure::addEliminationEntries(uint64_t elimStart,
+                                                       uint64_t elimEnd) const {
+    uint64_t ord = order();
+    vector<int64_t> tags(ord), parent(ord, -1);
+
+    SparseStructure retv;
+    retv.ptrs.assign(ord + 1, 1);
+    for (uint64_t k = 0; k < elimEnd; ++k) {
+        /* L(k,:) pattern: all nodes reachable in etree from nz in A(0:k-1,k) */
+        parent[k] = -1; /* parent of k is not yet known */
+        tags[k] = k;    /* mark node k as visited */
+        // m_nonZerosPerCol[k] = 0; /* count of nonzeros in column k of L */
+        uint64_t start = ptrs[k];
+        uint64_t end = ptrs[k + 1];
+        for (uint64_t q = start; q < end; q++) {
+            uint64_t i = inds[q];
+            if (i >= k) {
+                continue;
+            }
+            if (i < elimStart) {
+                retv.ptrs[k]++; /* L (k,i) is nonzero */
+                continue;
+            }
+            /* follow path from i to root of etree, stop at flagged node */
+            for (; tags[i] != k; i = parent[i]) {
+                /* find parent of i if not yet determined */
+                if (parent[i] == -1) {
+                    parent[i] = k;
+                }
+
+                retv.ptrs[k]++; /* L (k,i) is nonzero */
+                tags[i] = k;
+            }
+        }
+    }
+    if (elimEnd < ord) {
+        LOG(INFO) << "Start: " << elimStart << ", End: " << elimEnd
+                  << ", Ord: " << ord;
+        uint64_t dataStart = ptrs[elimEnd];
+        uint64_t dataSize = ptrs[ord] - dataStart;
+        uint64_t rangeSize = elimEnd - elimStart;
+        vector<int64_t> sameColPrevRow(dataSize, -1);
+        vector<int64_t> sameColPtr(dataSize, -1);
+        vector<int64_t> colDataRefs(rangeSize, -1);
+        for (uint64_t k = elimEnd; k < ord; ++k) {
+            tags[k] = k; /* mark node k as visited */
+            uint64_t start = ptrs[k];
+            uint64_t end = ptrs[k + 1];
+            for (uint64_t q = start; q < end; q++) {
+                uint64_t qPtr = q - dataStart;
+                uint64_t i = inds[q];
+                if (tags[i] != k) {
+                    retv.ptrs[k]++; /* L (k,i) is nonzero */
+                    tags[i] = k;
+                }
+
+#if 0
+                if (i >= elimStart && i < elimEnd) {
+                    int64_t cRef = colDataRefs[i - elimStart];
+                    for (int64_t ref = cRef; ref != -1; ref = sameColPtr[ref]) {
+                        uint64_t r = sameColPrevRow[cRef];
+                        LOG(INFO) << "try: (" << k << ", " << r
+                                  << "): " << (tags[r] != k);
+                        if (tags[r] != k) {
+                            retv.ptrs[k]++; /* L (k,r) is nonzero */
+                            tags[r] = k;
+                        }
+                    }
+                    // append k to the list, next access to i-th col will
+                    // retrieve {row: k, ptr: cRef}
+                    sameColPrevRow[qPtr] = k;
+                    sameColPtr[qPtr] = cRef;
+                    colDataRefs[i - elimStart] = qPtr;
+                }
+#endif
+            }
+        }
+    }
+
+    uint64_t tot = 0;
+    for (uint64_t i = 0; i < ord; i++) {
+        uint64_t oldTot = tot;
+        tot += retv.ptrs[i];
+        retv.ptrs[i] = oldTot;
+    }
+    retv.ptrs[ord] = tot;
+    retv.inds.resize(tot);
+
+    return retv;
+
+    for (uint64_t k = 0; k < ord; ++k) {
+        /* L(k,:) pattern: all nodes reachable in etree from nz in
+         * A(0:k-1,k) */
+        parent[k] = -1; /* parent of k is not yet known */
+        tags[k] = k;    /* mark node k as visited */
+        retv.inds[retv.ptrs[k]++] = k;
+
+        // m_nonZerosPerCol[k] = 0; /* count of nonzeros in column k of L */
+        uint64_t start = ptrs[k];
+        uint64_t end = ptrs[k + 1];
+        for (uint64_t q = start; q < end; q++) {
+            uint64_t i = inds[q];
+            if (i < k) {
+                /* follow path from i to root of etree, stop at flagged node
+                 */
+                for (; tags[i] != k; i = parent[i]) {
+                    /* find parent of i if not yet determined */
+                    if (parent[i] == -1) {
+                        parent[i] = k;
+                    }
+                    // m_nonZerosPerCol[i]++; /* L (k,i) is nonzero */
+                    retv.inds[retv.ptrs[k]++] = i; /* L (k,i) is nonzero */
+                    tags[i] = k;                   /* mark i as visited */
+
+                    if (i < elimStart || i >= elimEnd) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    for (uint64_t i = ord; i >= 1; i--) {
+        retv.ptrs[i] = retv.ptrs[i - 1];
+    }
+    retv.ptrs[0] = 0;
+
+    retv.sortIndices();
+
+    return retv;
+}

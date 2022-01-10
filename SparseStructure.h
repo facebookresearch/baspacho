@@ -25,8 +25,17 @@ struct SparseStructure {
     // transpose
     SparseStructure transpose(bool sortIndices = true) const;
 
-    // assumes only a half (any) is present, result is lower/upper half csc
+    // assumes only a half (any) is present,
+    // result is lower/upper half csc (= upper/lower half csr)
     SparseStructure symmetricPermutation(const std::vector<uint64_t>& mapPerm,
                                          bool lowerHalf = true,
                                          bool sortIndices = true) const;
+
+    // assumes CSR lower diagonal matrix
+    SparseStructure addEliminationEntries(uint64_t start, uint64_t end) const;
+
+    SparseStructure extractRightBottom(uint64_t start);
+
+    SparseStructure replaceRightBottom(uint64_t start,
+                                       const SparseStructure& rb);
 };
