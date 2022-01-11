@@ -192,18 +192,37 @@ TEST(SparseStructure, IndependentEliminationFill) {
                     // algo
                     auto ssElim2 = ss.addIndependentEliminationFill(start, end);
 
-                    ASSERT_THAT(ssElim.ptrs,
-                                testing::ContainerEq(ssElim2.ptrs));
-                    ASSERT_THAT(ssElim.inds,
-                                testing::ContainerEq(ssElim2.inds));
+                    ASSERT_THAT(ssElim.ptrs, ContainerEq(ssElim2.ptrs));
+                    ASSERT_THAT(ssElim.inds, ContainerEq(ssElim2.inds));
                 }
             }
         }
     }
 }
 
-/*
+TEST(SparseStructure, FullEliminationFill) {
+    vector<uint64_t> sizes{10, 20, 30, 40};
+    vector<double> fills{0.15, 0.23, 0.3};
+    int seed = 37;
+    for (auto size : sizes) {
+        for (auto fill : fills) {
+            auto cols = randomCols(size, fill, seed++);
+            auto ss = columnsToCsrStruct(cols);
 
+            // naive (gt)
+            naiveAddEliminationEntries(cols, 0, size);
+            auto ssElim = columnsToCsrStruct(cols);
+
+            // algo
+            auto ssElim2 = ss.addFullEliminationFill();
+
+            ASSERT_THAT(ssElim.ptrs, ContainerEq(ssElim2.ptrs));
+            ASSERT_THAT(ssElim.inds, ContainerEq(ssElim2.inds));
+        }
+    }
+}
+
+/*
 TEST(SparseStructure, EliminationEntries) {
     vector<uint64_t> sizes{10, 20, 30, 40};
     vector<double> fills{0.15, 0.23, 0.3};
@@ -244,7 +263,7 @@ TEST(SparseStructure, EliminationEntries) {
                     LOG(INFO) << "ptrs exper:\n" << printInts(ssElim2.ptrs);
 
                     ASSERT_THAT(ssElim.ptrs,
-                                testing::ContainerEq(ssElim2.ptrs));
+                                ContainerEq(ssElim2.ptrs));
                     // LOG(INFO) << "ptrs exper:\n" << printInts(ssElim2.ptrs);
                     // LOG(INFO) << "inds exper:\n" << printInts(ssElim2.inds);
                 }
