@@ -126,13 +126,133 @@ SparseStructure SparseStructure::symmetricPermutation(
     return retv;
 }
 
-SparseStructure SparseStructure::addEliminationEntries(uint64_t elimStart,
-                                                       uint64_t elimEnd) const {
+SparseStructure SparseStructure::addIndependentEliminationFill(
+    uint64_t elimStart, uint64_t elimEnd) const {
+    uint64_t ord = order();
+
+    SparseStructure retv;
+    retv.ptrs.assign(ord + 1, 1);  // write sizes here initially
+    for (uint64_t k = 0; k < elimEnd; ++k) {
+        uint64_t start = ptrs[k];
+        uint64_t end = ptrs[k + 1];
+        for (uint64_t q = start; q < end; q++) {
+            uint64_t i = inds[q];
+            if (i >= k) {
+                continue;
+            }
+            // verify elimStart - elimEnd can be eliminated independently
+            if (k >= elimStart) {
+                CHECK((i < elimStart) || i >= elimEnd);
+            }
+            retv.ptrs[k]++;
+        }
+    }
+
+    // nothing to do, no entries are added
+    if (elimEnd == ord) {
+        return *this;
+    }
+
+    uint64_t dataStart = ptrs[elimEnd];
+    uint64_t dataSize = ptrs[ord] - dataStart;
+    uint64_t rangeSize = elimEnd - elimStart;
+    vector<int64_t> tags(ord, -1);                 // mark added row entries
+    vector<int64_t> colListRowIdx(dataSize, -1);   // col-list row index
+    vector<int64_t> colListPrevPtr(dataSize, -1);  // col-list pointer to prev
+    vector<int64_t> colDataRefs(rangeSize, -1);    // per-col list
+    for (uint64_t k = elimEnd; k < ord; ++k) {
+        uint64_t start = ptrs[k];
+        uint64_t end = ptrs[k + 1];
+        tags[k] = k;
+        for (uint64_t q = start; q < end; q++) {
+            uint64_t qPtr = q - dataStart;
+            uint64_t i = inds[q];
+            if (tags[i] != k) {
+                retv.ptrs[k]++; /* L(k,i) is nonzero */
+                tags[i] = k;
+            }
+
+            // for i in elim range, walk rows in same column
+            if (i >= elimStart && i < elimEnd) {
+                int64_t cRef = colDataRefs[i - elimStart];
+                for (int64_t ref = cRef; ref != -1; ref = colListPrevPtr[ref]) {
+                    uint64_t r = colListRowIdx[ref];
+                    if (tags[r] != k) {
+                        retv.ptrs[k]++; /* L(k,r) is nonzero */
+                        tags[r] = k;
+                    }
+                }
+                // append row value `k` to the col-list
+                colListRowIdx[qPtr] = k;
+                colListPrevPtr[qPtr] = cRef;
+                colDataRefs[i - elimStart] = qPtr;
+            }
+        }
+    }
+
+    // cumulate-sum ptrs: sizes -> pointers
+    uint64_t tot = 0;
+    for (uint64_t i = 0; i < ord; i++) {
+        uint64_t oldTot = tot;
+        tot += retv.ptrs[i];
+        retv.ptrs[i] = oldTot;
+    }
+    retv.ptrs[ord] = tot;
+
+    retv.inds.reserve(tot);
+    retv.inds.assign(inds.begin(), inds.begin() + dataStart);
+    retv.inds.resize(tot);
+
+    tags.assign(ord, -1);               // mark added row entries
+    colDataRefs.assign(rangeSize, -1);  // per-col list
+    for (uint64_t k = elimEnd; k < ord; ++k) {
+        uint64_t start = ptrs[k];
+        uint64_t end = ptrs[k + 1];
+        tags[k] = k;
+        retv.inds[retv.ptrs[k]++] = k;
+
+        for (uint64_t q = start; q < end; q++) {
+            uint64_t qPtr = q - dataStart;
+            uint64_t i = inds[q];
+            if (tags[i] != k) {
+                retv.inds[retv.ptrs[k]++] = i; /* L(k,i) is nonzero */
+                tags[i] = k;
+            }
+
+            // for i in elim range, walk rows in same column
+            if (i >= elimStart && i < elimEnd) {
+                int64_t cRef = colDataRefs[i - elimStart];
+                for (int64_t ref = cRef; ref != -1; ref = colListPrevPtr[ref]) {
+                    uint64_t r = colListRowIdx[ref];
+                    if (tags[r] != k) {
+                        retv.inds[retv.ptrs[k]++] = r; /* L(k,r) is nonzero */
+                        tags[r] = k;
+                    }
+                }
+                // move list start pointer
+                colDataRefs[i - elimStart] = qPtr;
+            }
+        }
+    }
+
+    // move back pointer that were advanced
+    for (uint64_t i = ord; i > elimEnd; i--) {
+        retv.ptrs[i] = retv.ptrs[i - 1];
+    }
+    retv.ptrs[elimEnd] = dataStart;
+
+    retv.sortIndices();
+
+    return retv;
+}
+
+#if 0
+SparseStructure SparseStructure::addFullEliminationFill() const {
     uint64_t ord = order();
     vector<int64_t> tags(ord), parent(ord, -1);
 
     SparseStructure retv;
-    retv.ptrs.assign(ord + 1, 1);
+    retv.ptrs.assign(ord + 1, 1);  // write sizes here initially
     for (uint64_t k = 0; k < elimEnd; ++k) {
         /* L(k,:) pattern: all nodes reachable in etree from nz in A(0:k-1,k) */
         parent[k] = -1; /* parent of k is not yet known */
@@ -167,8 +287,8 @@ SparseStructure SparseStructure::addEliminationEntries(uint64_t elimStart,
         uint64_t dataStart = ptrs[elimEnd];
         uint64_t dataSize = ptrs[ord] - dataStart;
         uint64_t rangeSize = elimEnd - elimStart;
-        vector<int64_t> sameColPrevRow(dataSize, -1);
-        vector<int64_t> sameColPtr(dataSize, -1);
+        vector<int64_t> colListRowIdx(dataSize, -1);
+        vector<int64_t> colListPrevPtr(dataSize, -1);
         vector<int64_t> colDataRefs(rangeSize, -1);
         for (uint64_t k = elimEnd; k < ord; ++k) {
             tags[k] = k; /* mark node k as visited */
@@ -185,8 +305,8 @@ SparseStructure SparseStructure::addEliminationEntries(uint64_t elimStart,
 #if 0
                 if (i >= elimStart && i < elimEnd) {
                     int64_t cRef = colDataRefs[i - elimStart];
-                    for (int64_t ref = cRef; ref != -1; ref = sameColPtr[ref]) {
-                        uint64_t r = sameColPrevRow[cRef];
+                    for (int64_t ref = cRef; ref != -1; ref = colListPrevPtr[ref]) {
+                        uint64_t r = colListRowIdx[cRef];
                         LOG(INFO) << "try: (" << k << ", " << r
                                   << "): " << (tags[r] != k);
                         if (tags[r] != k) {
@@ -196,8 +316,8 @@ SparseStructure SparseStructure::addEliminationEntries(uint64_t elimStart,
                     }
                     // append k to the list, next access to i-th col will
                     // retrieve {row: k, ptr: cRef}
-                    sameColPrevRow[qPtr] = k;
-                    sameColPtr[qPtr] = cRef;
+                    colListRowIdx[qPtr] = k;
+                    colListPrevPtr[qPtr] = cRef;
                     colDataRefs[i - elimStart] = qPtr;
                 }
 #endif
@@ -257,3 +377,4 @@ SparseStructure SparseStructure::addEliminationEntries(uint64_t elimStart,
 
     return retv;
 }
+#endif

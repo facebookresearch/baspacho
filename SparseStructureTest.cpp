@@ -151,6 +151,59 @@ static void naiveAddEliminationEntries(vector<set<uint64_t>>& columns,
     }
 }
 
+static vector<set<uint64_t>> makeIndependentElimSet(
+    vector<set<uint64_t>>& columns, uint64_t start, uint64_t end) {
+    vector<set<uint64_t>> retvCols(columns.size());
+    for (size_t i = 0; i < columns.size(); i++) {
+        if (i < start || i >= end) {
+            retvCols[i] = columns[i];
+        } else {
+            retvCols[i].insert(i);
+            for (uint64_t c : columns[i]) {
+                if (c >= end) {
+                    retvCols[i].insert(c);
+                }
+            }
+        }
+    }
+    return retvCols;
+}
+
+TEST(SparseStructure, IndependentEliminationFill) {
+    vector<uint64_t> sizes{10, 20, 30, 40};
+    vector<double> fills{0.15, 0.23, 0.3};
+    int seed = 37;
+    for (auto size : sizes) {
+        for (auto fill : fills) {
+            auto colsOrig = randomCols(size, fill, seed++);
+            auto ssOrig = columnsToCsrStruct(colsOrig);
+
+            for (int start = 0; start < size * 2 / 3; start += 3) {
+                for (int end = start + 3; end < size; end += 3) {
+                    vector<set<uint64_t>> cols =
+                        makeIndependentElimSet(colsOrig, start, end);
+
+                    auto ss = columnsToCsrStruct(cols);
+
+                    // naive (gt)
+                    naiveAddEliminationEntries(cols, start, end);
+                    auto ssElim = columnsToCsrStruct(cols);
+
+                    // algo
+                    auto ssElim2 = ss.addIndependentEliminationFill(start, end);
+
+                    ASSERT_THAT(ssElim.ptrs,
+                                testing::ContainerEq(ssElim2.ptrs));
+                    ASSERT_THAT(ssElim.inds,
+                                testing::ContainerEq(ssElim2.inds));
+                }
+            }
+        }
+    }
+}
+
+/*
+
 TEST(SparseStructure, EliminationEntries) {
     vector<uint64_t> sizes{10, 20, 30, 40};
     vector<double> fills{0.15, 0.23, 0.3};
@@ -177,7 +230,8 @@ TEST(SparseStructure, EliminationEntries) {
                         << "gt: "
                         << printCols(csrStructToColumns(ssElim.transpose()));
 
-                    auto ssElim2 = ssOrig.addEliminationEntries(start, end);
+                    auto ssElim2 =
+                        ssOrig.addIndependentEliminationFill(start, end);
 
                     LOG(INFO) << "xx.ptrs: " << printInts(ssElim2.ptrs);
                     // LOG(INFO) << "xx.inds: " << printInts(ssElim2.inds);
@@ -198,6 +252,7 @@ TEST(SparseStructure, EliminationEntries) {
         }
     }
 }
+*/
 
 /*TEST(SparseStructure, EliminationEntries) {
     auto cols = randomCols(10, 0.3, 37);
