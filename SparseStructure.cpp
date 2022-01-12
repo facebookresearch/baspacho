@@ -167,6 +167,9 @@ SparseStructure SparseStructure::addIndependentEliminationFill(
         for (uint64_t q = start; q < end; q++) {
             uint64_t qPtr = q - dataStart;
             uint64_t i = inds[q];
+            if (i >= k) {
+                continue;
+            }
             if (tags[i] != k) {
                 retv.ptrs[k]++; /* L(k,i) is nonzero */
                 tags[i] = k;
@@ -214,6 +217,9 @@ SparseStructure SparseStructure::addIndependentEliminationFill(
         for (uint64_t q = start; q < end; q++) {
             uint64_t qPtr = q - dataStart;
             uint64_t i = inds[q];
+            if (i >= k) {
+                continue;
+            }
             if (tags[i] != k) {
                 retv.inds[retv.ptrs[k]++] = i; /* L(k,i) is nonzero */
                 tags[i] = k;
@@ -258,7 +264,7 @@ SparseStructure SparseStructure::addFullEliminationFill() const {
     for (uint64_t k = 0; k < ord; ++k) {
         /* L(k,:) pattern: all nodes reachable in etree from nz in A(0:k-1,k) */
         parent[k] = -1; /* parent of k is not yet known */
-        tags[k] = k;    /* mark node k as visited, L(k,i) is nonzero */
+        tags[k] = k;    /* mark node k as visited, L(k,k) is nonzero */
 
         uint64_t start = ptrs[k];
         uint64_t end = ptrs[k + 1];
@@ -295,7 +301,7 @@ SparseStructure SparseStructure::addFullEliminationFill() const {
         /* L(k,:) pattern: all nodes reachable in etree from nz in A(0:k-1,k) */
         parent[k] = -1;                /* parent of k is not yet known */
         tags[k] = k;                   /* mark node k as visited */
-        retv.inds[retv.ptrs[k]++] = k; /* L(k,i) is nonzero */
+        retv.inds[retv.ptrs[k]++] = k; /* L(k,k) is nonzero */
 
         uint64_t start = ptrs[k];
         uint64_t end = ptrs[k + 1];
