@@ -31,9 +31,13 @@ std::string printAggreg(std::vector<uint64_t> ptrs, std::vector<uint64_t> inds,
 std::vector<std::set<uint64_t>> randomCols(uint64_t size, double fill,
                                            uint64_t seed);
 
+std::vector<std::set<uint64_t>> joinColums(
+    const std::vector<std::set<uint64_t>>& columns,
+    std::vector<uint64_t> aggregStart);
+
 std::vector<std::set<uint64_t>> csrStructToColumns(const SparseStructure& mat);
 
-SparseStructure columnsToCsrStruct(
+SparseStructure columnsToCscStruct(
     const std::vector<std::set<uint64_t>>& columns);
 
 void naiveAddEliminationEntries(std::vector<std::set<uint64_t>>& columns,

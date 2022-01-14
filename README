@@ -1,6 +1,6 @@
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake --build build -v
 (cd build && make && ctest -R BlockMatrix -V)
 (cd build && make && ctest -R Factor -V)
 (cd build && make SparseStructureTest && ctest -R SparseStructure)
@@ -9,3 +9,4 @@ cmake --build build
 (cd build && make BAL_test) && build/BAL_test ~/BAL/problem-871-527480-pre.txt
 (cd build && make BAL_test) && build/BAL_test ~/BAL/problem-3068-310854-pre.txt
 (cd build && make BAL_test) && build/BAL_test ~/BAL/problem-4585-1324582-pre.txt
+(cd build && make BAL_test VERBOSE=1) && build/BAL_test ~/BAL/problem-13682-4456117-pre.txt

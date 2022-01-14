@@ -7,7 +7,8 @@
 #include <sstream>
 
 #include "BlockMatrix.h"
-#include "BlockStructure.h"
+#include "SparseStructure.h"
+#include "TestingUtils.h"
 
 #if 0
 //CHEAT SHEET:
@@ -38,15 +39,16 @@ using namespace std;
 using namespace testing;
 
 TEST(BlockMatrix, BasicAssertions) {
-    // sizes:                    1    1  2    1    2  2    3    2   2
+    // sizes:                     1  1  2  1  2  2  3   2   2
     vector<uint64_t> paramStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
     // sizes:                          1  3  1  4  3  4
     vector<uint64_t> aggregParamStart{0, 1, 3, 4, 6, 7, 9};
-    vector<vector<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                          {3, 4, 5, 8},    {4, 5, 7},
-                                          {6, 8},          {7, 8}};
-    BlockMatrixSkel skel =
-        initBlockMatrixSkel(paramStart, aggregParamStart, columnParams);
+    vector<set<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                       {3, 4, 5, 8},    {4, 5, 7},
+                                       {6, 8},          {7, 8}};
+    SparseStructure sStruct = columnsToCscStruct(columnParams);
+    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
+                                               sStruct.ptrs, sStruct.inds);
 
     ASSERT_THAT(skel.paramStart, ContainerEq(paramStart));
     ASSERT_THAT(skel.aggregParamStart, ContainerEq(aggregParamStart));
@@ -54,8 +56,12 @@ TEST(BlockMatrix, BasicAssertions) {
     ASSERT_THAT(skel.aggregStart, ElementsAre(0, 1, 4, 5, 9, 12, 16));
 
     ASSERT_THAT(skel.blockColDataPtr, ElementsAre(0, 5, 10, 14, 17, 19, 21));
-    ASSERT_THAT(skel.blockRowParam, ElementsAre(0, 1, 2, 5, 8, 1, 2, 3, 6, 7, 3,
-                                                4, 5, 8, 4, 5, 7, 6, 8, 7, 8));
+    ASSERT_THAT(skel.blockRowParam, ElementsAre(0, 1, 2, 5, 8,  //
+                                                1, 2, 3, 6, 7,  //
+                                                3, 4, 5, 8,     //
+                                                4, 5, 7,        //
+                                                6, 8,           //
+                                                7, 8));
     // 1x{1, 1, 2, 2, 2}, 3x{1, 2, 1, 3, 2}, 1x{1, 2, 2, 2}, 4x{2, 2, 2}, 3x{3,
     // 2}, 4x{2, 2}
     ASSERT_THAT(skel.blockData,
@@ -67,23 +73,29 @@ TEST(BlockMatrix, BasicAssertions) {
 
     ASSERT_THAT(skel.blockColGatheredDataPtr,
                 ElementsAre(0, 5, 10, 14, 17, 20, 22));
-    ASSERT_THAT(
-        skel.blockRowAggreg,
-        ElementsAre(0, 1, 3, 5, kInvalid, 1, 2, 4, 5, kInvalid, 2, 3, 5,
-                    kInvalid, 3, 5, kInvalid, 4, 5, kInvalid, 5, kInvalid));
-    ASSERT_THAT(skel.blockRowAggregParamPtr,
-                ElementsAre(0, 1, 3, 4, 5, 0, 2, 3, 4, 5, 0, 1, 3, 4, 0, 2, 3,
-                            0, 1, 2, 0, 2));
+    ASSERT_THAT(skel.blockRowAggreg, ElementsAre(0, 1, 3, 5, kInvalid,  //
+                                                 1, 2, 4, 5, kInvalid,  //
+                                                 2, 3, 5, kInvalid,     //
+                                                 3, 5, kInvalid,        //
+                                                 4, 5, kInvalid,        //
+                                                 5, kInvalid));
+    ASSERT_THAT(skel.blockRowAggregParamPtr, ElementsAre(0, 1, 3, 4, 5,  //
+                                                         0, 2, 3, 4, 5,  //
+                                                         0, 1, 3, 4,     //
+                                                         0, 2, 3,        //
+                                                         0, 1, 2,        //
+                                                         0, 2));
 }
 
 TEST(BlockMatrix, Densify) {
     vector<uint64_t> paramStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
     vector<uint64_t> aggregParamStart{0, 1, 3, 4, 6, 7, 9};
-    vector<vector<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                          {3, 4, 5, 8},    {4, 5, 7},
-                                          {6, 8},          {7, 8}};
-    BlockMatrixSkel skel =
-        initBlockMatrixSkel(paramStart, aggregParamStart, columnParams);
+    vector<set<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                       {3, 4, 5, 8},    {4, 5, 7},
+                                       {6, 8},          {7, 8}};
+    SparseStructure sStruct = columnsToCscStruct(columnParams);
+    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
+                                               sStruct.ptrs, sStruct.inds);
 
     uint64_t totData = skel.blockData[skel.blockData.size() - 1];
     vector<double> data(totData);
@@ -116,11 +128,12 @@ TEST(BlockMatrix, Densify) {
 TEST(BlockMatrix, Damp) {
     vector<uint64_t> paramStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
     vector<uint64_t> aggregParamStart{0, 1, 3, 4, 6, 7, 9};
-    vector<vector<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                          {3, 4, 5, 8},    {4, 5, 7},
-                                          {6, 8},          {7, 8}};
-    BlockMatrixSkel skel =
-        initBlockMatrixSkel(paramStart, aggregParamStart, columnParams);
+    vector<set<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                       {3, 4, 5, 8},    {4, 5, 7},
+                                       {6, 8},          {7, 8}};
+    SparseStructure sStruct = columnsToCscStruct(columnParams);
+    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
+                                               sStruct.ptrs, sStruct.inds);
 
     uint64_t totData = skel.blockData[skel.blockData.size() - 1];
     vector<double> data(totData);
@@ -136,95 +149,4 @@ TEST(BlockMatrix, Damp) {
     mat.diagonal() *= (1.0 + alpha);
     mat.diagonal().array() += beta;
     ASSERT_NEAR((mat - matDamped).norm(), 0, 1e-5);
-}
-
-TEST(BlockMatrix, SymbolicCholeskyFillIn) {
-    vector<uint64_t> paramSize{1, 2, 1, 2, 1, 2, 3, 2, 3, 2, 3, 2};
-    vector<set<uint64_t>> colBlocks{{0, 6, 7},  {1, 8, 11}, {2, 7, 10}, {3, 11},
-                                    {4, 7, 10}, {5, 9},     {6, 7},     {7},
-                                    {8},        {9},        {10},       {11}};
-    BlockStructure blockStruct(paramSize, colBlocks);
-
-    vector<uint64_t> aggregParamStart{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-    Eigen::MatrixXd verifyMat, computeMat;
-    {
-        GroupedBlockStructure gbs(blockStruct, aggregParamStart);
-        BlockMatrixSkel skel = initBlockMatrixSkel(
-            gbs.paramStart, gbs.aggregParamStart, gbs.columnParams);
-        uint64_t totData = skel.blockData[skel.blockData.size() - 1];
-        vector<double> data(totData, 1);
-
-        std::cout << "original:\n" << densify(skel, data) << std::endl;
-
-        // for comparison compute (dense) cholesky with eigen, and put 1 where
-        // we have a nonzero
-        damp(skel, data, 0, 1000);
-        verifyMat = densify(skel, data);
-        Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
-        for (size_t i = 0; i < verifyMat.size(); i++) {
-            verifyMat.data()[i] = (verifyMat.data()[i] != 0);
-        }
-    }
-
-    std::cout << "verification:\n" << verifyMat << std::endl;
-
-    {
-        blockStruct.addBlocksForEliminationOfRange(0, paramSize.size());
-        GroupedBlockStructure gbs(blockStruct, aggregParamStart);
-        BlockMatrixSkel skel = initBlockMatrixSkel(
-            gbs.paramStart, gbs.aggregParamStart, gbs.columnParams);
-        uint64_t totData = skel.blockData[skel.blockData.size() - 1];
-        vector<double> data(totData, 1);
-        computeMat = densify(skel, data);
-    }
-    std::cout << "computed:\n" << computeMat << std::endl;
-
-    ASSERT_NEAR((verifyMat - computeMat).norm(), 0, 1e-5);
-}
-
-TEST(BlockMatrix, SymbolicCholeskyFillInGrouped) {
-    vector<uint64_t> paramSize{1, 2, 1, 2, 1, 2, 3, 2, 3, 2, 3, 2};
-    vector<set<uint64_t>> colBlocks{{0, 6, 7},  {1, 8, 11}, {2, 7, 10}, {3, 11},
-                                    {4, 7, 10}, {5, 9},     {6, 7},     {7},
-                                    {8},        {9},        {10},       {11}};
-    BlockStructure blockStruct(paramSize, colBlocks);
-
-    vector<uint64_t> aggregParamStart{0, 1, 2, 3, 4, 5, 6, 8, 10, 12};
-    blockStruct.addBlocksForEliminationOfRange(0, paramSize.size());
-    GroupedBlockStructure gbs(blockStruct, aggregParamStart);
-    BlockMatrixSkel skel = initBlockMatrixSkel(
-        gbs.paramStart, gbs.aggregParamStart, gbs.columnParams);
-    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
-    vector<double> data(totData, 1);
-
-    std::stringstream ss;
-    ss << densify(skel, data);
-    std::string expected =
-        "1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n"
-        "1 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
-        "1 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
-        "1 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
-        "1 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
-        "1 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0\n"
-        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
-        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
-        "0 1 1 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
-        "0 0 0 0 0 0 0 1 1 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
-        "0 0 0 0 0 0 0 1 1 0 0 0 0 0 1 1 1 1 1 0 0 0 0 0\n"
-        "0 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 1 1 1 1 1\n"
-        "0 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 1 1 1 1 1\n"
-        "0 0 0 1 0 0 1 0 0 1 1 1 1 1 0 0 0 0 0 1 1 1 1 1\n"
-        "0 1 1 0 1 1 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1\n"
-        "0 1 1 0 1 1 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1";
-
-    std::cout << "computed:\n" << ss.str() << std::endl;
-    ASSERT_EQ(ss.str(), expected);
 }

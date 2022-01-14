@@ -153,117 +153,65 @@ SparseStructure SparseStructure::symmetricPermutation(
 }
 
 SparseStructure SparseStructure::addIndependentEliminationFill(
-    uint64_t elimStart, uint64_t elimEnd) const {
+    uint64_t elimStart, uint64_t elimEnd, bool sortIdx) const {
     uint64_t ord = order();
-
-    SparseStructure retv;
-    retv.ptrs.assign(ord + 1, 1);  // write sizes here initially
-    for (uint64_t k = 0; k < elimEnd; ++k) {
-        uint64_t start = ptrs[k];
-        uint64_t end = ptrs[k + 1];
-        for (uint64_t q = start; q < end; q++) {
-            uint64_t i = inds[q];
-            if (i >= k) {
-                continue;
-            }
-            // verify elimStart - elimEnd can be eliminated independently
-            if (k >= elimStart) {
-                CHECK((i < elimStart) || i >= elimEnd);
-            }
-            retv.ptrs[k]++;
-        }
-    }
 
     // nothing to do, no entries are added
     if (elimEnd == ord) {
         return *this;
     }
 
-    uint64_t dataStart = ptrs[elimEnd];
-    uint64_t dataSize = ptrs[ord] - dataStart;
-    uint64_t rangeSize = elimEnd - elimStart;
-    vector<int64_t> tags(ord, -1);                 // mark added row entries
-    vector<int64_t> colListRowIdx(dataSize, -1);   // col-list row index
-    vector<int64_t> colListPrevPtr(dataSize, -1);  // col-list pointer to prev
-    vector<int64_t> colDataRefs(rangeSize, -1);    // per-col list
+    SparseStructure tThis = transpose(false);
+    for (uint64_t i = elimStart; i < elimEnd; i++) {  // sort subset
+        uint64_t start = tThis.ptrs[i];
+        uint64_t end = tThis.ptrs[i + 1];
+        std::sort(tThis.inds.begin() + start, tThis.inds.begin() + end);
+    }
+
+    SparseStructure retv;
+    retv.ptrs.reserve(ptrs.size());
+    retv.ptrs.assign(ptrs.begin(), ptrs.begin() + elimEnd + 1);
+    retv.inds.assign(inds.begin(), inds.begin() + ptrs[elimEnd]);
+
+    vector<int64_t> tags(ord, -1);  // mark added row entries
+    uint64_t numMatches = 0;
     for (uint64_t k = elimEnd; k < ord; ++k) {
         uint64_t start = ptrs[k];
         uint64_t end = ptrs[k + 1];
         tags[k] = k;
+        retv.inds.push_back(k);
         for (uint64_t q = start; q < end; q++) {
-            uint64_t qPtr = q - dataStart;
             uint64_t i = inds[q];
             if (i >= k) {
                 continue;
             }
             if (tags[i] != k) {
-                retv.ptrs[k]++; /* L(k,i) is nonzero */
+                retv.inds.push_back(i); /* L(k,i) is nonzero */
                 tags[i] = k;
             }
 
             // for i in elim range, walk rows in same column
             if (i >= elimStart && i < elimEnd) {
-                int64_t cRef = colDataRefs[i - elimStart];
-                for (int64_t ref = cRef; ref != -1; ref = colListPrevPtr[ref]) {
-                    uint64_t r = colListRowIdx[ref];
-                    if (tags[r] != k) {
-                        retv.ptrs[k]++; /* L(k,r) is nonzero */
-                        tags[r] = k;
+                uint64_t tStart = tThis.ptrs[i];
+                uint64_t tEnd = tThis.ptrs[i + 1];
+                for (uint64_t t = tStart; t < tEnd; t++) {
+                    uint64_t q = tThis.inds[t];
+                    if (q >= k) {
+                        break;  // tThis rows are sorted
+                    }
+                    if (tags[q] < k) {
+                        tags[q] = k;
+                        retv.inds.push_back(q); /* L(k,q) is nonzero */
                     }
                 }
-                // append row value `k` to the col-list
-                colListRowIdx[qPtr] = k;
-                colListPrevPtr[qPtr] = cRef;
-                colDataRefs[i - elimStart] = qPtr;
             }
         }
+        retv.ptrs.push_back(retv.inds.size());
     }
 
-    // cumulate-sum ptrs: sizes -> pointers
-    uint64_t tot = cumSum(retv.ptrs);
-    retv.inds.reserve(tot);
-    retv.inds.assign(inds.begin(), inds.begin() + dataStart);
-    retv.inds.resize(tot);
-
-    tags.assign(ord, -1);               // mark added row entries
-    colDataRefs.assign(rangeSize, -1);  // per-col list
-    for (uint64_t k = elimEnd; k < ord; ++k) {
-        uint64_t start = ptrs[k];
-        uint64_t end = ptrs[k + 1];
-        tags[k] = k;
-        retv.inds[retv.ptrs[k]++] = k;
-
-        for (uint64_t q = start; q < end; q++) {
-            uint64_t qPtr = q - dataStart;
-            uint64_t i = inds[q];
-            if (i >= k) {
-                continue;
-            }
-            if (tags[i] != k) {
-                retv.inds[retv.ptrs[k]++] = i; /* L(k,i) is nonzero */
-                tags[i] = k;
-            }
-
-            // for i in elim range, walk rows in same column
-            if (i >= elimStart && i < elimEnd) {
-                int64_t cRef = colDataRefs[i - elimStart];
-                for (int64_t ref = cRef; ref != -1; ref = colListPrevPtr[ref]) {
-                    uint64_t r = colListRowIdx[ref];
-                    if (tags[r] != k) {
-                        retv.inds[retv.ptrs[k]++] = r; /* L(k,r) is nonzero */
-                        tags[r] = k;
-                    }
-                }
-                // move list start pointer
-                colDataRefs[i - elimStart] = qPtr;
-            }
-        }
+    if (sortIdx) {
+        retv.sortIndices();
     }
-
-    // move back pointers advanced while writing entries (from elimEnd)
-    rewind(retv.ptrs, elimEnd, dataStart);
-
-    retv.sortIndices();
 
     return retv;
 }
@@ -354,4 +302,45 @@ std::vector<uint64_t> SparseStructure::fillReducingPermutation() const {
     LOG(INFO) << "result: " << result;
 
     return std::vector<uint64_t>(P.begin(), P.end());
+}
+
+SparseStructure SparseStructure::extractRightBottom(uint64_t startRow) {
+    uint64_t ord = order();
+    CHECK_LT(startRow, ord);
+    CHECK_GE(startRow, 0);
+    uint64_t newOrd = ord - startRow;
+
+    SparseStructure retv;
+    retv.ptrs.assign(newOrd + 1, 0);
+
+    for (uint64_t i = startRow; i < ord; i++) {
+        uint64_t start = ptrs[i];
+        uint64_t end = ptrs[i + 1];
+        for (uint64_t k = start; k < end; k++) {
+            uint64_t j = inds[k];
+            CHECK_LT(j, ord);
+            if (j >= startRow) {
+                retv.ptrs[i - startRow]++;
+            }
+        }
+    }
+
+    uint64_t tot = cumSum(retv.ptrs);
+    retv.inds.resize(tot);
+
+    for (uint64_t i = 0; i < ord; i++) {
+        uint64_t start = ptrs[i];
+        uint64_t end = ptrs[i + 1];
+        for (uint64_t k = start; k < end; k++) {
+            uint64_t j = inds[k];
+            CHECK_LT(j, ord);
+            if (j >= startRow) {
+                CHECK_LT(retv.ptrs[i - startRow], retv.inds.size());
+                retv.inds[retv.ptrs[i - startRow]++] = j - startRow;
+            }
+        }
+    }
+
+    rewind(retv.ptrs);
+    return retv;
 }

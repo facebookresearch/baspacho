@@ -8,15 +8,15 @@
 
 using namespace std;
 
-BlockMatrixSkel initBlockMatrixSkel(
-    const vector<uint64_t>& paramStart,
-    const vector<uint64_t>& aggregParamStart,
-    const vector<vector<uint64_t>>& columnParams) {
+BlockMatrixSkel initBlockMatrixSkel(const vector<uint64_t>& paramStart,
+                                    const vector<uint64_t>& aggregParamStart,
+                                    const vector<uint64_t>& colPtr,
+                                    const vector<uint64_t>& rowInd) {
     CHECK_GE(paramStart.size(), aggregParamStart.size());
     CHECK_GE(aggregParamStart.size(), 1);
     CHECK_EQ(paramStart.size() - 1,
              aggregParamStart[aggregParamStart.size() - 1]);
-    CHECK_EQ(columnParams.size(), aggregParamStart.size() - 1);
+    CHECK_EQ(colPtr.size(), aggregParamStart.size());
     CHECK(isStrictlyIncreasing(paramStart, 0, paramStart.size()));
     CHECK(isStrictlyIncreasing(aggregParamStart, 0, aggregParamStart.size()));
 
@@ -50,7 +50,9 @@ BlockMatrixSkel initBlockMatrixSkel(
     uint64_t dataPtr = 0;
     uint64_t gatheredDataPtr = 0;
     for (size_t a = 0; a < numAggregs; a++) {
-        CHECK(isStrictlyIncreasing(columnParams[a], 0, columnParams[a].size()));
+        uint64_t colStart = colPtr[a];
+        uint64_t colEnd = colPtr[a + 1];
+        CHECK(isStrictlyIncreasing(rowInd, colStart, colEnd));
         uint64_t aParamStart = aggregParamStart[a];
         uint64_t aParamEnd = aggregParamStart[a + 1];
         uint64_t aParamSize = aParamEnd - aParamStart;
@@ -58,19 +60,19 @@ BlockMatrixSkel initBlockMatrixSkel(
 
         // check the initial section is the set of params from `a`, and
         // therefore the full diagonal block is contained in the matrix
-        CHECK_GE(columnParams[a].size(), aParamSize)
+        CHECK_GE(colEnd - colStart, aParamSize)
             << "Column must contain full diagonal block";
-        CHECK_EQ(columnParams[a][0], aParamStart)
+        CHECK_EQ(rowInd[colStart], aParamStart)
             << "Column data must start at diagonal block";
-        CHECK_EQ(columnParams[a][aParamSize - 1], aParamEnd - 1)
+        CHECK_EQ(rowInd[colStart + aParamSize - 1], aParamEnd - 1)
             << "Column must contain full diagonal block";
 
         retv.blockColDataPtr[a] = retv.blockRowParam.size();
         retv.blockColGatheredDataPtr[a] = retv.blockRowAggreg.size();
         uint64_t currentRowAggreg = kInvalid;
         uint64_t numRowsSkipped = 0;
-        for (size_t i = 0; i < columnParams[a].size(); i++) {
-            uint64_t p = columnParams[a][i];
+        for (size_t i = colStart; i < colEnd; i++) {
+            uint64_t p = rowInd[i];
             retv.blockRowParam.push_back(p);
             retv.blockData.push_back(dataPtr);
             dataPtr += aDataSize * (paramStart[p + 1] - paramStart[p]);
@@ -81,11 +83,11 @@ BlockMatrixSkel initBlockMatrixSkel(
             if (rowAggreg != currentRowAggreg) {
                 currentRowAggreg = rowAggreg;
                 retv.blockRowAggreg.push_back(rowAggreg);
-                retv.blockRowAggregParamPtr.push_back(i);
+                retv.blockRowAggregParamPtr.push_back(i - colStart);
             }
         }
         retv.blockRowAggreg.push_back(kInvalid);
-        retv.blockRowAggregParamPtr.push_back(columnParams[a].size());
+        retv.blockRowAggregParamPtr.push_back(colEnd - colStart);
     }
     retv.blockColDataPtr[numAggregs] = retv.blockRowParam.size();
     retv.blockColGatheredDataPtr[numAggregs] = retv.blockRowAggreg.size();

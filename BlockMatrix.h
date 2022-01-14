@@ -36,7 +36,7 @@ struct BlockMatrixSkel {
 BlockMatrixSkel initBlockMatrixSkel(
     const std::vector<uint64_t>& paramStart,
     const std::vector<uint64_t>& aggregParamStart,
-    const std::vector<std::vector<uint64_t>>& columnParams);
+    const std::vector<uint64_t>& colPtr, const std::vector<uint64_t>& rowInd);
 
 Eigen::MatrixXd densify(const BlockMatrixSkel& skel,
                         const std::vector<double>& data);

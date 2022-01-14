@@ -34,9 +34,9 @@ struct SparseStructure {
                                          bool lowerHalf = true,
                                          bool sortIndices = true) const;
 
-    // assumes CSR lower diagonal matrix
-    SparseStructure addIndependentEliminationFill(uint64_t start,
-                                                  uint64_t end) const;
+    // assumes CSR lower-diagonal matrix
+    SparseStructure addIndependentEliminationFill(uint64_t start, uint64_t end,
+                                                  bool sortIdx = true) const;
 
     SparseStructure addFullEliminationFill() const;
 

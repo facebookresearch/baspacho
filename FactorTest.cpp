@@ -7,21 +7,22 @@
 #include <sstream>
 
 #include "BlockMatrix.h"
-#include "BlockStructure.h"
 #include "Factor.h"
+#include "SparseStructure.h"
+#include "TestingUtils.h"
 
 using namespace std;
 
 TEST(Factor, FactorAggreg) {
-    vector<uint64_t> paramSize{2, 3, 2, 3, 2, 3};
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
-    BlockStructure blockStruct(paramSize, colBlocks);
-
+    SparseStructure ss =
+        columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
+    vector<uint64_t> paramStart{0, 2, 5, 7, 10, 12, 15};
     vector<uint64_t> aggregParamStart{0, 2, 4, 6};
-    blockStruct.addBlocksForEliminationOfRange(0, paramSize.size());
-    GroupedBlockStructure gbs(blockStruct, aggregParamStart);
-    BlockMatrixSkel skel = initBlockMatrixSkel(
-        gbs.paramStart, gbs.aggregParamStart, gbs.columnParams);
+    SparseStructure groupedSs = columnsToCscStruct(
+        joinColums(csrStructToColumns(ss), aggregParamStart));
+    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
+                                               groupedSs.ptrs, groupedSs.inds);
     uint64_t totData = skel.blockData[skel.blockData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
@@ -38,18 +39,21 @@ TEST(Factor, FactorAggreg) {
 }
 
 TEST(Factor, Factor) {
-    vector<uint64_t> paramSize{2, 3, 2, 3, 2, 3};
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
-    BlockStructure blockStruct(paramSize, colBlocks);
-
+    SparseStructure ss =
+        columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
+    vector<uint64_t> paramStart{0, 2, 5, 7, 10, 12, 15};
     vector<uint64_t> aggregParamStart{0, 2, 4, 6};
-    blockStruct.addBlocksForEliminationOfRange(0, paramSize.size());
-    GroupedBlockStructure gbs(blockStruct, aggregParamStart);
-    BlockMatrixSkel skel = initBlockMatrixSkel(
-        gbs.paramStart, gbs.aggregParamStart, gbs.columnParams);
+    SparseStructure groupedSs = columnsToCscStruct(
+        joinColums(csrStructToColumns(ss), aggregParamStart));
+    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
+                                               groupedSs.ptrs, groupedSs.inds);
+
     uint64_t totData = skel.blockData[skel.blockData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
+    std::cout << "VERIF:\n" << densify(skel, data) << std::endl;
+
     damp(skel, data, 5, 50);
 
     Eigen::MatrixXd verifyMat = densify(skel, data);

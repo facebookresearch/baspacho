@@ -63,18 +63,18 @@ TEST(SparseStructure, IndependentEliminationFill) {
     for (auto size : sizes) {
         for (auto fill : fills) {
             auto colsOrig = randomCols(size, fill, seed++);
-            auto ssOrig = columnsToCsrStruct(colsOrig);
+            auto ssOrig = columnsToCscStruct(colsOrig).transpose();
 
             for (int start = 0; start < size * 2 / 3; start += 3) {
                 for (int end = start + 3; end < size; end += 3) {
                     vector<set<uint64_t>> cols =
                         makeIndependentElimSet(colsOrig, start, end);
 
-                    auto ss = columnsToCsrStruct(cols);
+                    auto ss = columnsToCscStruct(cols).transpose();
 
                     // naive (gt)
                     naiveAddEliminationEntries(cols, start, end);
-                    auto ssElim = columnsToCsrStruct(cols);
+                    auto ssElim = columnsToCscStruct(cols).transpose();
 
                     // algo
                     auto ssElim2 = ss.addIndependentEliminationFill(start, end);
@@ -94,11 +94,11 @@ TEST(SparseStructure, FullEliminationFill) {
     for (auto size : sizes) {
         for (auto fill : fills) {
             auto cols = randomCols(size, fill, seed++);
-            auto ss = columnsToCsrStruct(cols);
+            auto ss = columnsToCscStruct(cols).transpose();
 
             // naive (gt)
             naiveAddEliminationEntries(cols, 0, size);
-            auto ssElim = columnsToCsrStruct(cols);
+            auto ssElim = columnsToCscStruct(cols).transpose();
 
             // algo
             auto ssElim2 = ss.addFullEliminationFill();

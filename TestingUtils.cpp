@@ -98,6 +98,23 @@ vector<set<uint64_t>> randomCols(uint64_t size, double fill, uint64_t seed) {
     return columns;
 }
 
+std::vector<std::set<uint64_t>> joinColums(
+    const std::vector<std::set<uint64_t>>& columns,
+    std::vector<uint64_t> aggregStart) {
+    CHECK_EQ(aggregStart[aggregStart.size() - 1], columns.size());
+    std::vector<std::set<uint64_t>> retv;
+    for (uint64_t a = 0; a < aggregStart.size() - 1; a++) {
+        uint64_t start = aggregStart[a];
+        uint64_t end = aggregStart[a + 1];
+        std::set<uint64_t> colz;
+        for (uint64_t i = start; i < end; i++) {
+            colz.insert(columns[i].begin(), columns[i].end());
+        }
+        retv.push_back(colz);
+    }
+    return retv;
+}
+
 // helper
 vector<set<uint64_t>> csrStructToColumns(const SparseStructure& mat) {
     uint64_t ord = mat.order();
@@ -114,14 +131,14 @@ vector<set<uint64_t>> csrStructToColumns(const SparseStructure& mat) {
 }
 
 // helper
-SparseStructure columnsToCsrStruct(const vector<set<uint64_t>>& columns) {
+SparseStructure columnsToCscStruct(const vector<set<uint64_t>>& columns) {
     vector<uint64_t> ptrs, inds;
     for (const set<uint64_t>& col : columns) {
         ptrs.push_back(inds.size());
         inds.insert(inds.end(), col.begin(), col.end());
     }
     ptrs.push_back(inds.size());
-    return SparseStructure(ptrs, inds).transpose();  // csc to csr
+    return SparseStructure(ptrs, inds);  // csc to csr
 }
 
 // naive implementation

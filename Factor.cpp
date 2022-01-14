@@ -59,6 +59,7 @@ uint64_t bisect(const uint64_t* array, uint64_t size, uint64_t needle) {
     return a;
 }
 
+// returns (offset, stride)
 std::pair<uint64_t, uint64_t> findBlock(const BlockMatrixSkel& skel,
                                         uint64_t cParam, uint64_t rParam) {
     uint64_t aggreg = skel.paramToAggreg[cParam];

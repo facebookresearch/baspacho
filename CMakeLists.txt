@@ -104,7 +104,6 @@ add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 add_library(BaSpaCho
             BlockMatrix.cpp
-            BlockStructure.cpp
             EliminationTree.cpp
             Factor.cpp
             SparseStructure.cpp
@@ -146,12 +145,6 @@ target_link_libraries(
 )
 target_link_libraries(
   FactorTest
-	BaSpaCho
-  gtest_main
-	gmock
-)
-target_link_libraries(
-  SparseStructureTest
 	BaSpaCho
   gtest_main
 	gmock

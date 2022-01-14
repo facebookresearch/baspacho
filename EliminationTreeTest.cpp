@@ -44,7 +44,8 @@ TEST(EliminationTree, Build) {
         /* column 22: */ 2, 20, 21, 22,
         /* column 23: */ 6, 11, 12, 23};
 
-    SparseStructure ssOrig = SparseStructure(ptrs, inds).clear();  // lower half
+    SparseStructure ssOrig =
+        SparseStructure(ptrs, inds).clear();  // lower half csr
 
 #if 0
     vector<uint64_t> permutation = ssOrig.fillReducingPermutation();
