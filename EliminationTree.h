@@ -13,7 +13,7 @@ struct EliminationTree {
     void computeAggregateStruct();
 
     std::vector<uint64_t> paramSize;
-    const SparseStructure& ss;
+    const SparseStructure& ss;  // input
 
     // generated data, buildTree
     std::vector<int64_t> parent;
@@ -26,4 +26,12 @@ struct EliminationTree {
     // generated data, computeMerges
     std::vector<int64_t> mergeWith;
     uint64_t numMerges;
+
+    // generated computing aggregate struct
+    std::vector<uint64_t> colStart;
+    std::vector<uint64_t> rowParam;
+
+    std::vector<uint64_t> permutation;
+    std::vector<uint64_t> permInverse;
+    std::vector<uint64_t> aggregStart;
 };

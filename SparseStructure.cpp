@@ -2,8 +2,11 @@
 #include "SparseStructure.h"
 
 #include <glog/logging.h>
+#include <suitesparse/amd.h>
 
 #include <algorithm>
+
+#include "Utils.h"
 
 using namespace std;
 
@@ -21,7 +24,6 @@ SparseStructure SparseStructure::transpose(bool sortIndices) const {
     uint64_t ord = order();
     SparseStructure retv;
     retv.ptrs.assign(ord + 1, 0);
-    retv.inds.resize(inds.size());
 
     for (uint64_t i = 0; i < ord; i++) {
         uint64_t start = ptrs[i];
@@ -33,13 +35,8 @@ SparseStructure SparseStructure::transpose(bool sortIndices) const {
         }
     }
 
-    uint64_t tot = 0;
-    for (uint64_t i = 0; i < ord; i++) {
-        uint64_t oldTot = tot;
-        tot += retv.ptrs[i];
-        retv.ptrs[i] = oldTot;
-    }
-    retv.ptrs[ord] = tot;
+    uint64_t tot = cumSum(retv.ptrs);
+    retv.inds.resize(tot);
 
     for (uint64_t i = 0; i < ord; i++) {
         uint64_t start = ptrs[i];
@@ -52,14 +49,52 @@ SparseStructure SparseStructure::transpose(bool sortIndices) const {
         }
     }
 
-    for (uint64_t i = ord; i >= 1; i--) {
-        retv.ptrs[i] = retv.ptrs[i - 1];
-    }
-    retv.ptrs[0] = 0;
+    rewind(retv.ptrs);
 
     if (sortIndices) {
         retv.sortIndices();
     }
+
+    return retv;
+}
+
+// assumed square matrix
+SparseStructure SparseStructure::clear(bool lowerHalf) const {
+    uint64_t ord = order();
+    SparseStructure retv;
+    retv.ptrs.assign(ord + 1, 0);
+
+    for (uint64_t i = 0; i < ord; i++) {
+        uint64_t start = ptrs[i];
+        uint64_t end = ptrs[i + 1];
+        for (uint64_t k = start; k < end; k++) {
+            uint64_t j = inds[k];
+            CHECK_LT(j, ord);
+            if (i != j && (j > i) == lowerHalf) {
+                continue;
+            }
+            retv.ptrs[i]++;
+        }
+    }
+
+    uint64_t tot = cumSum(retv.ptrs);
+    retv.inds.resize(tot);
+
+    for (uint64_t i = 0; i < ord; i++) {
+        uint64_t start = ptrs[i];
+        uint64_t end = ptrs[i + 1];
+        for (uint64_t k = start; k < end; k++) {
+            uint64_t j = inds[k];
+            CHECK_LT(j, ord);
+            if (i != j && (j > i) == lowerHalf) {
+                continue;
+            }
+            CHECK_LT(retv.ptrs[i], retv.inds.size());
+            retv.inds[retv.ptrs[i]++] = j;
+        }
+    }
+
+    rewind(retv.ptrs);
 
     return retv;
 }
@@ -72,7 +107,6 @@ SparseStructure SparseStructure::symmetricPermutation(
 
     SparseStructure retv;
     retv.ptrs.assign(ord + 1, 0);
-    retv.inds.resize(inds.size());
 
     for (uint64_t i = 0; i < ord; i++) {
         uint64_t start = ptrs[i];
@@ -89,13 +123,8 @@ SparseStructure SparseStructure::symmetricPermutation(
         }
     }
 
-    uint64_t tot = 0;
-    for (uint64_t i = 0; i < ord; i++) {
-        uint64_t oldTot = tot;
-        tot += retv.ptrs[i];
-        retv.ptrs[i] = oldTot;
-    }
-    retv.ptrs[ord] = tot;
+    uint64_t tot = cumSum(retv.ptrs);
+    retv.inds.resize(tot);
 
     for (uint64_t i = 0; i < ord; i++) {
         uint64_t start = ptrs[i];
@@ -114,10 +143,7 @@ SparseStructure SparseStructure::symmetricPermutation(
         }
     }
 
-    for (uint64_t i = ord; i >= 1; i--) {
-        retv.ptrs[i] = retv.ptrs[i - 1];
-    }
-    retv.ptrs[0] = 0;
+    rewind(retv.ptrs);
 
     if (sortIndices) {
         retv.sortIndices();
@@ -194,14 +220,7 @@ SparseStructure SparseStructure::addIndependentEliminationFill(
     }
 
     // cumulate-sum ptrs: sizes -> pointers
-    uint64_t tot = 0;
-    for (uint64_t i = 0; i < ord; i++) {
-        uint64_t oldTot = tot;
-        tot += retv.ptrs[i];
-        retv.ptrs[i] = oldTot;
-    }
-    retv.ptrs[ord] = tot;
-
+    uint64_t tot = cumSum(retv.ptrs);
     retv.inds.reserve(tot);
     retv.inds.assign(inds.begin(), inds.begin() + dataStart);
     retv.inds.resize(tot);
@@ -241,11 +260,8 @@ SparseStructure SparseStructure::addIndependentEliminationFill(
         }
     }
 
-    // move back pointers that were advanced while writing entries
-    for (uint64_t i = ord; i > elimEnd; i--) {
-        retv.ptrs[i] = retv.ptrs[i - 1];
-    }
-    retv.ptrs[elimEnd] = dataStart;
+    // move back pointers advanced while writing entries (from elimEnd)
+    rewind(retv.ptrs, elimEnd, dataStart);
 
     retv.sortIndices();
 
@@ -287,13 +303,7 @@ SparseStructure SparseStructure::addFullEliminationFill() const {
     }
 
     // cumulate-sum ptrs: sizes -> pointers
-    uint64_t tot = 0;
-    for (uint64_t i = 0; i < ord; i++) {
-        uint64_t oldTot = tot;
-        tot += retv.ptrs[i];
-        retv.ptrs[i] = oldTot;
-    }
-    retv.ptrs[ord] = tot;
+    uint64_t tot = cumSum(retv.ptrs);
     retv.inds.resize(tot);
 
     // walk again, saving entries in rows
@@ -322,13 +332,26 @@ SparseStructure SparseStructure::addFullEliminationFill() const {
         }
     }
 
-    // move back pointers that were advanced while writing entries
-    for (uint64_t i = ord; i >= 1; i--) {
-        retv.ptrs[i] = retv.ptrs[i - 1];
-    }
-    retv.ptrs[0] = 0;
+    rewind(retv.ptrs);
 
     retv.sortIndices();
 
     return retv;
+}
+
+std::vector<uint64_t> SparseStructure::fillReducingPermutation() const {
+    std::vector<int64_t> colPtr(ptrs.begin(), ptrs.end()),
+        rowInd(inds.begin(), inds.end());
+    std::vector<int64_t> P(colPtr.size() - 1);
+    double Control[AMD_CONTROL], Info[AMD_INFO];
+
+    LOG(INFO) << "run AMD...";
+    amd_l_defaults(Control);
+    amd_l_control(Control);
+
+    int result = amd_l_order(P.size(), colPtr.data(), rowInd.data(), P.data(),
+                             Control, Info);
+    LOG(INFO) << "result: " << result;
+
+    return std::vector<uint64_t>(P.begin(), P.end());
 }

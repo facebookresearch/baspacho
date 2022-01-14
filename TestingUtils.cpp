@@ -3,9 +3,18 @@
 
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <random>
 
 using namespace std;
+
+vector<uint64_t> randomPermutation(size_t size, uint64_t seed) {
+    mt19937 gen(seed);
+    vector<uint64_t> retv(size);
+    iota(retv.begin(), retv.end(), 0);
+    shuffle(retv.begin(), retv.end(), gen);
+    return retv;
+}
 
 string printCols(const vector<set<uint64_t>>& columns) {
     stringstream ss;
@@ -20,6 +29,57 @@ string printCols(const vector<set<uint64_t>>& columns) {
         ss << " }\n";
     }
     ss << "}";
+    return ss.str();
+}
+
+string printPattern(const SparseStructure& mat, bool sym) {
+    uint64_t ord = mat.order();
+    vector<bool> isSet(ord * ord, false);
+    for (uint64_t i = 0; i < ord; i++) {
+        uint64_t start = mat.ptrs[i];
+        uint64_t end = mat.ptrs[i + 1];
+        for (uint64_t k = start; k < end; k++) {
+            uint64_t j = mat.inds[k];
+            isSet[ord * i + j] = true;  // assume CSR
+            if (sym) {
+                isSet[ord * j + i] = true;
+            }
+        }
+    }
+    stringstream ss;
+    for (uint64_t i = 0; i < ord; i++) {
+        for (uint64_t j = 0; j < ord; j++) {
+            ss << (j > 0 ? " " : "") << (isSet[ord * i + j] ? "#" : "_");
+        }
+        ss << "\n";
+    }
+    return ss.str();
+}
+
+string printAggreg(vector<uint64_t> ptrs,  // csc
+                   vector<uint64_t> inds, vector<uint64_t> aggregStart) {
+    CHECK_EQ(ptrs.size(), aggregStart.size());
+    int64_t ord = aggregStart[aggregStart.size() - 1];
+    vector<bool> isSet(ord * ord, false);
+    for (uint64_t i = 0; i < ptrs.size() - 1; i++) {
+        uint64_t start = ptrs[i];
+        uint64_t end = ptrs[i + 1];
+        uint64_t aStart = aggregStart[i];
+        uint64_t aEnd = aggregStart[i + 1];
+        for (uint64_t k = start; k < end; k++) {
+            uint64_t j = inds[k];
+            for (uint64_t a = aStart; a < aEnd; a++) {
+                isSet[ord * j + a] = true;  // assume CSR
+            }
+        }
+    }
+    stringstream ss;
+    for (uint64_t i = 0; i < ord; i++) {
+        for (uint64_t j = 0; j < ord; j++) {
+            ss << (j > 0 ? " " : "") << (isSet[ord * i + j] ? "#" : "_");
+        }
+        ss << "\n";
+    }
     return ss.str();
 }
 

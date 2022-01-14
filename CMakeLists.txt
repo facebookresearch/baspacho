@@ -108,7 +108,8 @@ add_library(BaSpaCho
             EliminationTree.cpp
             Factor.cpp
             SparseStructure.cpp
-            TestingUtils.cpp)
+            TestingUtils.cpp
+            Utils.cpp)
 target_link_libraries (BaSpaCho glog::glog amd)
 
 

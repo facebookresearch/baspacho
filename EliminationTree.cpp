@@ -3,6 +3,9 @@
 
 #include <glog/logging.h>
 
+#include "TestingUtils.h"
+#include "Utils.h"
+
 using namespace std;
 
 EliminationTree::EliminationTree(const std::vector<uint64_t>& paramSize,
@@ -68,13 +71,8 @@ void EliminationTree::buildTree() {
     }
 }
 
-#if 0
-    std::vector<uint64_t> nodeSize;
-    std::vector<uint64_t> nodeRows;
-    std::vector<uint64_t> nodeFill;
-#endif
-
-static constexpr double kPropRows = 0.3;
+// TODO: expand on merge settings
+static constexpr double kPropRows = 0.6;
 
 void EliminationTree::computeMerges() {
     uint64_t ord = ss.order();
@@ -119,12 +117,11 @@ void EliminationTree::computeAggregateStruct() {
 
     // straightening permutation
     uint64_t numAggregs = ord - numMerges;
-    vector<uint64_t> permutation(ord);
-    vector<uint64_t> permInv(ord);
     vector<uint64_t> paramToAggreg(ord);
-    vector<uint64_t> aggregStart(numAggregs + 1);
     uint64_t pIdx = ord;
     uint64_t agIdx = numAggregs;
+    permutation.resize(ord);
+    aggregStart.resize(numAggregs + 1);
     for (int64_t k = ord - 1; k >= 0; k--) {
         if (mergeWith[k] != -1) {
             continue;
@@ -146,54 +143,70 @@ void EliminationTree::computeAggregateStruct() {
     CHECK_EQ(agIdx, 0);
 
     // cum-sum aggregStart
-    uint64_t tot = 0;
-    for (uint64_t i = 0; i < numAggregs; i++) {
-        uint64_t oldTot = tot;
-        tot += aggregStart[i];
-        aggregStart[i] = oldTot;
-    }
-    aggregStart[ord] = tot;
+    uint64_t tot = cumSum(aggregStart);
+    permInverse = inversePermutation(permutation);
 
-    for (uint64_t k = 0; k < ord; k++) {
-        permInv[permutation[k]] = k;
-    }
     SparseStructure tperm =
-        ss.symmetricPermutation(permInv, /* lowerHalf = */ true,
+        ss.symmetricPermutation(permInverse, /* lowerHalf = */ true,
                                 /* sortIndices = */ false);
 
-    vector<int64_t> tags(ord, -1);
-    vector<uint64_t> colStart(numAggregs + 1, 0);
-    for (uint64_t a = 0; a < numAggregs) {
+    LOG(INFO) << "ss.ptrs: " << printInts(ss.ptrs);
+    LOG(INFO) << "ss.inds: " << printInts(ss.inds);
+
+    LOG(INFO) << "permInverse:\n" << printInts(permInverse);
+    LOG(INFO) << "cluster-perm:\n" << printPattern(tperm, true);
+
+    LOG(INFO) << "ptrs: " << printInts(tperm.ptrs);
+    LOG(INFO) << "inds: " << printInts(tperm.inds);
+    vector<int64_t> tags(ord, -1);  // check if row added already
+    colStart.assign(numAggregs + 1, 0);
+    for (uint64_t a = 0; a < numAggregs; a++) {
         uint64_t aStart = aggregStart[a];
         uint64_t aEnd = aggregStart[a + 1];
         uint64_t pStart = tperm.ptrs[aStart];
         uint64_t pEnd = tperm.ptrs[aEnd];
+        LOG(INFO) << "a = " << aStart << "..." << aEnd;
+        LOG(INFO) << "i = " << pStart << "..." << pEnd;
         for (uint64_t i = pStart; i < pEnd; i++) {
             uint64_t p = tperm.inds[i];
-            if (tags[p] < a) {
+            // LOG(INFO) << a << ", " << p << " @ " << i << "." << (tags[p] <
+            // a);
+            if (tags[p] < (int64_t)a) {
                 // L(p,a) is set
                 colStart[a]++;
                 tags[p] = a;
             }
         }
     }
+    LOG(INFO) << "colStart-0: " << printInts(colStart);
 
-    uint64_t totColSize = cumSum(colStart, numAggregs);
-    vector<uint64_t> rowParam(totColSize);
+    uint64_t totColSize = cumSum(colStart);
+    rowParam.resize(totColSize);
 
     tags.assign(ord, -1);
-    for (uint64_t a = 0; a < numAggregs) {
+    for (uint64_t a = 0; a < numAggregs; a++) {
         uint64_t aStart = aggregStart[a];
         uint64_t aEnd = aggregStart[a + 1];
         uint64_t pStart = tperm.ptrs[aStart];
         uint64_t pEnd = tperm.ptrs[aEnd];
         for (uint64_t i = pStart; i < pEnd; i++) {
             uint64_t p = tperm.inds[i];
-            if (tags[p] < a) {
+            if (tags[p] < (int64_t)a) {
                 // L(p,a) is set
                 rowParam[colStart[a]++] = p;
                 tags[p] = a;
             }
         }
     }
+
+    // rewind
+    for (uint64_t i = numAggregs; i >= 1; i--) {
+        colStart[i] = colStart[i - 1];
+    }
+    colStart[0] = 0;
+
+    LOG(INFO) << "colStart: " << printInts(colStart);
+    LOG(INFO) << "rowParam: " << printInts(rowParam);
+    LOG(INFO) << "aggregStart: " << printInts(aggregStart);
+    LOG(INFO) << "aggreg:\n" << printAggreg(colStart, rowParam, aggregStart);
 }

@@ -6,6 +6,8 @@
 
 #include "SparseStructure.h"
 
+std::vector<uint64_t> randomPermutation(size_t size, uint64_t seed);
+
 template <typename T>
 std::string printInts(const std::vector<T>& ints) {
     std::stringstream ss;
@@ -20,6 +22,11 @@ std::string printInts(const std::vector<T>& ints) {
 }
 
 std::string printCols(const std::vector<std::set<uint64_t>>& columns);
+
+std::string printPattern(const SparseStructure& mat, bool sym);
+
+std::string printAggreg(std::vector<uint64_t> ptrs, std::vector<uint64_t> inds,
+                        std::vector<uint64_t> aggregStart);
 
 std::vector<std::set<uint64_t>> randomCols(uint64_t size, double fill,
                                            uint64_t seed);

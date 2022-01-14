@@ -9,6 +9,7 @@
 
 #include "EliminationTree.h"
 #include "TestingUtils.h"
+#include "Utils.h"
 
 using namespace std;
 using namespace testing;
@@ -43,7 +44,32 @@ TEST(EliminationTree, Build) {
         /* column 22: */ 2, 20, 21, 22,
         /* column 23: */ 6, 11, 12, 23};
 
-    SparseStructure ss(ptrs, inds);
+    SparseStructure ssOrig = SparseStructure(ptrs, inds).clear();  // lower half
+
+#if 0
+    vector<uint64_t> permutation = ssOrig.fillReducingPermutation();
+    vector<uint64_t> invPerm = inversePermutation(permutation);
+
+    SparseStructure ss =
+        ssOrig.symmetricPermutation(invPerm, false).addFullEliminationFill();
+    LOG(INFO) << "perm:\n" << printPattern(ss, false);
+    LOG(INFO) << "entries: " << ss.inds.size();
+#endif
+
+#if 1
+    vector<uint64_t> permutation = ssOrig.fillReducingPermutation();
+    vector<uint64_t> invPerm = inversePermutation(permutation);
+
+    SparseStructure ss =
+        ssOrig.symmetricPermutation(invPerm, false).addFullEliminationFill();
+    /*vector<uint64_t> permutation = randomPermutation(ptrs.size() - 1, 40);
+    SparseStructure ss =
+        ssOrig.clear().symmetricPermutation(permutation, false);*/
+
+    LOG(INFO) << "perm:\n" << printPattern(ss, false);
+    LOG(INFO) << "zz.ptrs: " << printInts(ss.ptrs);
+    LOG(INFO) << "zz.inds: " << printInts(ss.inds);
+
     vector<uint64_t> paramSize(ptrs.size() - 1, 1);
     EliminationTree et(paramSize, ss);
 
@@ -51,4 +77,10 @@ TEST(EliminationTree, Build) {
     LOG(INFO) << "parents: " << printInts(et.parent);
     LOG(INFO) << "1st ch: " << printInts(et.firstChild);
     LOG(INFO) << "nextsb: " << printInts(et.nextSibling);
+
+    et.computeMerges();
+    LOG(INFO) << "mergeWith: " << printInts(et.mergeWith);
+
+    et.computeAggregateStruct();
+#endif
 }
