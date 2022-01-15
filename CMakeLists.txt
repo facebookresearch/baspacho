@@ -30,17 +30,12 @@ message("Amd Library Dir = " ${AMD_LIBRARIES})
 include(FetchContent)
 
 # glog
+cmake_policy(SET CMP0077 NEW)
 FetchContent_Declare(
   glog
   URL https://github.com/google/glog/archive/refs/tags/v0.5.0.zip
 	)
-if(NOT glog_POPULATED)
-  FetchContent_Populate(glog)
-  set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE BOOL "")
-  add_subdirectory(${glog_SOURCE_DIR} ${glog_BINARY_DIR} EXCLUDE_FROM_ALL)
-  unset(CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
-endif()
-set(glog_force_shared_crt ON CACHE BOOL "" FORCE)
+set(BUILD_TESTING 0 CACHE BOOL "")
 FetchContent_MakeAvailable(glog)
 message("Glog Source = " ${glog_SOURCE_DIR})
 message("Glog Library Dir = " ${glog_BINARY_DIR})
@@ -51,12 +46,6 @@ FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
 	)
-if(NOT googletest_POPULATED)
-  FetchContent_Populate(googletest)
-  set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE BOOL "")
-  add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
-  unset(CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
-endif()
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 message("GTest Source = " ${gtest_SOURCE_DIR})
@@ -73,11 +62,7 @@ FetchContent_Declare(
 	)
 if(NOT eigen_POPULATED)
   FetchContent_Populate(eigen)
-  set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE BOOL "")
-  add_subdirectory(${eigen_SOURCE_DIR} ${eigen_BINARY_DIR} EXCLUDE_FROM_ALL)
-  unset(CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
 endif()
-FetchContent_MakeAvailable(eigen)
 message("Eigen Source = " ${eigen_SOURCE_DIR})
 message("Eigen Library Dir = " ${eigen_BINARY_DIR})
 include_directories(${eigen_SOURCE_DIR})
@@ -91,11 +76,7 @@ FetchContent_Declare(
 )
 if(NOT sophus_POPULATED)
   FetchContent_Populate(sophus)
-  set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE BOOL "")
-  add_subdirectory(${sophus_SOURCE_DIR} ${sophus_BINARY_DIR} EXCLUDE_FROM_ALL)
-  unset(CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
 endif()
-FetchContent_MakeAvailable(sophus)
 message("Sophus Source = " ${sophus_SOURCE_DIR})
 message("Sophus Library Dir = " ${sophus_BINARY_DIR})
 include_directories(${sophus_SOURCE_DIR})
@@ -114,9 +95,6 @@ target_link_libraries (BaSpaCho glog::glog amd)
 
 add_executable(BAL_test BaAtLarge.cpp BaAtLargeTest.cpp)
 target_link_libraries (BAL_test glog::glog BaSpaCho)
-
-add_executable(AMD_test AmdTest.cpp)
-target_link_libraries (AMD_test amd)
 
 
 enable_testing()

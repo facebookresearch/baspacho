@@ -21,20 +21,19 @@ TEST(Factor, FactorAggreg) {
     vector<uint64_t> aggregParamStart{0, 2, 4, 6};
     SparseStructure groupedSs = columnsToCscStruct(
         joinColums(csrStructToColumns(ss), aggregParamStart));
-    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
-                                               groupedSs.ptrs, groupedSs.inds);
+    BlockMatrixSkel skel(paramStart, aggregParamStart, groupedSs.ptrs,
+                         groupedSs.inds);
     uint64_t totData = skel.blockData[skel.blockData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
-    damp(skel, data, 5, 50);
+    skel.damp(data, 5, 50);
 
-    Eigen::MatrixXd verifyMat = densify(skel, data);
+    Eigen::MatrixXd verifyMat = skel.densify(data);
     Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
     factorAggreg(skel, data, 0);
-    Eigen::MatrixXd computedMat = densify(skel, data);
+    Eigen::MatrixXd computedMat = skel.densify(data);
     std::cout << computedMat << std::endl;
-
     ASSERT_NEAR((verifyMat - computedMat).leftCols(5).norm(), 0, 1e-5);
 }
 
@@ -46,22 +45,21 @@ TEST(Factor, Factor) {
     vector<uint64_t> aggregParamStart{0, 2, 4, 6};
     SparseStructure groupedSs = columnsToCscStruct(
         joinColums(csrStructToColumns(ss), aggregParamStart));
-    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
-                                               groupedSs.ptrs, groupedSs.inds);
+    BlockMatrixSkel skel(paramStart, aggregParamStart, groupedSs.ptrs,
+                         groupedSs.inds);
 
     uint64_t totData = skel.blockData[skel.blockData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
-    std::cout << "VERIF:\n" << densify(skel, data) << std::endl;
 
-    damp(skel, data, 5, 50);
+    skel.damp(data, 5, 50);
 
-    Eigen::MatrixXd verifyMat = densify(skel, data);
+    Eigen::MatrixXd verifyMat = skel.densify(data);
     Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
     std::cout << "VERIF:\n" << verifyMat << std::endl;
 
     factor(skel, data);
-    Eigen::MatrixXd computedMat = densify(skel, data);
+    Eigen::MatrixXd computedMat = skel.densify(data);
     std::cout << "COMPUT:\n" << computedMat << std::endl;
 
     ASSERT_NEAR(Eigen::MatrixXd(

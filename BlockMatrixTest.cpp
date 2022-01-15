@@ -47,8 +47,8 @@ TEST(BlockMatrix, BasicAssertions) {
                                        {3, 4, 5, 8},    {4, 5, 7},
                                        {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
-    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
-                                               sStruct.ptrs, sStruct.inds);
+    BlockMatrixSkel skel(paramStart, aggregParamStart, sStruct.ptrs,
+                         sStruct.inds);
 
     ASSERT_THAT(skel.paramStart, ContainerEq(paramStart));
     ASSERT_THAT(skel.aggregParamStart, ContainerEq(aggregParamStart));
@@ -94,13 +94,13 @@ TEST(BlockMatrix, Densify) {
                                        {3, 4, 5, 8},    {4, 5, 7},
                                        {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
-    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
-                                               sStruct.ptrs, sStruct.inds);
+    BlockMatrixSkel skel(paramStart, aggregParamStart, sStruct.ptrs,
+                         sStruct.inds);
 
     uint64_t totData = skel.blockData[skel.blockData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
-    Eigen::MatrixXd mat = densify(skel, data);
+    Eigen::MatrixXd mat = skel.densify(data);
 
     std::stringstream ss;
     ss << mat;
@@ -132,19 +132,19 @@ TEST(BlockMatrix, Damp) {
                                        {3, 4, 5, 8},    {4, 5, 7},
                                        {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
-    BlockMatrixSkel skel = initBlockMatrixSkel(paramStart, aggregParamStart,
-                                               sStruct.ptrs, sStruct.inds);
+    BlockMatrixSkel skel(paramStart, aggregParamStart, sStruct.ptrs,
+                         sStruct.inds);
 
     uint64_t totData = skel.blockData[skel.blockData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
 
-    Eigen::MatrixXd mat = densify(skel, data);
+    Eigen::MatrixXd mat = skel.densify(data);
 
     double alpha = 2.0, beta = 100.0;
-    damp(skel, data, alpha, beta);
+    skel.damp(data, alpha, beta);
 
-    Eigen::MatrixXd matDamped = densify(skel, data);
+    Eigen::MatrixXd matDamped = skel.densify(data);
 
     mat.diagonal() *= (1.0 + alpha);
     mat.diagonal().array() += beta;

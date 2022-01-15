@@ -12,6 +12,15 @@ using MatRMaj =
     Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
 struct BlockMatrixSkel {
+    BlockMatrixSkel(const std::vector<uint64_t>& paramStart,
+                    const std::vector<uint64_t>& aggregParamStart,
+                    const std::vector<uint64_t>& colPtr,
+                    const std::vector<uint64_t>& rowInd);
+
+    Eigen::MatrixXd densify(const std::vector<double>& data);
+
+    void damp(std::vector<double>& data, double alpha, double beta);
+
     std::vector<uint64_t> paramStart;        // num_params + 1
     std::vector<uint64_t> paramToAggreg;     // num_params
     std::vector<uint64_t> aggregStart;       // num_aggregs + 1
