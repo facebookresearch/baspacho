@@ -295,7 +295,7 @@ std::vector<uint64_t> SparseStructure::fillReducingPermutation() const {
 
     LOG(INFO) << "run AMD...";
     amd_l_defaults(Control);
-    amd_l_control(Control);
+    // amd_l_control(Control); // print verbose messages
 
     int result = amd_l_order(P.size(), colPtr.data(), rowInd.data(), P.data(),
                              Control, Info);

@@ -7,6 +7,7 @@
 #include <random>
 #include <sstream>
 
+#include "BlockMatrix.h"
 #include "EliminationTree.h"
 #include "TestingUtils.h"
 #include "Utils.h"
@@ -15,73 +16,60 @@ using namespace std;
 using namespace testing;
 
 TEST(EliminationTree, Build) {
-    vector<uint64_t> ptrs{0,   9,   15,  21,  27,  33,  39,  48,  57,
-                          61,  70,  76,  82,  88,  94,  100, 106, 110,
-                          119, 128, 137, 143, 152, 156, 160};
-    vector<uint64_t> inds{
-        /* column  0: */ 0, 5,  6,  12, 13, 17, 18, 19, 21,
-        /* column  1: */ 1, 8,  9,  13, 14, 17,
-        /* column  2: */ 2, 6,  11, 20, 21, 22,
-        /* column  3: */ 3, 7,  10, 15, 18, 19,
-        /* column  4: */ 4, 7,  9,  14, 15, 16,
-        /* column  5: */ 0, 5,  6,  12, 13, 17,
-        /* column  6: */ 0, 2,  5,  6,  11, 12, 19, 21, 23,
-        /* column  7: */ 3, 4,  7,  9,  14, 15, 16, 17, 18,
-        /* column  8: */ 1, 8,  9,  14,
-        /* column  9: */ 1, 4,  7,  8,  9,  13, 14, 17, 18,
-        /* column 10: */ 3, 10, 18, 19, 20, 21,
-        /* column 11: */ 2, 6,  11, 12, 21, 23,
-        /* column 12: */ 0, 5,  6,  11, 12, 23,
-        /* column 13: */ 0, 1,  5,  9,  13, 17,
-        /* column 14: */ 1, 4,  7,  8,  9,  14,
-        /* column 15: */ 3, 4,  7,  15, 16, 18,
-        /* column 16: */ 4, 7,  15, 16,
-        /* column 17: */ 0, 1,  5,  7,  9,  13, 17, 18, 19,
-        /* column 18: */ 0, 3,  7,  9,  10, 15, 17, 18, 19,
-        /* column 19: */ 0, 3,  6,  10, 17, 18, 19, 20, 21,
-        /* column 20: */ 2, 10, 19, 20, 21, 22,
-        /* column 21: */ 0, 2,  6,  10, 11, 19, 20, 21, 22,
-        /* column 22: */ 2, 20, 21, 22,
-        /* column 23: */ 6, 11, 12, 23};
+    for (int h = 0; h < 200; h++) {
+        auto colsOrig = randomCols(70, 0.1, h + 37);
+        auto ssOrig = columnsToCscStruct(colsOrig).transpose();
 
-    SparseStructure ssOrig =
-        SparseStructure(ptrs, inds).clear();  // lower half csr
+        vector<uint64_t> permutation = ssOrig.fillReducingPermutation();
+        vector<uint64_t> invPerm = inversePermutation(permutation);
 
-#if 0
-    vector<uint64_t> permutation = ssOrig.fillReducingPermutation();
-    vector<uint64_t> invPerm = inversePermutation(permutation);
+        SparseStructure ss = ssOrig.symmetricPermutation(invPerm, false);
 
-    SparseStructure ss =
-        ssOrig.symmetricPermutation(invPerm, false).addFullEliminationFill();
-    LOG(INFO) << "perm:\n" << printPattern(ss, false);
-    LOG(INFO) << "entries: " << ss.inds.size();
-#endif
+        LOG(INFO) << "perm:\n" << printPattern(ss, false);
 
-#if 1
-    vector<uint64_t> permutation = ssOrig.fillReducingPermutation();
-    vector<uint64_t> invPerm = inversePermutation(permutation);
+        vector<uint64_t> paramSize(ssOrig.ptrs.size() - 1, 1);
+        EliminationTree et(paramSize, ss);
 
-    SparseStructure ss =
-        ssOrig.symmetricPermutation(invPerm, false).addFullEliminationFill();
-    /*vector<uint64_t> permutation = randomPermutation(ptrs.size() - 1, 40);
-    SparseStructure ss =
-        ssOrig.clear().symmetricPermutation(permutation, false);*/
+        et.buildTree();
 
-    LOG(INFO) << "perm:\n" << printPattern(ss, false);
-    LOG(INFO) << "zz.ptrs: " << printInts(ss.ptrs);
-    LOG(INFO) << "zz.inds: " << printInts(ss.inds);
+        et.computeMerges();
 
-    vector<uint64_t> paramSize(ptrs.size() - 1, 1);
-    EliminationTree et(paramSize, ss);
+        et.computeAggregateStruct();
 
-    et.buildTree();
-    LOG(INFO) << "parents: " << printInts(et.parent);
-    LOG(INFO) << "1st ch: " << printInts(et.firstChild);
-    LOG(INFO) << "nextsb: " << printInts(et.nextSibling);
+        BlockMatrixSkel skel(et.paramStart, et.aggregStart, et.colStart,
+                             et.rowParam);
+        uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+        vector<double> data(totData, 1);
+        Eigen::MatrixXd mat = skel.densify(data);
+        LOG(INFO) << "densified:\n" << mat;
 
-    et.computeMerges();
-    LOG(INFO) << "mergeWith: " << printInts(et.mergeWith);
+        // original must be contained via idMap
+        vector<uint64_t> idMap = composePermutations(et.permInverse, invPerm);
+        for (uint64_t i = 0; i < ssOrig.ptrs.size() - 1; i++) {
+            uint64_t start = ssOrig.ptrs[i];
+            uint64_t end = ssOrig.ptrs[i + 1];
+            uint64_t newI = idMap[i];
+            for (uint64_t q = start; q < end; q++) {
+                uint64_t j = ssOrig.inds[q];
+                uint64_t newJ = idMap[j];
+                uint64_t r = std::max(newI, newJ);
+                uint64_t c = std::min(newI, newJ);
+                ASSERT_GT(mat(r, c), 0.5);
+            }
+        }
 
-    et.computeAggregateStruct();
-#endif
+        // permuted and elim-filled must be contained
+        SparseStructure checkSs =
+            ss.symmetricPermutation(et.permInverse, false, true)
+                .addFullEliminationFill();
+        LOG(INFO) << "check:\n" << printPattern(checkSs, false);
+        for (uint64_t i = 0; i < checkSs.ptrs.size() - 1; i++) {
+            uint64_t start = checkSs.ptrs[i];
+            uint64_t end = checkSs.ptrs[i + 1];
+            for (uint64_t q = start; q < end; q++) {
+                uint64_t j = checkSs.inds[q];
+                ASSERT_GT(mat(i, j), 0.5);
+            }
+        }
+    }
 }

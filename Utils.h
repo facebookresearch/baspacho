@@ -23,6 +23,9 @@ bool isWeaklyIncreasing(const std::vector<T>& v, std::size_t begin,
     return i == e;
 }
 
+std::vector<uint64_t> composePermutations(const std::vector<uint64_t>& v,
+                                          const std::vector<uint64_t>& w);
+
 std::vector<uint64_t> inversePermutation(const std::vector<uint64_t>& v);
 
 uint64_t cumSum(std::vector<uint64_t>& v);

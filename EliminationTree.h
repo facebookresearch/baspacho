@@ -28,10 +28,10 @@ struct EliminationTree {
     uint64_t numMerges;
 
     // generated computing aggregate struct
-    std::vector<uint64_t> colStart;
-    std::vector<uint64_t> rowParam;
-
     std::vector<uint64_t> permutation;
     std::vector<uint64_t> permInverse;
+    std::vector<uint64_t> paramStart;
     std::vector<uint64_t> aggregStart;
+    std::vector<uint64_t> colStart;
+    std::vector<uint64_t> rowParam;
 };

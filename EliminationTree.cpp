@@ -3,6 +3,8 @@
 
 #include <glog/logging.h>
 
+#include <algorithm>
+
 #include "TestingUtils.h"
 #include "Utils.h"
 
@@ -146,44 +148,14 @@ void EliminationTree::computeAggregateStruct() {
     uint64_t tot = cumSum(aggregStart);
     permInverse = inversePermutation(permutation);
 
-    SparseStructure tperm =
-        ss.symmetricPermutation(permInverse, /* lowerHalf = */ true,
-                                /* sortIndices = */ false);
+    SparseStructure tperm =  // lower-half csc
+        ss.symmetricPermutation(permInverse, /* lowerHalf = */ false,
+                                /* sortIndices = */ false)
+            .addFullEliminationFill()
+            .transpose();
 
-    LOG(INFO) << "ss.ptrs: " << printInts(ss.ptrs);
-    LOG(INFO) << "ss.inds: " << printInts(ss.inds);
-
-    LOG(INFO) << "permInverse:\n" << printInts(permInverse);
-    LOG(INFO) << "cluster-perm:\n" << printPattern(tperm, true);
-
-    LOG(INFO) << "ptrs: " << printInts(tperm.ptrs);
-    LOG(INFO) << "inds: " << printInts(tperm.inds);
-    vector<int64_t> tags(ord, -1);  // check if row added already
-    colStart.assign(numAggregs + 1, 0);
-    for (uint64_t a = 0; a < numAggregs; a++) {
-        uint64_t aStart = aggregStart[a];
-        uint64_t aEnd = aggregStart[a + 1];
-        uint64_t pStart = tperm.ptrs[aStart];
-        uint64_t pEnd = tperm.ptrs[aEnd];
-        LOG(INFO) << "a = " << aStart << "..." << aEnd;
-        LOG(INFO) << "i = " << pStart << "..." << pEnd;
-        for (uint64_t i = pStart; i < pEnd; i++) {
-            uint64_t p = tperm.inds[i];
-            // LOG(INFO) << a << ", " << p << " @ " << i << "." << (tags[p] <
-            // a);
-            if (tags[p] < (int64_t)a) {
-                // L(p,a) is set
-                colStart[a]++;
-                tags[p] = a;
-            }
-        }
-    }
-    LOG(INFO) << "colStart-0: " << printInts(colStart);
-
-    uint64_t totColSize = cumSum(colStart);
-    rowParam.resize(totColSize);
-
-    tags.assign(ord, -1);
+    vector<int64_t> tags(ord, -1);  // check if row el was added already
+    colStart.push_back(0);
     for (uint64_t a = 0; a < numAggregs; a++) {
         uint64_t aStart = aggregStart[a];
         uint64_t aEnd = aggregStart[a + 1];
@@ -192,21 +164,18 @@ void EliminationTree::computeAggregateStruct() {
         for (uint64_t i = pStart; i < pEnd; i++) {
             uint64_t p = tperm.inds[i];
             if (tags[p] < (int64_t)a) {
-                // L(p,a) is set
-                rowParam[colStart[a]++] = p;
+                rowParam.push_back(p);  // L(p,a) is set
                 tags[p] = a;
             }
         }
+        std::sort(rowParam.begin() + colStart[colStart.size() - 1],
+                  rowParam.end());
+        colStart.push_back(rowParam.size());
     }
 
-    // rewind
-    for (uint64_t i = numAggregs; i >= 1; i--) {
-        colStart[i] = colStart[i - 1];
-    }
-    colStart[0] = 0;
-
-    LOG(INFO) << "colStart: " << printInts(colStart);
-    LOG(INFO) << "rowParam: " << printInts(rowParam);
-    LOG(INFO) << "aggregStart: " << printInts(aggregStart);
-    LOG(INFO) << "aggreg:\n" << printAggreg(colStart, rowParam, aggregStart);
+    // set paramStart to cumSum of paramSize
+    paramStart.reserve(paramSize.size() + 1);
+    paramStart = paramSize;
+    paramStart.push_back(0);
+    cumSum(paramStart);
 }
