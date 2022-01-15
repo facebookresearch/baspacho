@@ -74,7 +74,7 @@ void EliminationTree::buildTree() {
 }
 
 // TODO: expand on merge settings
-static constexpr double kPropRows = 0.6;
+static constexpr double kPropRows = 0.3;
 
 void EliminationTree::computeMerges() {
     uint64_t ord = ss.order();
@@ -124,6 +124,7 @@ void EliminationTree::computeAggregateStruct() {
     uint64_t agIdx = numAggregs;
     permutation.resize(ord);
     aggregStart.resize(numAggregs + 1);
+    aggregParamStart.assign(numAggregs + 1, 0);
     for (int64_t k = ord - 1; k >= 0; k--) {
         if (mergeWith[k] != -1) {
             continue;
@@ -135,16 +136,19 @@ void EliminationTree::computeAggregateStruct() {
         CHECK_GT(pIdx, 0);
         permutation[--pIdx] = k;
         paramToAggreg[k] = agIdx;
+        aggregParamStart[agIdx]++;
         for (int64_t q = firstMergeChild[k]; q != -1; q = nextMergeSibling[q]) {
             CHECK_GT(pIdx, 0);
             permutation[--pIdx] = q;
             paramToAggreg[q] = agIdx;
+            aggregParamStart[agIdx]++;
         }
     }
     CHECK_EQ(pIdx, 0);
     CHECK_EQ(agIdx, 0);
 
     // cum-sum aggregStart
+    cumSum(aggregParamStart);
     uint64_t tot = cumSum(aggregStart);
     permInverse = inversePermutation(permutation);
 
@@ -157,8 +161,8 @@ void EliminationTree::computeAggregateStruct() {
     vector<int64_t> tags(ord, -1);  // check if row el was added already
     colStart.push_back(0);
     for (uint64_t a = 0; a < numAggregs; a++) {
-        uint64_t aStart = aggregStart[a];
-        uint64_t aEnd = aggregStart[a + 1];
+        uint64_t aStart = aggregParamStart[a];
+        uint64_t aEnd = aggregParamStart[a + 1];
         uint64_t pStart = tperm.ptrs[aStart];
         uint64_t pEnd = tperm.ptrs[aEnd];
         for (uint64_t i = pStart; i < pEnd; i++) {

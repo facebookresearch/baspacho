@@ -2,6 +2,8 @@
 #include <glog/logging.h>
 
 #include "BaAtLarge.h"
+#include "BlockMatrix.h"
+#include "EliminationTree.h"
 #include "SparseStructure.h"
 #include "TestingUtils.h"
 #include "Utils.h"
@@ -75,25 +77,37 @@ void experiment(Data& data) {
     uint64_t camCamBlocks2 = filledSsT.ptrs[numCams];
     LOG(INFO) << "cam-cam blocks (with fill): " << camCamBlocks2 << " ("
               << (100.0 * camCamBlocks2 / totPossible) << "%)";
-#if 0
-    BlockStructure blockStructure(paramSize, colBlocks);
-    blockStructure.addBlocksForEliminationOfRange(0, numPts);
 
-    uint64_t totPossible = numCams * (numCams + 1) / 2;
+    LOG(INFO) << "Computing elim tree";
 
-    uint64_t camCamBlocks =
-        blockStructure.numBlocksInCols(numPts, totNumParams);
-    LOG(INFO) << "cam-cam blocks (from pts): " << camCamBlocks << " ("
-              << (100.0 * camCamBlocks / totPossible) << "%)";
+    vector<uint64_t> paramSz(sortedCamCamSs.ptrs.size() - 1, 1);
+    EliminationTree et(paramSz, sortedCamCamSs);
 
-    // blockStructure.applyAmdFrom(numPts);
+    LOG(INFO) << "Build tree";
+    et.buildTree();
 
-    blockStructure.addBlocksForEliminationOfRange(numPts, totNumParams);
-    uint64_t camCamBlocks2 =
-        blockStructure.numBlocksInCols(numPts, totNumParams);
-    LOG(INFO) << "cam-cam blocks (with fill): " << camCamBlocks2 << " ("
-              << (100.0 * camCamBlocks2 / totPossible) << "%)";
-#endif
+    LOG(INFO) << "Merges";
+    et.computeMerges();
+
+    LOG(INFO) << "Aggreg";
+    et.computeAggregateStruct();
+
+    LOG(INFO) << "Block mat";
+    BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
+                         et.rowParam);
+    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    LOG(INFO) << "cam-cam blocky (with fill): " << totData << " ("
+              << (100.0 * totData / (numCams * numCams)) << "%)";
+
+    LOG(INFO) << "aggregBlocks:" << skel.aggregParamStart.size() - 1;
+    for (size_t a = 0; a < skel.aggregParamStart.size() - 1; a++) {
+        LOG(INFO)
+            << "a." << a << ": size="
+            << skel.aggregParamStart[a + 1] - skel.aggregParamStart[a]
+            << ", nBlockRows="
+            << skel.blockRowAggregParamPtr[skel.blockColGatheredDataPtr[a + 1] -
+                                           1];
+    }
 }
 
 int main(int argc, char* argv[]) {
