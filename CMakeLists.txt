@@ -5,26 +5,28 @@ project(BaSpaCho)
 set(CMAKE_CXX_STANDARD 17)
 
 
-# cholmod
-# find_path(CHOLMOD_INCLUDES NAMES cholmod.h
-#           PATHS $ENV{CHOLMODDIR} ${INCLUDE_INSTALL_DIR}
-#           PATH_SUFFIXES suitesparse ufsparse
-#           REQUIRED)
-# find_library(CHOLMOD_LIBRARIES cholmod
-#              PATHS $ENV{CHOLMODDIR} ${LIB_INSTALL_DIR}
-#              REQUIRED)
-# message("Cholmod Source = " ${CHOLMOD_INCLUDES})
-# message("Cholmod Library Dir = " ${CHOLMOD_LIBRARIES})
+# cholmod (for benchmarking comparison)
+find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
+          PATHS $ENV{CHOLMODDIR} ${INCLUDE_INSTALL_DIR}
+          PATH_SUFFIXES suitesparse ufsparse
+          REQUIRED)
+find_library(CHOLMOD_LIBRARIES cholmod
+             PATHS $ENV{CHOLMODDIR} ${LIB_INSTALL_DIR}
+             REQUIRED)
+include_directories(${CHOLMOD_INCLUDE_DIR})
+message("Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
+message("Cholmod Library Dir = " ${CHOLMOD_LIBRARIES})
 
 # amd
-find_path(AMD_INCLUDES NAMES amd.h
+find_path(AMD_INCLUDE_DIR NAMES amd.h
           PATHS $ENV{CHOLMODDIR} ${INCLUDE_INSTALL_DIR}
           PATH_SUFFIXES suitesparse ufsparse
           REQUIRED)
 find_library(AMD_LIBRARIES amd
              PATHS $ENV{CHOLMODDIR} ${LIB_INSTALL_DIR}
              REQUIRED)
-message("Amd Source = " ${AMD_INCLUDES})
+include_directories(${AMD_INCLUDE_DIR})
+message("Amd Source = " ${AMD_INCLUDE_DIR})
 message("Amd Library Dir = " ${AMD_LIBRARIES})
 
 include(FetchContent)
@@ -84,13 +86,14 @@ add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 
 add_library(BaSpaCho
+            BenchCholmod.cpp
             BlockMatrix.cpp
             EliminationTree.cpp
             Factor.cpp
             SparseStructure.cpp
             TestingUtils.cpp
             Utils.cpp)
-target_link_libraries (BaSpaCho glog::glog amd)
+target_link_libraries (BaSpaCho glog::glog amd cholmod)
 
 
 add_executable(BAL_test BaAtLarge.cpp BaAtLargeTest.cpp)

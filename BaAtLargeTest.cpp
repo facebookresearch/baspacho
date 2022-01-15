@@ -2,6 +2,7 @@
 #include <glog/logging.h>
 
 #include "BaAtLarge.h"
+#include "BenchCholmod.h"
 #include "BlockMatrix.h"
 #include "EliminationTree.h"
 #include "SparseStructure.h"
@@ -80,7 +81,7 @@ void experiment(Data& data) {
 
     LOG(INFO) << "Computing elim tree";
 
-    vector<uint64_t> paramSz(sortedCamCamSs.ptrs.size() - 1, 1);
+    vector<uint64_t> paramSz(sortedCamCamSs.ptrs.size() - 1, 6);
     EliminationTree et(paramSz, sortedCamCamSs);
 
     LOG(INFO) << "Build tree";
@@ -108,6 +109,9 @@ void experiment(Data& data) {
             << skel.blockRowAggregParamPtr[skel.blockColGatheredDataPtr[a + 1] -
                                            1];
     }
+
+    LOG(INFO) << "Testing Cholmod...";
+    benchmarkCholmodSolve(paramSz, camCamSs);
 }
 
 int main(int argc, char* argv[]) {

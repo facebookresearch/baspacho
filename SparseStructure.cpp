@@ -1,8 +1,8 @@
 
 #include "SparseStructure.h"
 
+#include <amd.h>
 #include <glog/logging.h>
-#include <suitesparse/amd.h>
 
 #include <algorithm>
 
