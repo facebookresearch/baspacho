@@ -5,6 +5,9 @@
 
 #include <Eigen/Eigenvalues>
 
+#include "TestingUtils.h"
+#include "Utils.h"
+
 struct SimpleOps : Ops {
     struct OpaqueDataMatrixSkel : OpaqueData {
         OpaqueDataMatrixSkel(const BlockMatrixSkel& skel) : skel(skel) {}
@@ -142,11 +145,13 @@ static void eliminateAggregItem(const BlockMatrixSkel& skel, double* data,
 
     uint64_t gatheredStart = skel.blockColGatheredDataPtr[aggreg];
     uint64_t gatheredEnd = skel.blockColGatheredDataPtr[aggreg + 1];
+
     uint64_t rowDataStart =
         skel.blockRowAggregParamPtr[gatheredStart + rowItem];
     uint64_t rowDataEnd0 =
         skel.blockRowAggregParamPtr[gatheredStart + rowItem + 1];
     uint64_t rowDataEnd1 = skel.blockRowAggregParamPtr[gatheredEnd - 1];
+
     uint64_t belowDiagStart = skel.blockData[colStart + rowDataStart];
     uint64_t rowStart = skel.endBlockNumRowsAbove[colStart + rowDataStart - 1];
     uint64_t numRowsSub =
@@ -158,7 +163,6 @@ static void eliminateAggregItem(const BlockMatrixSkel& skel, double* data,
                                                   numRowsSub, aggregSize);
     Eigen::Map<MatRMaj<double>> belowDiagBlockFull(data + belowDiagStart,
                                                    numRowsFull, aggregSize);
-
     MatRMaj<double> prod = belowDiagBlockFull * belowDiagBlockSub.transpose();
 
     for (uint64_t c = rowDataStart; c < rowDataEnd0; c++) {

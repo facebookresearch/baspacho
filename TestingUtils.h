@@ -8,6 +8,12 @@
 
 std::vector<uint64_t> randomPermutation(size_t size, uint64_t seed);
 
+std::vector<uint64_t> randomVec(size_t size, uint64_t low, uint64_t high,
+                                uint64_t seed);
+
+std::vector<uint64_t> randomPartition(size_t weight, uint64_t low,
+                                      uint64_t high, uint64_t seed);
+
 template <typename T>
 std::string printVec(const std::vector<T>& ints) {
     std::stringstream ss;

@@ -16,6 +16,30 @@ vector<uint64_t> randomPermutation(size_t size, uint64_t seed) {
     return retv;
 }
 
+vector<uint64_t> randomVec(size_t size, uint64_t low, uint64_t high,
+                           uint64_t seed) {
+    mt19937 gen(seed);
+    vector<uint64_t> retv(size);
+    uniform_int_distribution el(low, high);
+    for (uint64_t i = 0; i < size; i++) {
+        retv[i] = el(gen);
+    }
+    return retv;
+}
+
+vector<uint64_t> randomPartition(size_t weight, uint64_t low, uint64_t high,
+                                 uint64_t seed) {
+    mt19937 gen(seed);
+    vector<uint64_t> retv;
+    uniform_int_distribution<uint64_t> el(low, high);
+    while (weight > 0) {
+        uint64_t val = std::min(weight, el(gen));
+        retv.push_back(val);
+        weight -= val;
+    }
+    return retv;
+}
+
 string printCols(const vector<set<uint64_t>>& columns) {
     stringstream ss;
     ss << "{\n";
