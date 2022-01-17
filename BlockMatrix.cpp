@@ -89,6 +89,34 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& paramStart,
     blockColDataPtr[numAggregs] = blockRowParam.size();
     blockColGatheredDataPtr[numAggregs] = blockRowAggreg.size();
     blockData.push_back(dataPtr);
+
+    /*
+    std::vector<uint64_t> slabRowPtr;
+    std::vector<uint64_t> slabAggregInd;
+    std::vector<uint64_t> slabSliceColInd;
+    */
+
+    slabRowPtr.assign(numAggregs + 1, 0);
+    for (size_t a = 0; a < numAggregs; a++) {
+        for (uint64_t i = blockColGatheredDataPtr[a];
+             i < blockColGatheredDataPtr[a + 1] - 1; i++) {
+            uint64_t rowAggreg = blockRowAggreg[i];
+            slabRowPtr[rowAggreg]++;
+        }
+    }
+    uint64_t numSlabs = cumSum(slabRowPtr);
+    slabAggregInd.resize(numSlabs);
+    slabColInd.resize(numSlabs);
+    for (size_t a = 0; a < numAggregs; a++) {
+        for (uint64_t i = blockColGatheredDataPtr[a];
+             i < blockColGatheredDataPtr[a + 1] - 1; i++) {
+            uint64_t rowAggreg = blockRowAggreg[i];
+            slabAggregInd[slabRowPtr[rowAggreg]] = a;
+            slabColInd[slabRowPtr[rowAggreg]] = i - blockColGatheredDataPtr[a];
+            slabRowPtr[rowAggreg]++;
+        }
+    }
+    rewind(slabRowPtr);
 }
 
 Eigen::MatrixXd BlockMatrixSkel::densify(const std::vector<double>& data) {

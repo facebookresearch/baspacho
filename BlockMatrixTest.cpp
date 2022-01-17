@@ -71,6 +71,14 @@ TEST(BlockMatrix, BasicAssertions) {
                 ElementsAre(1, 2, 4, 6, 8, 1, 3, 4, 7, 9, 1, 3, 5, 7, 2, 4, 6,
                             3, 5, 2, 4));
 
+    /*
+        X
+        X X
+        _ X X
+        X _ X X
+        _ X _ _ X
+        X X X X X X
+    */
     ASSERT_THAT(skel.blockColGatheredDataPtr,
                 ElementsAre(0, 5, 10, 14, 17, 20, 22));
     ASSERT_THAT(skel.blockRowAggreg, ElementsAre(0, 1, 3, 5, kInvalid,  //
@@ -85,6 +93,20 @@ TEST(BlockMatrix, BasicAssertions) {
                                                          0, 2, 3,        //
                                                          0, 1, 2,        //
                                                          0, 2));
+
+    ASSERT_THAT(skel.slabRowPtr, ElementsAre(0, 1, 3, 5, 8, 10, 16));
+    ASSERT_THAT(skel.slabAggregInd, ElementsAre(0,        //
+                                                0, 1,     //
+                                                1, 2,     //
+                                                0, 2, 3,  //
+                                                1, 4,     //
+                                                0, 1, 2, 3, 4, 5));
+    ASSERT_THAT(skel.slabColInd, ElementsAre(0,        //
+                                             1, 0,     //
+                                             1, 0,     //
+                                             2, 1, 0,  //
+                                             2, 0,     //
+                                             3, 3, 2, 1, 1, 0));
 }
 
 TEST(BlockMatrix, Densify) {

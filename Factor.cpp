@@ -22,12 +22,15 @@ void factor(const BlockMatrixSkel& skel, std::vector<double>& data) {
 
 void factorAggreg(const BlockMatrixSkel& skel, std::vector<double>& data,
                   uint64_t aggreg) {
+    LOG(INFO) << "a: " << aggreg;
     uint64_t aggregStart = skel.aggregStart[aggreg];
     uint64_t aggregSize = skel.aggregStart[aggreg + 1] - aggregStart;
     uint64_t colStart = skel.blockColDataPtr[aggreg];
     uint64_t dataPtr = skel.blockData[colStart];
 
     // compute lower diag cholesky dec on diagonal block
+    LOG(INFO) << "d: " << data.data() << ", ptr: " << dataPtr
+              << ", asz: " << aggregSize;
     Eigen::Map<MatRMaj<double>> diagBlock(data.data() + dataPtr, aggregSize,
                                           aggregSize);
     { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
@@ -39,6 +42,8 @@ void factorAggreg(const BlockMatrixSkel& skel, std::vector<double>& data,
     uint64_t numRows = skel.endBlockNumRowsAbove[colStart + rowDataEnd - 1] -
                        skel.endBlockNumRowsAbove[colStart + rowDataStart - 1];
 
+    LOG(INFO) << "d: " << data.data() << ", ptr: " << belowDiagStart
+              << ", nrows: " << numRows;
     Eigen::Map<MatRMaj<double>> belowDiagBlock(data.data() + belowDiagStart,
                                                numRows, aggregSize);
     diagBlock.triangularView<Eigen::Lower>()

@@ -114,10 +114,11 @@ add_library(BaSpaCho
             BlockMatrix.cpp
             EliminationTree.cpp
             Factor.cpp
+            Solver.cpp
             SparseStructure.cpp
             TestingUtils.cpp
             Utils.cpp)
-target_link_libraries (BaSpaCho glog::glog ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
+target_link_libraries (BaSpaCho glog::glog dispenso ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
 
 
 add_executable(BAL_test BaAtLarge.cpp BaAtLargeTest.cpp)
@@ -146,6 +147,10 @@ add_executable(
   EliminationTreeTest
   EliminationTreeTest.cpp
   )
+add_executable(
+  SolverTest
+  SolverTest.cpp
+  )
 target_link_libraries(
   BlockMatrixTest
 	BaSpaCho
@@ -170,7 +175,14 @@ target_link_libraries(
   gtest_main
 	gmock
 )
+target_link_libraries(
+  SolverTest
+	BaSpaCho
+  gtest_main
+	gmock
+)
 gtest_discover_tests(BlockMatrixTest)
 gtest_discover_tests(FactorTest)
 gtest_discover_tests(SparseStructureTest)
 gtest_discover_tests(EliminationTreeTest)
+gtest_discover_tests(SolverTest)

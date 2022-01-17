@@ -26,11 +26,14 @@ struct BlockMatrixSkel {
     std::vector<uint64_t> aggregStart;       // num_aggregs + 1
     std::vector<uint64_t> aggregParamStart;  // num_aggregs + 1
 
+    // rename to "slice" (param row set x aggreg cols)
     // A matrix block is identified by a pair of param x aggreg
     std::vector<uint64_t> blockColDataPtr;       // num_aggregs + 1
     std::vector<uint64_t> blockRowParam;         // num_blocks
     std::vector<uint64_t> blockData;             // num_blocks + 1
     std::vector<uint64_t> endBlockNumRowsAbove;  // num_blocks
+
+    // rename to "slab" (aggregated param row sets x aggreg cols)
 
     // We also need to know about the "gathered" blocks, where we have
     // grouped the consecutive row params into aggregates.
@@ -40,6 +43,11 @@ struct BlockMatrixSkel {
     std::vector<uint64_t> blockRowAggreg;  // num_gathered_blocks + num_aggregs
     std::vector<uint64_t>
         blockRowAggregParamPtr;  // num_gathered_blocks + num_aggregs
+
+    // supernodes per-row, essentially the transpose of the above
+    std::vector<uint64_t> slabRowPtr;     // numAggregs + 1
+    std::vector<uint64_t> slabAggregInd;  // num_gathered_blocks
+    std::vector<uint64_t> slabColInd;     // num_gathered_blocks
 };
 
 BlockMatrixSkel initBlockMatrixSkel(
