@@ -6,6 +6,16 @@ set(CMAKE_CXX_STANDARD 17)
 
 
 # cholmod (for benchmarking comparison)
+if(false) # use local installation dir
+  find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
+            PATHS $ENV{CHOLMODDIR}/Include
+            NO_DEFAULT_PATH
+            REQUIRED)
+  find_library(CHOLMOD_LIBRARIES cholmod
+            PATHS $ENV{CHOLMODDIR}/Lib
+            NO_DEFAULT_PATH
+            REQUIRED)
+else()
 find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
           PATHS $ENV{CHOLMODDIR} ${INCLUDE_INSTALL_DIR}
           PATH_SUFFIXES suitesparse ufsparse
@@ -13,26 +23,40 @@ find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
 find_library(CHOLMOD_LIBRARIES cholmod
              PATHS $ENV{CHOLMODDIR} ${LIB_INSTALL_DIR}
              REQUIRED)
+endif()
 include_directories(${CHOLMOD_INCLUDE_DIR})
+message("CHOLMODDIR = " $ENV{CHOLMODDIR})
 message("Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
-message("Cholmod Library Dir = " ${CHOLMOD_LIBRARIES})
+message("Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
 
 # amd
 find_path(AMD_INCLUDE_DIR NAMES amd.h
-          PATHS $ENV{CHOLMODDIR} ${INCLUDE_INSTALL_DIR}
+          PATHS $ENV{AMDDIR} ${INCLUDE_INSTALL_DIR}
           PATH_SUFFIXES suitesparse ufsparse
           REQUIRED)
 find_library(AMD_LIBRARIES amd
-             PATHS $ENV{CHOLMODDIR} ${LIB_INSTALL_DIR}
+             PATHS $ENV{AMDDIR} ${LIB_INSTALL_DIR}
              REQUIRED)
 include_directories(${AMD_INCLUDE_DIR})
 message("Amd Source = " ${AMD_INCLUDE_DIR})
-message("Amd Library Dir = " ${AMD_LIBRARIES})
+message("Amd Libraries = " ${AMD_LIBRARIES})
 
+# use fetchcontent to download dependencies
 include(FetchContent)
+cmake_policy(SET CMP0077 NEW)
+
+# dispenso for multithreading
+# currently in facebookincubator, soon to be opensourced
+FetchContent_Declare(
+  dispenso
+  GIT_REPOSITORY git@github.com:facebookincubator/dispenso.git
+  GIT_TAG 22ff47d07c32303a5059bfec26304a68dff01e65
+	)
+FetchContent_MakeAvailable(dispenso)
+message("Dispenso Source = " ${dispenso_SOURCE_DIR})
+message("Dispenso Library Dir = " ${dispenso_BINARY_DIR})
 
 # glog
-cmake_policy(SET CMP0077 NEW)
 FetchContent_Declare(
   glog
   URL https://github.com/google/glog/archive/refs/tags/v0.5.0.zip
@@ -93,13 +117,17 @@ add_library(BaSpaCho
             SparseStructure.cpp
             TestingUtils.cpp
             Utils.cpp)
-target_link_libraries (BaSpaCho glog::glog amd cholmod)
+target_link_libraries (BaSpaCho glog::glog ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
 
 
 add_executable(BAL_test BaAtLarge.cpp BaAtLargeTest.cpp)
-target_link_libraries (BAL_test glog::glog BaSpaCho)
+target_link_libraries (BAL_test BaSpaCho)
+
+add_executable(bench Bench.cpp)
+target_link_libraries (bench BaSpaCho)
 
 
+# unit tests
 enable_testing()
 
 add_executable(

@@ -9,7 +9,7 @@
 std::vector<uint64_t> randomPermutation(size_t size, uint64_t seed);
 
 template <typename T>
-std::string printInts(const std::vector<T>& ints) {
+std::string printVec(const std::vector<T>& ints) {
     std::stringstream ss;
     ss << "[";
     bool first = true;

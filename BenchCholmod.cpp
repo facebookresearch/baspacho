@@ -13,8 +13,9 @@ using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
-void benchmarkCholmodSolve(const vector<uint64_t>& paramSize,
-                           const SparseStructure& ss) {
+std::pair<double, double> benchmarkCholmodSolve(
+    const vector<uint64_t>& paramSize, const SparseStructure& ss,
+    bool verbose) {
     CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
     vector<int64_t> rowPtr, colInd;
     vector<double> val;
@@ -27,7 +28,7 @@ void benchmarkCholmodSolve(const vector<uint64_t>& paramSize,
     uniform_real_distribution<double> unif(-1.0, 1.0);
     double diagBoost = totSize * 2;  // make positive definite
 
-    LOG(INFO) << "to csr... (order=" << totSize << ")";
+    LOG_IF(INFO, verbose) << "to csr... (order=" << totSize << ")";
     for (uint64_t rb = 0; rb < paramSize.size(); rb++) {
         for (uint64_t ri = paramStart[rb]; ri < paramStart[rb + 1]; ri++) {
             // ri = row index
@@ -46,7 +47,7 @@ void benchmarkCholmodSolve(const vector<uint64_t>& paramSize,
             rowPtr.push_back(colInd.size());
         }
     }
-    LOG(INFO) << "to csr done.";
+    LOG_IF(INFO, verbose) << "to csr done.";
 
     cholmod_common cc_;
     cholmod_l_start(&cc_);
@@ -74,41 +75,53 @@ void benchmarkCholmodSolve(const vector<uint64_t>& paramSize,
     A.xtype = CHOLMOD_REAL;
     A.dtype = CHOLMOD_DOUBLE;
 
-    LOG(INFO) << "Analyzing...";
+    LOG_IF(INFO, verbose) << "Analyzing...";
     auto startAnalysis = hrc::now();
     cholmod_factor* cholmodFactor_ = cholmod_l_analyze(&A, &cc_);
-    LOG(INFO) << "Analysis time: " << tdelta(hrc::now() - startAnalysis).count()
-              << "s";
+    double analysisTime = tdelta(hrc::now() - startAnalysis).count();
+    LOG_IF(INFO, verbose) << "Analysis time: " << analysisTime << "s";
     CHECK_EQ(cc_.status, CHOLMOD_OK)
         << "cholmod_analyze failed. error code: " << cc_.status;
 
-    LOG(INFO) << "Factoring...";
+    LOG_IF(INFO, verbose) << "Factoring...";
     auto startFactor = hrc::now();
     const long oldPrintLevel = cc_.print;
-    cc_.print = 0;
+    cc_.print = 1;
     cc_.quick_return_if_not_posdef = 1;
     long cholmod_status = cholmod_l_factorize(&A, cholmodFactor_, &cc_);
     cc_.print = oldPrintLevel;
-    LOG(INFO) << "Factor time: " << tdelta(hrc::now() - startFactor).count()
-              << "s";
+    double factorTime = tdelta(hrc::now() - startFactor).count();
+    LOG_IF(INFO, verbose) << "Factor time: " << factorTime << "s";
 
-    LOG(INFO) << "Cholmod, A size: " << A.ncol << ", nz: " << A.nzmax << " ("
-              << A.nzmax / ((double)A.ncol * A.nrow) << " fill)";
+    LOG_IF(INFO, verbose) << "Cholmod, A size: " << A.ncol
+                          << ", nz: " << A.nzmax << " ("
+                          << A.nzmax / ((double)A.ncol * A.nrow) << " fill)";
     if (!cholmodFactor_->is_super) {
-        LOG(INFO) << "Cholmod, simplicial factor nz: " << cholmodFactor_->nzmax
-                  << " ("
-                  << cholmodFactor_->nzmax /
-                         ((double)cholmodFactor_->n * cholmodFactor_->n)
-                  << " fill)";
+        LOG_IF(INFO, verbose)
+            << "Cholmod, simplicial factor nz: " << cholmodFactor_->nzmax
+            << " ("
+            << cholmodFactor_->nzmax /
+                   ((double)cholmodFactor_->n * cholmodFactor_->n)
+            << " fill)";
     } else {
-        LOG(INFO) << "Cholmod, supernodes: " << cholmodFactor_->nsuper
-                  << ", ssize: " << cholmodFactor_->ssize
-                  << ", xsize: " << cholmodFactor_->xsize
-                  << ", maxcsize: " << cholmodFactor_->maxcsize
-                  << ", maxesize: " << cholmodFactor_->maxesize << " ("
-                  << cholmodFactor_->xsize /
-                         ((double)cholmodFactor_->n * cholmodFactor_->n)
-                  << " fill)";
+        LOG_IF(INFO, verbose)
+            << "Cholmod\nsupernodes: " << cholmodFactor_->nsuper
+            << "\nssize: " << cholmodFactor_->ssize
+            << "\nxsize: " << cholmodFactor_->xsize
+            << "\nmaxcsize: " << cholmodFactor_->maxcsize
+            << "\nmaxesize: " << cholmodFactor_->maxesize << " ("
+            << cholmodFactor_->xsize /
+                   ((double)cholmodFactor_->n * cholmodFactor_->n)
+            << " fill)";
+        LOG_IF(INFO, verbose)
+            << "Stats:\ngemm calls: " << cc_.cholmod_cpu_gemm_calls
+            << ", time: " << cc_.cholmod_cpu_gemm_time
+            << "\nsyrk calls: " << cc_.cholmod_cpu_syrk_calls
+            << ", time: " << cc_.cholmod_cpu_syrk_time
+            << "\npotrf calls: " << cc_.cholmod_cpu_potrf_calls
+            << ", time: " << cc_.cholmod_cpu_potrf_time
+            << "\ntrsm calls: " << cc_.cholmod_cpu_trsm_calls
+            << ", time: " << cc_.cholmod_cpu_trsm_time;
     }
 
     switch (cc_.status) {
@@ -127,7 +140,7 @@ void benchmarkCholmodSolve(const vector<uint64_t>& paramSize,
                           "tiny absolute value.";
         case CHOLMOD_OK:
             if (cholmod_status != 0) {
-                LOG(INFO) << "Success!";
+                LOG_IF(INFO, verbose) << "Success!";
                 break;
             }
             LOG(FATAL) << "CHOLMOD failure: cholmod_factorize returned "
@@ -141,4 +154,6 @@ void benchmarkCholmodSolve(const vector<uint64_t>& paramSize,
         cholmod_l_free_factor(&cholmodFactor_, &cc_);
     }
     cholmod_l_finish(&cc_);
+
+    return std::make_pair(analysisTime, factorTime);
 }
