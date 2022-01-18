@@ -114,6 +114,7 @@ add_library(BaSpaCho
             BlockMatrix.cpp
             EliminationTree.cpp
             Factor.cpp
+            MatOps.cpp
             Solver.cpp
             SparseStructure.cpp
             TestingUtils.cpp
