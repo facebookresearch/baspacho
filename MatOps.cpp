@@ -37,10 +37,54 @@ struct SimpleOps : Ops {
         return OpaqueDataPtr(new OpaqueDataMatrixSkel(skel));
     }
 
+    struct OpaqueDataElimData : OpaqueData {
+        OpaqueDataElimData() {}
+        virtual ~OpaqueDataElimData() {}
+        vector<uint64_t> rowIndices;  // unused atm
+        vector<uint64_t> rowPtr;
+        vector<uint64_t> aggregInd;
+        vector<uint64_t> sliceIndexInCol;
+    };
+
+    // TODO: unit test
     virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
                                              uint64_t aggrStart,
                                              uint64_t aggrEnd) override {
-        return OpaqueDataPtr();
+        OpaqueDataElimData* elim = new OpaqueDataElimData;
+
+        uint64_t pIndexBegin = skel.aggregParamStart[aggrEnd];
+        uint64_t nParams = skel.paramStart.size() - 1 - pIndexBegin;
+        elim->rowPtr.assign(nParams, 0);
+        for (uint64_t a = aggrStart; a < aggrEnd; a++) {
+            for (uint64_t i = skel.blockColDataPtr[a],
+                          iEnd = skel.blockColDataPtr[a + 1];
+                 i < iEnd; i++) {
+                uint64_t pIndex = skel.blockRowParam[a];
+                if (pIndex < pIndexBegin) {
+                    continue;
+                }
+                uint64_t pRelIndex = pIndex - pIndexBegin;
+                elim->rowPtr[pRelIndex]++;
+            }
+        }
+        cumSum(elim->rowPtr);
+        for (uint64_t a = aggrStart; a < aggrEnd; a++) {
+            for (uint64_t iStart = skel.blockColDataPtr[a],
+                          iEnd = skel.blockColDataPtr[a + 1], i = iStart;
+                 i < iEnd; i++) {
+                uint64_t pIndex = skel.blockRowParam[a];
+                if (pIndex < pIndexBegin) {
+                    continue;
+                }
+                uint64_t pRelIndex = pIndex - pIndexBegin;
+                elim->aggregInd[elim->rowPtr[pRelIndex]] = a;
+                elim->sliceIndexInCol[elim->rowPtr[pRelIndex]] = i - iStart;
+                elim->rowPtr[pRelIndex]++;
+            }
+        }
+        rewind(elim->rowPtr);
+
+        return OpaqueDataPtr(elim);
     }
 
     virtual void doElimination(const OpaqueData& ref, double* data,

@@ -57,8 +57,6 @@ void Solver::prepareContextForTargetAggreg(uint64_t targetAggreg,
     }
 }
 
-uint64_t wth = 0;
-
 void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
                       SolverContext& ctx) const {
     auto start = hrc::now();
@@ -89,6 +87,7 @@ void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
     uint64_t dstStride = targetAggregSize;
     uint64_t srcStride = ctx.stride;
 
+    // TODO: multithread here
     for (uint64_t r = rowDataStart; r < rowDataEnd1; r++) {
         uint64_t rStart =
             skel.endBlockNumRowsAbove[colStart + r - 1] - startRowInSuperNode;
@@ -110,7 +109,7 @@ void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
                 skel.paramStart[cParam] - skel.aggregStart[targetAggreg];
             uint64_t offset = rOffset + offsetInAggreg;
 
-            // wth += offsetInAggreg + rOffset + rSize + rSize + cStart + cSize;
+            // TODO: investigate why is Eigen MUCH slower here?!
             double* dst = data + offset;
             const double* src = matRowPtr + cStart;
             for (uint j = 0; j < rSize; j++) {

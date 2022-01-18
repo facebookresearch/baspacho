@@ -121,7 +121,9 @@ std::pair<double, double> benchmarkCholmodSolve(
             << "\npotrf calls: " << cc_.cholmod_cpu_potrf_calls
             << ", time: " << cc_.cholmod_cpu_potrf_time
             << "\ntrsm calls: " << cc_.cholmod_cpu_trsm_calls
-            << ", time: " << cc_.cholmod_cpu_trsm_time;
+            << ", time: " << cc_.cholmod_cpu_trsm_time
+            << "\nassemb1: " << cc_.cholmod_assemble_time
+            << ", assemb2: " << cc_.cholmod_assemble_time2;
     }
 
     switch (cc_.status) {

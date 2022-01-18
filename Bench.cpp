@@ -85,7 +85,7 @@ void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill,
         SparseStructure ss = columnsToCscStruct(columns).transpose();
 
         vector<uint64_t> paramSizes(size, paramSize);
-        auto timings = benchmarkCholmodSolve(paramSizes, ss, false);
+        auto timings = benchmarkCholmodSolve(paramSizes, ss, true);
         analysisCholmodTimings.push_back(timings.first);
         factorCholmodTimings.push_back(timings.second);
     }
