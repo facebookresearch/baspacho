@@ -49,7 +49,7 @@ TEST(Solver, Solver) {
 }
 
 TEST(Solver, SolverXt) {
-    auto colBlocks = randomCols(100, 0.15, 37);
+    auto colBlocks = randomCols(115, 0.037, 57);
     SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
 
     vector<uint64_t> permutation = ss.fillReducingPermutation();
@@ -77,13 +77,13 @@ TEST(Solver, SolverXt) {
 
     Eigen::MatrixXd verifyMat = skel.densify(data);
     Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
-    std::cout << "VERIF:\n" << verifyMat << std::endl;
+    // std::cout << "VERIF:\n" << verifyMat << std::endl;
 
     Solver solver(std::move(skel), std::vector<uint64_t>{}, simpleOps());
     solver.factor(data.data());
 
     Eigen::MatrixXd computedMat = solver.skel.densify(data);
-    std::cout << "COMPUT:\n" << computedMat << std::endl;
+    // std::cout << "COMPUT:\n" << computedMat << std::endl;
 
     ASSERT_NEAR(Eigen::MatrixXd(
                     (verifyMat - computedMat).triangularView<Eigen::Lower>())
