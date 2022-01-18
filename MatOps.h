@@ -9,6 +9,8 @@ struct OpaqueData {
 using OpaqueDataPtr = std::unique_ptr<OpaqueData>;
 
 struct Ops {
+    virtual void printStats() const = 0;
+
     // (optionally) allows creation of op-specific global data (eg GPU copies)
     virtual OpaqueDataPtr prepareMatrixSkel(const BlockMatrixSkel& skel) = 0;
 

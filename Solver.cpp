@@ -4,12 +4,15 @@
 #include <glog/logging.h>
 
 #include <Eigen/Eigenvalues>
+#include <chrono>
 
 #include "EliminationTree.h"
 #include "TestingUtils.h"
 #include "Utils.h"
 
 using namespace std;
+using hrc = chrono::high_resolution_clock;
+using tdelta = chrono::duration<double>;
 
 Solver::Solver(BlockMatrixSkel&& skel, std::vector<uint64_t>&& elimRanges,
                OpsPtr ops)
@@ -56,6 +59,8 @@ void Solver::prepareContextForTargetAggreg(uint64_t targetAggreg,
 
 void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
                       SolverContext& ctx) const {
+    auto start = hrc::now();
+
     uint64_t aggregSize =
         skel.aggregStart[aggreg + 1] - skel.aggregStart[aggreg];
     uint64_t colStart = skel.blockColDataPtr[aggreg];
@@ -105,6 +110,11 @@ void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
                                        OuterStride(ctx.stride));
         }
     }
+
+    assembleLastCallTime = tdelta(hrc::now() - start).count();
+    assembleCalls++;
+    assembleTotTime += assembleLastCallTime;
+    assembleMaxCallTime = std::max(assembleMaxCallTime, assembleLastCallTime);
 }
 
 void Solver::eliminateAggregItem(double* data, uint64_t aggreg,
@@ -164,6 +174,12 @@ void Solver::factor(double* data) const {
         }
         factorAggreg(data, a);
     }
+
+    LOG(INFO) << "solver stats:"
+              << "\nassemble: #=" << assembleCalls
+              << ", time=" << assembleTotTime
+              << "s, last=" << assembleLastCallTime
+              << "s, max=" << assembleMaxCallTime << "s";
 }
 
 SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
@@ -181,6 +197,8 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
     et.buildTree();
     et.computeMerges();
     et.computeAggregateStruct();
+
+    // LOG(INFO) << "\naggregs: " << printVec(et.aggregParamStart);
 
     BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
                          et.rowParam);

@@ -34,6 +34,11 @@ struct Solver {
 
     OpaqueDataPtr opMatrixSkel;
     std::vector<OpaqueDataPtr> opElimination;
+
+    mutable uint64_t assembleCalls = 0;
+    mutable double assembleTotTime = 0.0;
+    mutable double assembleLastCallTime;
+    mutable double assembleMaxCallTime = 0.0;
 };
 
 using SolverPtr = std::unique_ptr<Solver>;

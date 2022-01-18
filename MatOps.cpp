@@ -18,6 +18,20 @@ struct SimpleOps : Ops {
         const BlockMatrixSkel& skel;
     };
 
+    virtual void printStats() const override {
+        LOG(INFO) << "matOp stats:"
+                  << "\nBiggest dense block: " << potrfBiggestN
+                  << "\npotrf: #=" << potrfCalls << ", time=" << potrfTotTime
+                  << "s, last=" << potrfLastCallTime
+                  << "s, max=" << potrfMaxCallTime << "s"
+                  << "\ntrsm: #=" << trsmCalls << ", time=" << trsmTotTime
+                  << "s, last=" << trsmLastCallTime
+                  << "s, max=" << trsmMaxCallTime << "s"
+                  << "\ngemm: #=" << gemmCalls << ", time=" << gemmTotTime
+                  << "s, last=" << gemmLastCallTime
+                  << "s, max=" << gemmMaxCallTime << "s";
+    }
+
     virtual OpaqueDataPtr prepareMatrixSkel(
         const BlockMatrixSkel& skel) override {
         return OpaqueDataPtr(new OpaqueDataMatrixSkel(skel));
@@ -39,12 +53,22 @@ struct SimpleOps : Ops {
     }
 
     virtual void potrf(uint64_t n, double* A) override {
+        auto start = hrc::now();
+
         Eigen::Map<MatRMaj<double>> matA(A, n, n);
         Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(matA);
+
+        potrfLastCallTime = tdelta(hrc::now() - start).count();
+        potrfCalls++;
+        potrfTotTime += potrfLastCallTime;
+        potrfMaxCallTime = std::max(potrfMaxCallTime, potrfLastCallTime);
+        potrfBiggestN = std::max(potrfBiggestN, n);
     }
 
     virtual void trsm(uint64_t n, uint64_t k, const double* A,
                       double* B) override {
+        auto start = hrc::now();
+
         using MatCMajD = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
                                        Eigen::ColMajor>;
 
@@ -53,16 +77,42 @@ struct SimpleOps : Ops {
         Eigen::Map<MatRMaj<double>> matB(B, k, n);
         matA.triangularView<Eigen::Upper>().solveInPlace<Eigen::OnTheRight>(
             matB);
+
+        trsmLastCallTime = tdelta(hrc::now() - start).count();
+        trsmCalls++;
+        trsmTotTime += trsmLastCallTime;
+        trsmMaxCallTime = std::max(trsmMaxCallTime, trsmLastCallTime);
     }
 
     // C = A * B'
     virtual void gemm(uint64_t m, uint64_t n, uint64_t k, const double* A,
                       const double* B, double* C) override {
+        auto start = hrc::now();
+
         Eigen::Map<const MatRMaj<double>> matA(A, m, k);
         Eigen::Map<const MatRMaj<double>> matB(B, n, k);
         Eigen::Map<MatRMaj<double>> matC(C, n, m);
         matC = matB * matA.transpose();
+
+        gemmLastCallTime = tdelta(hrc::now() - start).count();
+        gemmCalls++;
+        gemmTotTime += gemmLastCallTime;
+        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
     }
+
+    uint64_t potrfBiggestN = 0;
+    uint64_t potrfCalls = 0;
+    double potrfTotTime = 0.0;
+    double potrfLastCallTime;
+    double potrfMaxCallTime = 0.0;
+    uint64_t trsmCalls = 0;
+    double trsmTotTime = 0.0;
+    double trsmLastCallTime;
+    double trsmMaxCallTime = 0.0;
+    uint64_t gemmCalls = 0;
+    double gemmTotTime = 0.0;
+    double gemmLastCallTime;
+    double gemmMaxCallTime = 0.0;
 
     // TODO
     // virtual void assemble();
@@ -92,18 +142,26 @@ void dgemm_(char* transa, char* transb, BLAS_INT* m, BLAS_INT* n, BLAS_INT* k,
 
 struct BlasOps : SimpleOps {
     virtual void potrf(uint64_t n, double* A) override {
+        auto start = hrc::now();
+
         char argUpLo = 'U';
         BLAS_INT argN = n;
         BLAS_INT argLdA = n;
         BLAS_INT info;
-        // auto startPotrf = hrc::now();
+
         dpotrf_(&argUpLo, &argN, A, &argLdA, &info);
-        /*LOG(INFO) << "potrf time: " << tdelta(hrc::now() - startPotrf).count()
-                  << "s\n";*/
+
+        potrfLastCallTime = tdelta(hrc::now() - start).count();
+        potrfCalls++;
+        potrfTotTime += potrfLastCallTime;
+        potrfMaxCallTime = std::max(potrfMaxCallTime, potrfLastCallTime);
+        potrfBiggestN = std::max(potrfBiggestN, n);
     }
 
     virtual void trsm(uint64_t n, uint64_t k, const double* A,
                       double* B) override {
+        auto start = hrc::now();
+
         char argSide = 'L';
         char argUpLo = 'U';
         char argTransA = 'C';
@@ -116,11 +174,18 @@ struct BlasOps : SimpleOps {
 
         dtrsm_(&argSide, &argUpLo, &argTransA, &argDiag, &argM, &argN,
                &argAlpha, (double*)A, &argLdA, B, &argLdB);
+
+        trsmLastCallTime = tdelta(hrc::now() - start).count();
+        trsmCalls++;
+        trsmTotTime += trsmLastCallTime;
+        trsmMaxCallTime = std::max(trsmMaxCallTime, trsmLastCallTime);
     }
 
     // C = A * B'
     virtual void gemm(uint64_t m, uint64_t n, uint64_t k, const double* A,
                       const double* B, double* C) override {
+        auto start = hrc::now();
+
         char argTransA = 'C';
         char argTransB = 'N';
         BLAS_INT argM = m;
@@ -134,13 +199,11 @@ struct BlasOps : SimpleOps {
 
         dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha,
                (double*)A, &argLdA, (double*)B, &argLdB, &argBeta, C, &argLdC);
-        /*BLAS_INT* n, BLAS_INT* k, double* alpha, double* A,
-        BLAS_INT* lda, double* B, BLAS_INT* ldb, double* beta, double* C,
-        BLAS_INT* ldc);*/
-        /*Eigen::Map<const MatRMaj<double>> matA(A, m, k);
-        Eigen::Map<const MatRMaj<double>> matB(B, n, k);
-        Eigen::Map<MatRMaj<double>> matC(C, n, m);
-        matC = matB * matA.transpose();*/
+
+        gemmLastCallTime = tdelta(hrc::now() - start).count();
+        gemmCalls++;
+        gemmTotTime += gemmLastCallTime;
+        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
     }
 };
 

@@ -37,33 +37,16 @@ std::pair<double, double> benchmarkSolver(
     solver->factor(data.data());
     double factorTime = tdelta(hrc::now() - startFactor).count();
 
+    cout << endl;
+    solver->ops->printStats();
+    cout << "analysis: " << analysisTime << ", factor: " << factorTime << endl;
+
     return std::make_pair(analysisTime, factorTime);
 }
 
 // todo: try with different generator with different sparse topologies
-void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill) {
-    vector<double> analysisCholmodTimings, factorCholmodTimings;
-    cout << "Benchmark (size=" << size << ", pSize: " << paramSize
-         << ", fill: " << fill << ");" << endl;
-    for (int i = 0; i < numRuns; i++) {
-        cout << "\r" << setfill('.') << setw(i) << ""
-             << "(" << i << "/" << numRuns << ")" << flush;
-
-        int seed = i + 37;
-        auto columns = randomCols(size, fill, seed);
-        SparseStructure ss = columnsToCscStruct(columns).transpose();
-
-        vector<uint64_t> paramSizes(size, paramSize);
-        auto timings = benchmarkCholmodSolve(paramSizes, ss, false);
-        analysisCholmodTimings.push_back(timings.first);
-        factorCholmodTimings.push_back(timings.second);
-    }
-    cout << "\r" << setfill('.') << setw(numRuns) << ""
-         << "(" << numRuns << "/" << numRuns << ")" << endl;
-
-    cout << "analysis, Cholmod:\n" << printVec(analysisCholmodTimings) << endl;
-    cout << "factor, Cholmod:\n" << printVec(factorCholmodTimings) << endl;
-
+void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill,
+                  uint64_t schurSize = 0) {
     vector<double> analysisSolverTimings, factorSolverTimings;
     for (int i = 0; i < numRuns; i++) {
         cout << "\r" << setfill('.') << setw(i) << ""
@@ -71,6 +54,9 @@ void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill) {
 
         int seed = i + 37;
         auto columns = randomCols(size, fill, seed);
+        if (schurSize) {
+            columns = makeIndependentElimSet(columns, 0, schurSize);
+        }
         SparseStructure ss = columnsToCscStruct(columns).transpose();
 
         vector<uint64_t> paramSizes(size, paramSize);
@@ -83,12 +69,37 @@ void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill) {
 
     cout << "analysis, Solver:\n" << printVec(analysisSolverTimings) << endl;
     cout << "factor, Solver:\n" << printVec(factorSolverTimings) << endl;
+
+    vector<double> analysisCholmodTimings, factorCholmodTimings;
+    cout << "Benchmark (size=" << size << ", pSize: " << paramSize
+         << ", fill: " << fill << ");" << endl;
+    for (int i = 0; i < numRuns; i++) {
+        cout << "\r" << setfill('.') << setw(i) << ""
+             << "(" << i << "/" << numRuns << ")" << flush;
+
+        int seed = i + 37;
+        auto columns = randomCols(size, fill, seed);
+        if (schurSize) {
+            columns = makeIndependentElimSet(columns, 0, schurSize);
+        }
+        SparseStructure ss = columnsToCscStruct(columns).transpose();
+
+        vector<uint64_t> paramSizes(size, paramSize);
+        auto timings = benchmarkCholmodSolve(paramSizes, ss, false);
+        analysisCholmodTimings.push_back(timings.first);
+        factorCholmodTimings.push_back(timings.second);
+    }
+    cout << "\r" << setfill('.') << setw(numRuns) << ""
+         << "(" << numRuns << "/" << numRuns << ")" << endl;
+
+    cout << "analysis, Cholmod:\n" << printVec(analysisCholmodTimings) << endl;
+    cout << "factor, Cholmod:\n" << printVec(factorCholmodTimings) << endl;
 }
 
 int main(int argc, char* argv[]) {
     // runBenchmark(10, 1000, 3, 1);
-    // runBenchmark(10, 2000, 3, 0.01);
-    runBenchmark(10, 2000, 3, 1);
+    runBenchmark(1, 10000, 2, 0.05, 7500);
+    // runBenchmark(10, 2000, 3, 1);
 
     return 0;
 }

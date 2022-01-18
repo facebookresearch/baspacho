@@ -74,7 +74,7 @@ void EliminationTree::buildTree() {
 }
 
 // TODO: expand on merge settings
-static constexpr double kPropRows = 0.3;
+static constexpr double kPropRows = 0.5;
 
 void EliminationTree::computeMerges() {
     uint64_t ord = ss.order();
