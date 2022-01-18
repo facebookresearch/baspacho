@@ -57,6 +57,8 @@ void Solver::prepareContextForTargetAggreg(uint64_t targetAggreg,
     }
 }
 
+uint64_t wth = 0;
+
 void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
                       SolverContext& ctx) const {
     auto start = hrc::now();
@@ -84,6 +86,9 @@ void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
 
     const double* matProduct = ctx.tempBuffer.data();
 
+    uint64_t dstStride = targetAggregSize;
+    uint64_t srcStride = ctx.stride;
+
     for (uint64_t r = rowDataStart; r < rowDataEnd1; r++) {
         uint64_t rStart =
             skel.endBlockNumRowsAbove[colStart + r - 1] - startRowInSuperNode;
@@ -93,21 +98,34 @@ void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
         uint64_t rOffset = ctx.paramToSliceOffset[rParam];
         const double* matRowPtr = matProduct + rStart * ctx.stride;
 
-        for (uint64_t c = rowDataStart; c < rowDataEnd0; c++) {
+        uint64_t cEnd = std::min(rowDataEnd0, r + 1);
+        for (uint64_t c = rowDataStart; c < cEnd; c++) {
             uint64_t cStart = skel.endBlockNumRowsAbove[colStart + c - 1] -
                               startRowInSuperNode;
             uint64_t cSize = skel.endBlockNumRowsAbove[colStart + c] - cStart -
                              startRowInSuperNode;
             uint64_t cParam = skel.blockRowParam[colStart + c];
-            CHECK_EQ(skel.paramToAggreg[cParam], targetAggreg);
+            // CHECK_EQ(skel.paramToAggreg[cParam], targetAggreg);
             uint64_t offsetInAggreg =
                 skel.paramStart[cParam] - skel.aggregStart[targetAggreg];
             uint64_t offset = rOffset + offsetInAggreg;
 
+            // wth += offsetInAggreg + rOffset + rSize + rSize + cStart + cSize;
+            double* dst = data + offset;
+            const double* src = matRowPtr + cStart;
+            for (uint j = 0; j < rSize; j++) {
+                for (uint i = 0; i < cSize; i++) {
+                    dst[i] -= src[i];
+                }
+                dst += dstStride;
+                src += srcStride;
+            }
+#if 0
             OuterStridedMatM target(data + offset, rSize, cSize,
                                     OuterStride(targetAggregSize));
             target -= OuterStridedMatK(matRowPtr + cStart, rSize, cSize,
                                        OuterStride(ctx.stride));
+#endif
         }
     }
 
