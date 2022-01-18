@@ -293,13 +293,12 @@ std::vector<uint64_t> SparseStructure::fillReducingPermutation() const {
     std::vector<int64_t> P(colPtr.size() - 1);
     double Control[AMD_CONTROL], Info[AMD_INFO];
 
-    LOG(INFO) << "run AMD...";
     amd_l_defaults(Control);
     // amd_l_control(Control); // print verbose messages
 
     int result = amd_l_order(P.size(), colPtr.data(), rowInd.data(), P.data(),
                              Control, Info);
-    LOG(INFO) << "result: " << result;
+    CHECK_EQ(result, AMD_OK);
 
     return std::vector<uint64_t>(P.begin(), P.end());
 }
