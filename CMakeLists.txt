@@ -4,6 +4,18 @@ cmake_minimum_required(VERSION 3.20)
 project(BaSpaCho)
 set(CMAKE_CXX_STANDARD 17)
 
+# a few possibilities are:
+# * ATLAS
+# * OpenBLAS
+# * Intel10_64{i}lp{_seq}
+#   (if 'i' indices are 64bits, if '_seq' sequential ie single thread)
+set(BLA_VENDOR OpenBLAS CACHE STRING
+    "BLAS Library to be searched, possibilities are: ATLAS, OpenBLAS, Intel10_64ilp_seq, etc")
+message("BLA_VENDOR = " ${BLA_VENDOR})
+find_package(BLAS REQUIRED)
+message("BLAS linkerFlags = " ${BLAS_LINKER_FLAGS})
+message("BLAS Libraries = " ${BLAS_LIBRARIES})
+
 
 # cholmod (for benchmarking comparison)
 if(false) # use local installation dir
@@ -121,6 +133,8 @@ add_library(BaSpaCho
             Utils.cpp)
 target_link_libraries (BaSpaCho glog::glog dispenso ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
 
+# IF have blas
+target_link_libraries (BaSpaCho ${BLAS_LIBRARIES})
 
 add_executable(BAL_test BaAtLarge.cpp BaAtLargeTest.cpp)
 target_link_libraries (BAL_test BaSpaCho)

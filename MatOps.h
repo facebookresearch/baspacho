@@ -39,3 +39,5 @@ struct Ops {
 using OpsPtr = std::unique_ptr<Ops>;
 
 OpsPtr simpleOps();
+
+OpsPtr blasOps();

@@ -1,5 +1,28 @@
+BaSpaCho (*Ba*tched *Spa*rse *Cho*lesky) is a library for batched, sparse Cholesky
+decomposition and solving of linear systems, with support for Cuda.
 
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+# Required libraries:
+* BLAS
+* AMD, from SuiteSparse
+* CHOLMOD (only for comparison benchmarks and tests)
+Libraries fetched automatical by build:
+* glog (CHECK macros are handy)
+* gtest
+* Eigen
+* Sophus (only used in BA demo)
+
+# Blas
+The library used is specified in the CMake variable BLA_VENDOR,
+a few possibilities are:
+* ATLAS
+* OpenBLAS
+* Intel10_64{i}lp{_seq}
+  (if 'i' indices are 64bits, if '_seq' sequential ie single thread)
+For the full list check CMake docs at:
+https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors
+
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release 
+# -DBLA_VENDOR=Intel10_64ilp
 cmake --build build -v -- -j16
 ctest --test-dir build --show-only
 ctest --test-dir build

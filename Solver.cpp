@@ -185,6 +185,7 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
     BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
                          et.rowParam);
 
-    return SolverPtr(
-        new Solver(std::move(skel), std::vector<uint64_t>{}, simpleOps()));
+    return SolverPtr(new Solver(std::move(skel), std::vector<uint64_t>{},
+                                blasOps()  // simpleOps()
+                                ));
 }

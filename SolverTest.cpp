@@ -79,7 +79,10 @@ TEST(Solver, SolverXt) {
     Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
     // std::cout << "VERIF:\n" << verifyMat << std::endl;
 
-    Solver solver(std::move(skel), std::vector<uint64_t>{}, simpleOps());
+    Solver solver(std::move(skel), std::vector<uint64_t>{},  //
+                  blasOps()
+                  // simpleOps()
+    );
     solver.factor(data.data());
 
     Eigen::MatrixXd computedMat = solver.skel.densify(data);

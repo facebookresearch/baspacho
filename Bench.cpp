@@ -86,7 +86,9 @@ void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill) {
 }
 
 int main(int argc, char* argv[]) {
-    runBenchmark(10, 300, 3, 1);
+    // runBenchmark(10, 1000, 3, 1);
+    // runBenchmark(10, 2000, 3, 0.01);
+    runBenchmark(10, 2000, 3, 1);
 
     return 0;
 }
