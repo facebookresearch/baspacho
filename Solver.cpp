@@ -19,6 +19,7 @@ Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimRanges_,
     : skel(std::move(skel_)),
       elimRanges(std::move(elimRanges_)),
       ops(std::move(ops_)) {
+    opMatrixSkel = ops->prepareMatrixSkel(skel);
     LOG(INFO) << "wth? " << elimRanges.size();
     for (uint64_t r = 0; r + 1 < elimRanges.size(); r++) {
         // ops->prepareElimination(skel, elimRanges[r], elimRanges[r + 1]);

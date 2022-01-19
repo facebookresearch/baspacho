@@ -143,14 +143,19 @@ TEST(Solver, SolverXtElim) {
                       std::vector<uint64_t>{0, largestIndep},  //
                       // blasOps()
                       simpleOps());
-        solver.factor(data.data());
+        solver.ops->doElimination(*solver.opMatrixSkel, data.data(), 0,
+                                  largestIndep, *solver.opElimination[0]);
+        // solver.factor(data.data());
 
         Eigen::MatrixXd computedMat = solver.skel.densify(data);
         // std::cout << "COMPUT:\n" << computedMat << std::endl;
 
+        int endDenseSize = solver.skel.paramStart[largestIndep];
+
         ASSERT_NEAR(
             Eigen::MatrixXd(
                 (verifyMat - computedMat).triangularView<Eigen::Lower>())
+                .leftCols(largestIndep)
                 .norm(),
             0, 1e-5);
     }

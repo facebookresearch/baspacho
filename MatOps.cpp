@@ -5,6 +5,7 @@
 
 #include <chrono>
 
+#include "TestingUtils.h"
 #include "Utils.h"
 
 using namespace std;
@@ -94,18 +95,16 @@ struct SimpleOps : Ops {
     virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
                                              uint64_t aggrStart,
                                              uint64_t aggrEnd) override {
-        LOG(INFO) << "w: " << aggrEnd << " / " << skel.aggregParamStart.size();
         OpaqueDataElimData* elim = new OpaqueDataElimData;
 
         uint64_t pIndexBegin = skel.aggregParamStart[aggrEnd];
         uint64_t nParams = skel.paramStart.size() - 1 - pIndexBegin;
-        LOG(INFO) << "a.. " << nParams;
         elim->rowPtr.assign(nParams + 1, 0);
         for (uint64_t a = aggrStart; a < aggrEnd; a++) {
             for (uint64_t i = skel.blockColDataPtr[a],
                           iEnd = skel.blockColDataPtr[a + 1];
                  i < iEnd; i++) {
-                uint64_t pIndex = skel.blockRowParam[a];
+                uint64_t pIndex = skel.blockRowParam[i];
                 if (pIndex < pIndexBegin) {
                     continue;
                 }
@@ -114,14 +113,13 @@ struct SimpleOps : Ops {
             }
         }
         uint64_t totEls = cumSum(elim->rowPtr);
-        LOG(INFO) << "b: " << totEls;
         elim->aggregInd.resize(totEls);
         elim->sliceIndexInCol.resize(totEls);
         for (uint64_t a = aggrStart; a < aggrEnd; a++) {
             for (uint64_t iStart = skel.blockColDataPtr[a],
                           iEnd = skel.blockColDataPtr[a + 1], i = iStart;
                  i < iEnd; i++) {
-                uint64_t pIndex = skel.blockRowParam[a];
+                uint64_t pIndex = skel.blockRowParam[i];
                 if (pIndex < pIndexBegin) {
                     continue;
                 }
@@ -129,11 +127,16 @@ struct SimpleOps : Ops {
                 CHECK_LT(elim->rowPtr[pRelIndex], totEls);
                 elim->aggregInd[elim->rowPtr[pRelIndex]] = a;
                 elim->sliceIndexInCol[elim->rowPtr[pRelIndex]] = i - iStart;
+
+                CHECK_EQ(
+                    skel.blockRowParam[iStart + elim->sliceIndexInCol
+                                                    [elim->rowPtr[pRelIndex]]],
+                    pIndex);
+
                 elim->rowPtr[pRelIndex]++;
             }
         }
         rewind(elim->rowPtr);
-        LOG(INFO) << "c";
         return OpaqueDataPtr(elim);
     }
 
@@ -142,11 +145,11 @@ struct SimpleOps : Ops {
                                const OpaqueData& elimData) override {
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
-        CHECK_NOTNULL(pSkel);
-        const BlockMatrixSkel& skel = pSkel->skel;
         const OpaqueDataElimData* pElim =
             dynamic_cast<const OpaqueDataElimData*>(&elimData);
         CHECK_NOTNULL(pSkel);
+        CHECK_NOTNULL(pElim);
+        const BlockMatrixSkel& skel = pSkel->skel;
         const OpaqueDataElimData& elim = *pElim;
 
         // TODO: parallel
@@ -177,8 +180,7 @@ struct SimpleOps : Ops {
                 uint64_t sliceIdx = elim.sliceIndexInCol[i];
                 uint64_t ptrStart = skel.blockColDataPtr[aggreg];
                 uint64_t ptrEnd = skel.blockColDataPtr[aggreg + 1];
-                CHECK_EQ(skel.blockRowParam[ptrStart + sliceIdx],
-                         pIndexBegin + pRelIndex);
+                CHECK_EQ(skel.blockRowParam[ptrStart + sliceIdx], param);
                 uint64_t nRowsBase =
                     skel.endBlockNumRowsAbove[ptrStart + sliceIdx - 1];
                 uint64_t nRowsEnd0 =
@@ -197,7 +199,7 @@ struct SimpleOps : Ops {
                 Eigen::Map<MatRMaj<double>> belowDiagBlockFull(
                     data + belowDiagOffset, numRowsFull, aggregSize);
 
-                tempBuffer.resize(numRowsFull, numRowsSub);
+                tempBuffer.resize(numRowsFull * numRowsSub);
                 Eigen::Map<MatRMaj<double>> prod(tempBuffer.data(), numRowsFull,
                                                  numRowsSub);
                 prod = belowDiagBlockFull * belowDiagBlockSub.transpose();
