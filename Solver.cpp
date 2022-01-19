@@ -14,11 +14,18 @@ using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
-Solver::Solver(BlockMatrixSkel&& skel, std::vector<uint64_t>&& elimRanges,
-               OpsPtr ops)
-    : skel(std::move(skel)),
-      elimRanges(std::move(elimRanges)),
-      ops(std::move(ops)) {}
+Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimRanges_,
+               OpsPtr&& ops_)
+    : skel(std::move(skel_)),
+      elimRanges(std::move(elimRanges_)),
+      ops(std::move(ops_)) {
+    LOG(INFO) << "wth? " << elimRanges.size();
+    for (uint64_t r = 0; r + 1 < elimRanges.size(); r++) {
+        // ops->prepareElimination(skel, elimRanges[r], elimRanges[r + 1]);
+        opElimination.push_back(
+            ops->prepareElimination(skel, elimRanges[r], elimRanges[r + 1]));
+    }
+}
 
 void Solver::factorAggreg(double* data, uint64_t aggreg) const {
     uint64_t aggregStart = skel.aggregStart[aggreg];
@@ -199,6 +206,21 @@ void Solver::factor(double* data) const {
               << "s, max=" << assembleMaxCallTime << "s";
 }
 
+uint64_t findLargestIndependentAggregSet(const BlockMatrixSkel& skel) {
+    uint64_t limit = kInvalid;
+    for (uint64_t a = 0; a < skel.aggregParamStart.size() - 1; a++) {
+        if (a >= limit) {
+            break;
+        }
+        uint64_t aPtrStart = skel.blockColGatheredDataPtr[a];
+        uint64_t aPtrEnd = skel.blockColGatheredDataPtr[a + 1];
+        CHECK_EQ(skel.blockRowAggreg[aPtrStart], a);
+        CHECK_LE(2, aPtrEnd - aPtrStart);
+        limit = std::min(skel.blockRowAggreg[aPtrStart + 1], limit);
+    }
+    return std::min(limit, skel.aggregParamStart.size());
+}
+
 SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
                        const SparseStructure& ss) {
     vector<uint64_t> permutation = ss.fillReducingPermutation();
@@ -219,6 +241,9 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
 
     BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
                          et.rowParam);
+
+    uint64_t largestIndep = findLargestIndependentAggregSet(skel);
+    LOG(INFO) << "Largest indep set is 0.." << largestIndep;
 
     return SolverPtr(new Solver(std::move(skel), std::vector<uint64_t>{},
                                 blasOps()  // simpleOps()

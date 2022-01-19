@@ -7,7 +7,7 @@
 
 struct Solver {
     Solver(BlockMatrixSkel&& skel, std::vector<uint64_t>&& elimRanges,
-           OpsPtr ops);
+           OpsPtr&& ops);
 
     void factorAggreg(double* data, uint64_t aggreg) const;
 

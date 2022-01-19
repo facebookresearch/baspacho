@@ -5,9 +5,53 @@
 
 #include <chrono>
 
+#include "Utils.h"
+
 using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
+
+static void factorAggreg(const BlockMatrixSkel& skel, double* data,
+                         uint64_t aggreg) {
+    uint64_t aggregStart = skel.aggregStart[aggreg];
+    uint64_t aggregSize = skel.aggregStart[aggreg + 1] - aggregStart;
+    uint64_t colStart = skel.blockColDataPtr[aggreg];
+    uint64_t dataPtr = skel.blockData[colStart];
+
+    // compute lower diag cholesky dec on diagonal block
+    Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, aggregSize,
+                                          aggregSize);
+    { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
+    uint64_t gatheredStart = skel.blockColGatheredDataPtr[aggreg];
+    uint64_t gatheredEnd = skel.blockColGatheredDataPtr[aggreg + 1];
+    uint64_t rowDataStart = skel.blockRowAggregParamPtr[gatheredStart + 1];
+    uint64_t rowDataEnd = skel.blockRowAggregParamPtr[gatheredEnd - 1];
+    uint64_t belowDiagStart = skel.blockData[colStart + rowDataStart];
+    uint64_t numRows = skel.endBlockNumRowsAbove[colStart + rowDataEnd - 1] -
+                       skel.endBlockNumRowsAbove[colStart + rowDataStart - 1];
+
+    Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart, numRows,
+                                               aggregSize);
+    diagBlock.triangularView<Eigen::Lower>()
+        .transpose()
+        .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
+}
+
+static void prepareContextForTargetAggreg(
+    const BlockMatrixSkel& skel, uint64_t targetAggreg,
+    vector<uint64_t>& paramToSliceOffset) {
+    paramToSliceOffset.assign(skel.paramStart.size() - 1, 999999);
+    for (uint64_t i = skel.blockColDataPtr[targetAggreg],
+                  iEnd = skel.blockColDataPtr[targetAggreg + 1];
+         i < iEnd; i++) {
+        paramToSliceOffset[skel.blockRowParam[i]] = skel.blockData[i];
+    }
+}
+
+using OuterStride = Eigen::OuterStride<>;
+using OuterStridedMatM = Eigen::Map<
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
+    OuterStride>;
 
 // simple ops implemented using Eigen (therefore single thread)
 struct SimpleOps : Ops {
@@ -50,11 +94,13 @@ struct SimpleOps : Ops {
     virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
                                              uint64_t aggrStart,
                                              uint64_t aggrEnd) override {
+        LOG(INFO) << "w: " << aggrEnd << " / " << skel.aggregParamStart.size();
         OpaqueDataElimData* elim = new OpaqueDataElimData;
 
         uint64_t pIndexBegin = skel.aggregParamStart[aggrEnd];
         uint64_t nParams = skel.paramStart.size() - 1 - pIndexBegin;
-        elim->rowPtr.assign(nParams, 0);
+        LOG(INFO) << "a.. " << nParams;
+        elim->rowPtr.assign(nParams + 1, 0);
         for (uint64_t a = aggrStart; a < aggrEnd; a++) {
             for (uint64_t i = skel.blockColDataPtr[a],
                           iEnd = skel.blockColDataPtr[a + 1];
@@ -67,7 +113,10 @@ struct SimpleOps : Ops {
                 elim->rowPtr[pRelIndex]++;
             }
         }
-        cumSum(elim->rowPtr);
+        uint64_t totEls = cumSum(elim->rowPtr);
+        LOG(INFO) << "b: " << totEls;
+        elim->aggregInd.resize(totEls);
+        elim->sliceIndexInCol.resize(totEls);
         for (uint64_t a = aggrStart; a < aggrEnd; a++) {
             for (uint64_t iStart = skel.blockColDataPtr[a],
                           iEnd = skel.blockColDataPtr[a + 1], i = iStart;
@@ -77,13 +126,14 @@ struct SimpleOps : Ops {
                     continue;
                 }
                 uint64_t pRelIndex = pIndex - pIndexBegin;
+                CHECK_LT(elim->rowPtr[pRelIndex], totEls);
                 elim->aggregInd[elim->rowPtr[pRelIndex]] = a;
                 elim->sliceIndexInCol[elim->rowPtr[pRelIndex]] = i - iStart;
                 elim->rowPtr[pRelIndex]++;
             }
         }
         rewind(elim->rowPtr);
-
+        LOG(INFO) << "c";
         return OpaqueDataPtr(elim);
     }
 
@@ -93,7 +143,87 @@ struct SimpleOps : Ops {
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         CHECK_NOTNULL(pSkel);
-        const OpaqueDataMatrixSkel& skel = *pSkel;
+        const BlockMatrixSkel& skel = pSkel->skel;
+        const OpaqueDataElimData* pElim =
+            dynamic_cast<const OpaqueDataElimData*>(&elimData);
+        CHECK_NOTNULL(pSkel);
+        const OpaqueDataElimData& elim = *pElim;
+
+        // TODO: parallel
+        for (uint64_t a = aggrStart; a < aggrEnd; a++) {
+            factorAggreg(skel, data, a);
+        }
+
+        // TODO: parallel2
+        std::vector<double> tempBuffer;
+        std::vector<uint64_t> paramToSliceOffset;
+        uint64_t pIndexBegin = skel.aggregParamStart[aggrEnd];
+        uint64_t pNum = skel.paramStart.size() - 1;
+        for (uint64_t pRelIndex = 0; pRelIndex < elim.rowPtr.size() - 1;
+             pRelIndex++) {
+            uint64_t param = pRelIndex + pIndexBegin;
+            uint64_t targetAggreg = skel.paramToAggreg[param];
+            uint64_t targetAggregSize = skel.aggregStart[targetAggreg + 1] -
+                                        skel.aggregStart[targetAggreg];
+            uint64_t offsetInAggreg =
+                skel.paramStart[param] - skel.aggregStart[targetAggreg];
+            prepareContextForTargetAggreg(skel, targetAggreg,
+                                          paramToSliceOffset);
+
+            for (uint64_t i = elim.rowPtr[pRelIndex],
+                          iEnd = elim.rowPtr[pRelIndex + 1];
+                 i < iEnd; i++) {
+                uint64_t aggreg = elim.aggregInd[i];
+                uint64_t sliceIdx = elim.sliceIndexInCol[i];
+                uint64_t ptrStart = skel.blockColDataPtr[aggreg];
+                uint64_t ptrEnd = skel.blockColDataPtr[aggreg + 1];
+                CHECK_EQ(skel.blockRowParam[ptrStart + sliceIdx],
+                         pIndexBegin + pRelIndex);
+                uint64_t nRowsBase =
+                    skel.endBlockNumRowsAbove[ptrStart + sliceIdx - 1];
+                uint64_t nRowsEnd0 =
+                    skel.endBlockNumRowsAbove[ptrStart + sliceIdx];
+                uint64_t nRowsEnd = skel.endBlockNumRowsAbove[ptrEnd - 1];
+                uint64_t belowDiagOffset = skel.blockData[ptrStart + sliceIdx];
+                uint64_t numRowsSub = nRowsEnd0 - nRowsBase;
+                uint64_t numRowsFull = nRowsEnd - nRowsBase;
+                CHECK_EQ(numRowsSub,
+                         skel.paramStart[param + 1] - skel.paramStart[param]);
+                uint64_t aggregSize =
+                    skel.aggregStart[aggreg + 1] - skel.aggregStart[aggreg];
+
+                Eigen::Map<MatRMaj<double>> belowDiagBlockSub(
+                    data + belowDiagOffset, numRowsSub, aggregSize);
+                Eigen::Map<MatRMaj<double>> belowDiagBlockFull(
+                    data + belowDiagOffset, numRowsFull, aggregSize);
+
+                tempBuffer.resize(numRowsFull, numRowsSub);
+                Eigen::Map<MatRMaj<double>> prod(tempBuffer.data(), numRowsFull,
+                                                 numRowsSub);
+                prod = belowDiagBlockFull * belowDiagBlockSub.transpose();
+
+                // assemble
+                for (uint64_t ptr = ptrStart + sliceIdx; ptr < ptrEnd; ptr++) {
+                    uint64_t p = skel.blockRowParam[ptr];
+                    uint64_t rowStart =
+                        skel.endBlockNumRowsAbove[ptr - 1] - nRowsBase;
+                    uint64_t rowEnd =
+                        skel.endBlockNumRowsAbove[ptr] - nRowsBase;
+                    uint64_t rowSize = rowEnd - rowStart;
+                    CHECK_EQ(rowEnd - rowStart,
+                             skel.paramStart[p + 1] - skel.paramStart[p]);
+
+                    double* targetData =
+                        data + offsetInAggreg + paramToSliceOffset[p];
+
+                    OuterStridedMatM targetBlock(targetData, rowEnd - rowStart,
+                                                 numRowsSub,
+                                                 OuterStride(targetAggregSize));
+                    targetBlock -=
+                        prod.block(rowStart, 0, rowEnd - rowStart, numRowsSub);
+                }
+            }
+        }
     }
 
     virtual void potrf(uint64_t n, double* A) override {
