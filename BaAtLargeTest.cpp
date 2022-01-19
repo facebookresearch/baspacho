@@ -94,20 +94,18 @@ void experiment(Data& data) {
     et.computeAggregateStruct();
 
     LOG(INFO) << "Block mat";
-    BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
+    BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
                          et.rowParam);
-    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
     LOG(INFO) << "cam-cam blocky (with fill): " << totData << " ("
               << (100.0 * totData / (numCams * numCams)) << "%)";
 
-    LOG(INFO) << "aggregBlocks:" << skel.aggregParamStart.size() - 1;
-    for (size_t a = 0; a < skel.aggregParamStart.size() - 1; a++) {
-        LOG(INFO)
-            << "a." << a << ": size="
-            << skel.aggregParamStart[a + 1] - skel.aggregParamStart[a]
-            << ", nBlockRows="
-            << skel.blockRowAggregParamPtr[skel.blockColGatheredDataPtr[a + 1] -
-                                           1];
+    LOG(INFO) << "aggregBlocks:" << skel.rangeToSpan.size() - 1;
+    for (size_t a = 0; a < skel.rangeToSpan.size() - 1; a++) {
+        LOG(INFO) << "a." << a
+                  << ": size=" << skel.rangeToSpan[a + 1] - skel.rangeToSpan[a]
+                  << ", nBlockRows="
+                  << skel.slabSliceColOrd[skel.slabColPtr[a + 1] - 1];
     }
 
     LOG(INFO) << "Testing Cholmod...";

@@ -81,15 +81,15 @@ string printPattern(const SparseStructure& mat, bool sym) {
 }
 
 string printAggreg(vector<uint64_t> ptrs,  // csc
-                   vector<uint64_t> inds, vector<uint64_t> aggregStart) {
-    CHECK_EQ(ptrs.size(), aggregStart.size());
-    int64_t ord = aggregStart[aggregStart.size() - 1];
+                   vector<uint64_t> inds, vector<uint64_t> rangeStart) {
+    CHECK_EQ(ptrs.size(), rangeStart.size());
+    int64_t ord = rangeStart[rangeStart.size() - 1];
     vector<bool> isSet(ord * ord, false);
     for (uint64_t i = 0; i < ptrs.size() - 1; i++) {
         uint64_t start = ptrs[i];
         uint64_t end = ptrs[i + 1];
-        uint64_t aStart = aggregStart[i];
-        uint64_t aEnd = aggregStart[i + 1];
+        uint64_t aStart = rangeStart[i];
+        uint64_t aEnd = rangeStart[i + 1];
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
             for (uint64_t a = aStart; a < aEnd; a++) {
@@ -124,12 +124,12 @@ vector<set<uint64_t>> randomCols(uint64_t size, double fill, uint64_t seed) {
 
 std::vector<std::set<uint64_t>> joinColums(
     const std::vector<std::set<uint64_t>>& columns,
-    std::vector<uint64_t> aggregStart) {
-    CHECK_EQ(aggregStart[aggregStart.size() - 1], columns.size());
+    std::vector<uint64_t> rangeStart) {
+    CHECK_EQ(rangeStart[rangeStart.size() - 1], columns.size());
     std::vector<std::set<uint64_t>> retv;
-    for (uint64_t a = 0; a < aggregStart.size() - 1; a++) {
-        uint64_t start = aggregStart[a];
-        uint64_t end = aggregStart[a + 1];
+    for (uint64_t a = 0; a < rangeStart.size() - 1; a++) {
+        uint64_t start = rangeStart[a];
+        uint64_t end = rangeStart[a + 1];
         std::set<uint64_t> colz;
         for (uint64_t i = start; i < end; i++) {
             colz.insert(columns[i].begin(), columns[i].end());

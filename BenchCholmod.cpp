@@ -19,9 +19,9 @@ std::pair<double, double> benchmarkCholmodSolve(
     CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
     vector<int64_t> rowPtr, colInd;
     vector<double> val;
-    vector<uint64_t> paramStart = paramSize;
-    paramStart.push_back(0);
-    uint64_t totSize = cumSum(paramStart);
+    vector<uint64_t> spanStart = paramSize;
+    spanStart.push_back(0);
+    uint64_t totSize = cumSum(spanStart);
     rowPtr.push_back(0);
 
     mt19937 gen(37);
@@ -30,11 +30,11 @@ std::pair<double, double> benchmarkCholmodSolve(
 
     LOG_IF(INFO, verbose) << "to csr... (order=" << totSize << ")";
     for (uint64_t rb = 0; rb < paramSize.size(); rb++) {
-        for (uint64_t ri = paramStart[rb]; ri < paramStart[rb + 1]; ri++) {
+        for (uint64_t ri = spanStart[rb]; ri < spanStart[rb + 1]; ri++) {
             // ri = row index
             for (uint64_t q = ss.ptrs[rb]; q < ss.ptrs[rb + 1]; q++) {
                 uint64_t cb = ss.inds[q];
-                for (uint64_t ci = paramStart[cb]; ci < paramStart[cb + 1];
+                for (uint64_t ci = spanStart[cb]; ci < spanStart[cb + 1];
                      ci++) {
                     // ci = col index
                     if (ci > ri) {

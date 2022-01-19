@@ -21,7 +21,7 @@ std::pair<double, double> benchmarkSolver(
 
     // mock data
     uint64_t totData =
-        solver->skel.blockData[solver->skel.blockData.size() - 1];
+        solver->skel.sliceData[solver->skel.sliceData.size() - 1];
     vector<double> data(totData);
 
     mt19937 gen(39);
@@ -29,8 +29,7 @@ std::pair<double, double> benchmarkSolver(
     for (size_t i = 0; i < data.size(); i++) {
         data[i] = dis(gen);
     }
-    uint64_t order =
-        solver->skel.paramStart[solver->skel.paramStart.size() - 1];
+    uint64_t order = solver->skel.spanStart[solver->skel.spanStart.size() - 1];
     solver->skel.damp(data, 0, order * 1.2);
 
     auto startFactor = hrc::now();

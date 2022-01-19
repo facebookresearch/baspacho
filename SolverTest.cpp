@@ -20,14 +20,14 @@ TEST(Solver, Solver0) {
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> paramStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> aggregParamStart{0, 2, 4, 6};
-    SparseStructure groupedSs = columnsToCscStruct(
-        joinColums(csrStructToColumns(ss), aggregParamStart));
-    BlockMatrixSkel skel(paramStart, aggregParamStart, groupedSs.ptrs,
+    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<uint64_t> rangeToSpan{0, 2, 4, 6};
+    SparseStructure groupedSs =
+        columnsToCscStruct(joinColums(csrStructToColumns(ss), rangeToSpan));
+    BlockMatrixSkel skel(spanStart, rangeToSpan, groupedSs.ptrs,
                          groupedSs.inds);
 
-    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
 
@@ -64,10 +64,10 @@ TEST(Solver, SolverXt1) {
         et.computeMerges();
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
+        BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
                              et.rowParam);
 
-        uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+        uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
         vector<double> data(totData);
 
         mt19937 gen(39 + i);
@@ -117,10 +117,10 @@ TEST(Solver, SolverXtElim) {
         et.computeMerges();
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
+        BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
                              et.rowParam);
 
-        uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+        uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
         vector<double> data(totData);
 
         mt19937 gen(39 + i);
@@ -136,8 +136,8 @@ TEST(Solver, SolverXtElim) {
 
         uint64_t largestIndep = findLargestIndependentAggregSet(skel);
         cout << "Largest indep set is 0.." << largestIndep
-             << " (nAggregs: " << et.aggregParamStart.size() - 1 << ")"
-             << "\naggregs:" << printVec(et.aggregParamStart) << endl;
+             << " (nAggregs: " << et.rangeToSpan.size() - 1 << ")"
+             << "\naggregs:" << printVec(et.rangeToSpan) << endl;
 
         Solver solver(std::move(skel),
                       std::vector<uint64_t>{0, largestIndep},  //
@@ -150,7 +150,7 @@ TEST(Solver, SolverXtElim) {
         Eigen::MatrixXd computedMat = solver.skel.densify(data);
         // std::cout << "COMPUT:\n" << computedMat << std::endl;
 
-        int endDenseSize = solver.skel.paramStart[largestIndep];
+        int endDenseSize = solver.skel.spanStart[largestIndep];
 
         ASSERT_NEAR(
             Eigen::MatrixXd(

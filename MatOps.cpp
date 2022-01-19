@@ -14,22 +14,22 @@ using tdelta = chrono::duration<double>;
 
 static void factorAggreg(const BlockMatrixSkel& skel, double* data,
                          uint64_t aggreg) {
-    uint64_t aggregStart = skel.aggregStart[aggreg];
-    uint64_t aggregSize = skel.aggregStart[aggreg + 1] - aggregStart;
-    uint64_t colStart = skel.blockColDataPtr[aggreg];
-    uint64_t dataPtr = skel.blockData[colStart];
+    uint64_t rangeStart = skel.rangeStart[aggreg];
+    uint64_t aggregSize = skel.rangeStart[aggreg + 1] - rangeStart;
+    uint64_t colStart = skel.sliceColPtr[aggreg];
+    uint64_t dataPtr = skel.sliceData[colStart];
 
     // compute lower diag cholesky dec on diagonal block
     Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, aggregSize,
                                           aggregSize);
     { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
-    uint64_t gatheredStart = skel.blockColGatheredDataPtr[aggreg];
-    uint64_t gatheredEnd = skel.blockColGatheredDataPtr[aggreg + 1];
-    uint64_t rowDataStart = skel.blockRowAggregParamPtr[gatheredStart + 1];
-    uint64_t rowDataEnd = skel.blockRowAggregParamPtr[gatheredEnd - 1];
-    uint64_t belowDiagStart = skel.blockData[colStart + rowDataStart];
-    uint64_t numRows = skel.endBlockNumRowsAbove[colStart + rowDataEnd - 1] -
-                       skel.endBlockNumRowsAbove[colStart + rowDataStart - 1];
+    uint64_t gatheredStart = skel.slabColPtr[aggreg];
+    uint64_t gatheredEnd = skel.slabColPtr[aggreg + 1];
+    uint64_t rowDataStart = skel.slabSliceColOrd[gatheredStart + 1];
+    uint64_t rowDataEnd = skel.slabSliceColOrd[gatheredEnd - 1];
+    uint64_t belowDiagStart = skel.sliceData[colStart + rowDataStart];
+    uint64_t numRows = skel.sliceRowsTillEnd[colStart + rowDataEnd - 1] -
+                       skel.sliceRowsTillEnd[colStart + rowDataStart - 1];
 
     Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart, numRows,
                                                aggregSize);
@@ -41,11 +41,11 @@ static void factorAggreg(const BlockMatrixSkel& skel, double* data,
 static void prepareContextForTargetAggreg(
     const BlockMatrixSkel& skel, uint64_t targetAggreg,
     vector<uint64_t>& paramToSliceOffset) {
-    paramToSliceOffset.assign(skel.paramStart.size() - 1, 999999);
-    for (uint64_t i = skel.blockColDataPtr[targetAggreg],
-                  iEnd = skel.blockColDataPtr[targetAggreg + 1];
+    paramToSliceOffset.assign(skel.spanStart.size() - 1, 999999);
+    for (uint64_t i = skel.sliceColPtr[targetAggreg],
+                  iEnd = skel.sliceColPtr[targetAggreg + 1];
          i < iEnd; i++) {
-        paramToSliceOffset[skel.blockRowParam[i]] = skel.blockData[i];
+        paramToSliceOffset[skel.sliceRowSpan[i]] = skel.sliceData[i];
     }
 }
 
@@ -85,10 +85,9 @@ struct SimpleOps : Ops {
     struct OpaqueDataElimData : OpaqueData {
         OpaqueDataElimData() {}
         virtual ~OpaqueDataElimData() {}
-        vector<uint64_t> rowIndices;  // unused atm
-        vector<uint64_t> rowPtr;
-        vector<uint64_t> aggregInd;
-        vector<uint64_t> sliceIndexInCol;
+        vector<uint64_t> rowPtr;       // row data pointer
+        vector<uint64_t> colRange;     // col-range
+        vector<uint64_t> sliceColOrd;  //
     };
 
     // TODO: unit test
@@ -97,14 +96,14 @@ struct SimpleOps : Ops {
                                              uint64_t aggrEnd) override {
         OpaqueDataElimData* elim = new OpaqueDataElimData;
 
-        uint64_t pIndexBegin = skel.aggregParamStart[aggrEnd];
-        uint64_t nParams = skel.paramStart.size() - 1 - pIndexBegin;
+        uint64_t pIndexBegin = skel.rangeToSpan[aggrEnd];
+        uint64_t nParams = skel.spanStart.size() - 1 - pIndexBegin;
         elim->rowPtr.assign(nParams + 1, 0);
         for (uint64_t a = aggrStart; a < aggrEnd; a++) {
-            for (uint64_t i = skel.blockColDataPtr[a],
-                          iEnd = skel.blockColDataPtr[a + 1];
+            for (uint64_t i = skel.sliceColPtr[a],
+                          iEnd = skel.sliceColPtr[a + 1];
                  i < iEnd; i++) {
-                uint64_t pIndex = skel.blockRowParam[i];
+                uint64_t pIndex = skel.sliceRowSpan[i];
                 if (pIndex < pIndexBegin) {
                     continue;
                 }
@@ -113,24 +112,24 @@ struct SimpleOps : Ops {
             }
         }
         uint64_t totEls = cumSum(elim->rowPtr);
-        elim->aggregInd.resize(totEls);
-        elim->sliceIndexInCol.resize(totEls);
+        elim->colRange.resize(totEls);
+        elim->sliceColOrd.resize(totEls);
         for (uint64_t a = aggrStart; a < aggrEnd; a++) {
-            for (uint64_t iStart = skel.blockColDataPtr[a],
-                          iEnd = skel.blockColDataPtr[a + 1], i = iStart;
+            for (uint64_t iStart = skel.sliceColPtr[a],
+                          iEnd = skel.sliceColPtr[a + 1], i = iStart;
                  i < iEnd; i++) {
-                uint64_t pIndex = skel.blockRowParam[i];
+                uint64_t pIndex = skel.sliceRowSpan[i];
                 if (pIndex < pIndexBegin) {
                     continue;
                 }
                 uint64_t pRelIndex = pIndex - pIndexBegin;
                 CHECK_LT(elim->rowPtr[pRelIndex], totEls);
-                elim->aggregInd[elim->rowPtr[pRelIndex]] = a;
-                elim->sliceIndexInCol[elim->rowPtr[pRelIndex]] = i - iStart;
+                elim->colRange[elim->rowPtr[pRelIndex]] = a;
+                elim->sliceColOrd[elim->rowPtr[pRelIndex]] = i - iStart;
 
                 CHECK_EQ(
-                    skel.blockRowParam[iStart + elim->sliceIndexInCol
-                                                    [elim->rowPtr[pRelIndex]]],
+                    skel.sliceRowSpan
+                        [iStart + elim->sliceColOrd[elim->rowPtr[pRelIndex]]],
                     pIndex);
 
                 elim->rowPtr[pRelIndex]++;
@@ -160,39 +159,38 @@ struct SimpleOps : Ops {
         // TODO: parallel2
         std::vector<double> tempBuffer;
         std::vector<uint64_t> paramToSliceOffset;
-        uint64_t pIndexBegin = skel.aggregParamStart[aggrEnd];
-        uint64_t pNum = skel.paramStart.size() - 1;
+        uint64_t pIndexBegin = skel.rangeToSpan[aggrEnd];
+        uint64_t pNum = skel.spanStart.size() - 1;
         for (uint64_t pRelIndex = 0; pRelIndex < elim.rowPtr.size() - 1;
              pRelIndex++) {
             uint64_t param = pRelIndex + pIndexBegin;
-            uint64_t targetAggreg = skel.paramToAggreg[param];
-            uint64_t targetAggregSize = skel.aggregStart[targetAggreg + 1] -
-                                        skel.aggregStart[targetAggreg];
+            uint64_t targetAggreg = skel.spanToRange[param];
+            uint64_t targetAggregSize = skel.rangeStart[targetAggreg + 1] -
+                                        skel.rangeStart[targetAggreg];
             uint64_t offsetInAggreg =
-                skel.paramStart[param] - skel.aggregStart[targetAggreg];
+                skel.spanStart[param] - skel.rangeStart[targetAggreg];
             prepareContextForTargetAggreg(skel, targetAggreg,
                                           paramToSliceOffset);
 
             for (uint64_t i = elim.rowPtr[pRelIndex],
                           iEnd = elim.rowPtr[pRelIndex + 1];
                  i < iEnd; i++) {
-                uint64_t aggreg = elim.aggregInd[i];
-                uint64_t sliceIdx = elim.sliceIndexInCol[i];
-                uint64_t ptrStart = skel.blockColDataPtr[aggreg];
-                uint64_t ptrEnd = skel.blockColDataPtr[aggreg + 1];
-                CHECK_EQ(skel.blockRowParam[ptrStart + sliceIdx], param);
+                uint64_t aggreg = elim.colRange[i];
+                uint64_t sliceIdx = elim.sliceColOrd[i];
+                uint64_t ptrStart = skel.sliceColPtr[aggreg];
+                uint64_t ptrEnd = skel.sliceColPtr[aggreg + 1];
+                CHECK_EQ(skel.sliceRowSpan[ptrStart + sliceIdx], param);
                 uint64_t nRowsBase =
-                    skel.endBlockNumRowsAbove[ptrStart + sliceIdx - 1];
-                uint64_t nRowsEnd0 =
-                    skel.endBlockNumRowsAbove[ptrStart + sliceIdx];
-                uint64_t nRowsEnd = skel.endBlockNumRowsAbove[ptrEnd - 1];
-                uint64_t belowDiagOffset = skel.blockData[ptrStart + sliceIdx];
+                    skel.sliceRowsTillEnd[ptrStart + sliceIdx - 1];
+                uint64_t nRowsEnd0 = skel.sliceRowsTillEnd[ptrStart + sliceIdx];
+                uint64_t nRowsEnd = skel.sliceRowsTillEnd[ptrEnd - 1];
+                uint64_t belowDiagOffset = skel.sliceData[ptrStart + sliceIdx];
                 uint64_t numRowsSub = nRowsEnd0 - nRowsBase;
                 uint64_t numRowsFull = nRowsEnd - nRowsBase;
                 CHECK_EQ(numRowsSub,
-                         skel.paramStart[param + 1] - skel.paramStart[param]);
+                         skel.spanStart[param + 1] - skel.spanStart[param]);
                 uint64_t aggregSize =
-                    skel.aggregStart[aggreg + 1] - skel.aggregStart[aggreg];
+                    skel.rangeStart[aggreg + 1] - skel.rangeStart[aggreg];
 
                 Eigen::Map<MatRMaj<double>> belowDiagBlockSub(
                     data + belowDiagOffset, numRowsSub, aggregSize);
@@ -206,14 +204,13 @@ struct SimpleOps : Ops {
 
                 // assemble
                 for (uint64_t ptr = ptrStart + sliceIdx; ptr < ptrEnd; ptr++) {
-                    uint64_t p = skel.blockRowParam[ptr];
+                    uint64_t p = skel.sliceRowSpan[ptr];
                     uint64_t rowStart =
-                        skel.endBlockNumRowsAbove[ptr - 1] - nRowsBase;
-                    uint64_t rowEnd =
-                        skel.endBlockNumRowsAbove[ptr] - nRowsBase;
+                        skel.sliceRowsTillEnd[ptr - 1] - nRowsBase;
+                    uint64_t rowEnd = skel.sliceRowsTillEnd[ptr] - nRowsBase;
                     uint64_t rowSize = rowEnd - rowStart;
                     CHECK_EQ(rowEnd - rowStart,
-                             skel.paramStart[p + 1] - skel.paramStart[p]);
+                             skel.spanStart[p + 1] - skel.spanStart[p]);
 
                     double* targetData =
                         data + offsetInAggreg + paramToSliceOffset[p];

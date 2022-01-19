@@ -118,38 +118,38 @@ void EliminationTree::computeAggregateStruct() {
     }
 
     // straightening permutation
-    uint64_t numAggregs = ord - numMerges;
-    vector<uint64_t> paramToAggreg(ord);
+    uint64_t numRanges = ord - numMerges;
+    vector<uint64_t> spanToRange(ord);
     uint64_t pIdx = ord;
-    uint64_t agIdx = numAggregs;
+    uint64_t agIdx = numRanges;
     permutation.resize(ord);
-    aggregStart.resize(numAggregs + 1);
-    aggregParamStart.assign(numAggregs + 1, 0);
+    rangeStart.resize(numRanges + 1);
+    rangeToSpan.assign(numRanges + 1, 0);
     for (int64_t k = ord - 1; k >= 0; k--) {
         if (mergeWith[k] != -1) {
             continue;
         }
 
         CHECK_GT(agIdx, 0);
-        aggregStart[--agIdx] = nodeSize[k];
+        rangeStart[--agIdx] = nodeSize[k];
 
         CHECK_GT(pIdx, 0);
         permutation[--pIdx] = k;
-        paramToAggreg[k] = agIdx;
-        aggregParamStart[agIdx]++;
+        spanToRange[k] = agIdx;
+        rangeToSpan[agIdx]++;
         for (int64_t q = firstMergeChild[k]; q != -1; q = nextMergeSibling[q]) {
             CHECK_GT(pIdx, 0);
             permutation[--pIdx] = q;
-            paramToAggreg[q] = agIdx;
-            aggregParamStart[agIdx]++;
+            spanToRange[q] = agIdx;
+            rangeToSpan[agIdx]++;
         }
     }
     CHECK_EQ(pIdx, 0);
     CHECK_EQ(agIdx, 0);
 
-    // cum-sum aggregStart
-    cumSum(aggregParamStart);
-    uint64_t tot = cumSum(aggregStart);
+    // cum-sum rangeStart
+    cumSum(rangeToSpan);
+    uint64_t tot = cumSum(rangeStart);
     permInverse = inversePermutation(permutation);
 
     SparseStructure tperm =  // lower-half csc
@@ -160,9 +160,9 @@ void EliminationTree::computeAggregateStruct() {
 
     vector<int64_t> tags(ord, -1);  // check if row el was added already
     colStart.push_back(0);
-    for (uint64_t a = 0; a < numAggregs; a++) {
-        uint64_t aStart = aggregParamStart[a];
-        uint64_t aEnd = aggregParamStart[a + 1];
+    for (uint64_t a = 0; a < numRanges; a++) {
+        uint64_t aStart = rangeToSpan[a];
+        uint64_t aEnd = rangeToSpan[a + 1];
         uint64_t pStart = tperm.ptrs[aStart];
         uint64_t pEnd = tperm.ptrs[aEnd];
         for (uint64_t i = pStart; i < pEnd; i++) {
@@ -177,9 +177,9 @@ void EliminationTree::computeAggregateStruct() {
         colStart.push_back(rowParam.size());
     }
 
-    // set paramStart to cumSum of paramSize
-    paramStart.reserve(paramSize.size() + 1);
-    paramStart = paramSize;
-    paramStart.push_back(0);
-    cumSum(paramStart);
+    // set spanStart to cumSum of paramSize
+    spanStart.reserve(paramSize.size() + 1);
+    spanStart = paramSize;
+    spanStart.push_back(0);
+    cumSum(spanStart);
 }

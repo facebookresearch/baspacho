@@ -11,9 +11,24 @@ template <typename T>
 using MatRMaj =
     Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
+/*
+    Notation for block matrix with grouped columns:
+    Linear data:
+    * a `span` is the basic grouping of data (at creation)
+    * an `range` is formed by a few consecutive params
+    Block data:
+    * a `block` is `span rows` x `span cols`
+    * a `slice` is `span rows` x `range cols`
+    * a `slab` is (non-empty) and formed by:
+      `all the spans belonging to an range of rows` x `range cols`
+
+    Note that numeric data in a column of slices are a row-major
+    matrix. In this way we can refer to the slice sub-matrix,
+    or to the whole set of columns as the slice data are consecutive.
+*/
 struct BlockMatrixSkel {
-    BlockMatrixSkel(const std::vector<uint64_t>& paramStart,
-                    const std::vector<uint64_t>& aggregParamStart,
+    BlockMatrixSkel(const std::vector<uint64_t>& spanStart,
+                    const std::vector<uint64_t>& rangeToSpan,
                     const std::vector<uint64_t>& colPtr,
                     const std::vector<uint64_t>& rowInd);
 
@@ -21,39 +36,32 @@ struct BlockMatrixSkel {
 
     void damp(std::vector<double>& data, double alpha, double beta);
 
-    std::vector<uint64_t> paramStart;        // num_params + 1
-    std::vector<uint64_t> paramToAggreg;     // num_params
-    std::vector<uint64_t> aggregStart;       // num_aggregs + 1
-    std::vector<uint64_t> aggregParamStart;  // num_aggregs + 1
+    std::vector<uint64_t> spanStart;  // (with final el)
+    std::vector<uint64_t> spanToRange;
+    std::vector<uint64_t> rangeStart;   // (with final el)
+    std::vector<uint64_t> rangeToSpan;  // (with final el)
 
-    // rename to "slice" (param row set x aggreg cols)
-    // A matrix block is identified by a pair of param x aggreg
-    std::vector<uint64_t> blockColDataPtr;       // num_aggregs + 1
-    std::vector<uint64_t> blockRowParam;         // num_blocks
-    std::vector<uint64_t> blockData;             // num_blocks + 1
-    std::vector<uint64_t> endBlockNumRowsAbove;  // num_blocks
+    // per-slice data, column-ordered
+    std::vector<uint64_t> sliceColPtr;       // slab col data start (with end)
+    std::vector<uint64_t> sliceRowSpan;      // row-span id
+    std::vector<uint64_t> sliceData;         // numeric data offset
+    std::vector<uint64_t> sliceRowsTillEnd;  // num of rows till end
 
-    // rename to "slab" (aggregated param row sets x aggreg cols)
+    // per-slab data, column-ordered, colums have a final element
+    std::vector<uint64_t> slabColPtr;       // slab col data start (with end)
+    std::vector<uint64_t> slabRowRange;     // row-range id (end = invalid)
+    std::vector<uint64_t> slabSliceColOrd;  // slice ord in col (end = #slices)
 
-    // We also need to know about the "gathered" blocks, where we have
-    // grouped the consecutive row params into aggregates.
-    // This is because we will process the colum of blocks taking not
-    // one row at a time, but an aggregate of rows.
-    std::vector<uint64_t> blockColGatheredDataPtr;  // num_aggregs + 1
-    std::vector<uint64_t> blockRowAggreg;  // num_gathered_blocks + num_aggregs
-    std::vector<uint64_t>
-        blockRowAggregParamPtr;  // num_gathered_blocks + num_aggregs
-
-    // supernodes per-row, essentially the transpose of the above
-    std::vector<uint64_t> slabRowPtr;     // numAggregs + 1
-    std::vector<uint64_t> slabAggregInd;  // num_gathered_blocks
-    std::vector<uint64_t> slabColInd;     // num_gathered_blocks
+    // per-slab data, row-ordered
+    std::vector<uint64_t> slabRowPtr;    // slab row data start (with end)
+    std::vector<uint64_t> slabColRange;  // slab's col range
+    std::vector<uint64_t> slabColOrd;    // slab order in col
 };
 
-BlockMatrixSkel initBlockMatrixSkel(
-    const std::vector<uint64_t>& paramStart,
-    const std::vector<uint64_t>& aggregParamStart,
-    const std::vector<uint64_t>& colPtr, const std::vector<uint64_t>& rowInd);
+BlockMatrixSkel initBlockMatrixSkel(const std::vector<uint64_t>& spanStart,
+                                    const std::vector<uint64_t>& rangeToSpan,
+                                    const std::vector<uint64_t>& colPtr,
+                                    const std::vector<uint64_t>& rowInd);
 
 Eigen::MatrixXd densify(const BlockMatrixSkel& skel,
                         const std::vector<double>& data);

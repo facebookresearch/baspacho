@@ -17,13 +17,13 @@ TEST(Factor, FactorAggreg) {
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> paramStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> aggregParamStart{0, 2, 4, 6};
-    SparseStructure groupedSs = columnsToCscStruct(
-        joinColums(csrStructToColumns(ss), aggregParamStart));
-    BlockMatrixSkel skel(paramStart, aggregParamStart, groupedSs.ptrs,
+    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<uint64_t> rangeToSpan{0, 2, 4, 6};
+    SparseStructure groupedSs =
+        columnsToCscStruct(joinColums(csrStructToColumns(ss), rangeToSpan));
+    BlockMatrixSkel skel(spanStart, rangeToSpan, groupedSs.ptrs,
                          groupedSs.inds);
-    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
     skel.damp(data, 5, 50);
@@ -41,14 +41,14 @@ TEST(Factor, Factor) {
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> paramStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> aggregParamStart{0, 2, 4, 6};
-    SparseStructure groupedSs = columnsToCscStruct(
-        joinColums(csrStructToColumns(ss), aggregParamStart));
-    BlockMatrixSkel skel(paramStart, aggregParamStart, groupedSs.ptrs,
+    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<uint64_t> rangeToSpan{0, 2, 4, 6};
+    SparseStructure groupedSs =
+        columnsToCscStruct(joinColums(csrStructToColumns(ss), rangeToSpan));
+    BlockMatrixSkel skel(spanStart, rangeToSpan, groupedSs.ptrs,
                          groupedSs.inds);
 
-    uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
 

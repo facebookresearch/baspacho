@@ -36,9 +36,9 @@ TEST(EliminationTree, Build) {
 
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
+        BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
                              et.rowParam);
-        uint64_t totData = skel.blockData[skel.blockData.size() - 1];
+        uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
         vector<double> data(totData, 1);
         Eigen::MatrixXd mat = skel.densify(data);
         LOG(INFO) << "densified:\n" << mat;

@@ -29,21 +29,21 @@ Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimRanges_,
 }
 
 void Solver::factorAggreg(double* data, uint64_t aggreg) const {
-    uint64_t aggregStart = skel.aggregStart[aggreg];
-    uint64_t aggregSize = skel.aggregStart[aggreg + 1] - aggregStart;
-    uint64_t colStart = skel.blockColDataPtr[aggreg];
-    uint64_t diagBlockOff = skel.blockData[colStart];
+    uint64_t rangeStart = skel.rangeStart[aggreg];
+    uint64_t aggregSize = skel.rangeStart[aggreg + 1] - rangeStart;
+    uint64_t colStart = skel.sliceColPtr[aggreg];
+    uint64_t diagBlockOff = skel.sliceData[colStart];
 
     // compute lower diag cholesky dec on diagonal block
     ops->potrf(aggregSize, data + diagBlockOff);
 
-    uint64_t gatheredStart = skel.blockColGatheredDataPtr[aggreg];
-    uint64_t gatheredEnd = skel.blockColGatheredDataPtr[aggreg + 1];
-    uint64_t rowDataStart = skel.blockRowAggregParamPtr[gatheredStart + 1];
-    uint64_t rowDataEnd = skel.blockRowAggregParamPtr[gatheredEnd - 1];
-    uint64_t belowDiagOff = skel.blockData[colStart + rowDataStart];
-    uint64_t numRows = skel.endBlockNumRowsAbove[colStart + rowDataEnd - 1] -
-                       skel.endBlockNumRowsAbove[colStart + rowDataStart - 1];
+    uint64_t gatheredStart = skel.slabColPtr[aggreg];
+    uint64_t gatheredEnd = skel.slabColPtr[aggreg + 1];
+    uint64_t rowDataStart = skel.slabSliceColOrd[gatheredStart + 1];
+    uint64_t rowDataEnd = skel.slabSliceColOrd[gatheredEnd - 1];
+    uint64_t belowDiagOff = skel.sliceData[colStart + rowDataStart];
+    uint64_t numRows = skel.sliceRowsTillEnd[colStart + rowDataEnd - 1] -
+                       skel.sliceRowsTillEnd[colStart + rowDataStart - 1];
     if (numRows == 0) {
         return;
     }
@@ -57,11 +57,11 @@ using OuterStridedMatK = Eigen::Map<const MatRMaj<double>, 0, OuterStride>;
 
 void Solver::prepareContextForTargetAggreg(uint64_t targetAggreg,
                                            SolverContext& ctx) const {
-    ctx.paramToSliceOffset.assign(skel.paramStart.size() - 1, 999999);
-    for (uint64_t i = skel.blockColDataPtr[targetAggreg],
-                  iEnd = skel.blockColDataPtr[targetAggreg + 1];
+    ctx.paramToSliceOffset.assign(skel.spanStart.size() - 1, 999999);
+    for (uint64_t i = skel.sliceColPtr[targetAggreg],
+                  iEnd = skel.sliceColPtr[targetAggreg + 1];
          i < iEnd; i++) {
-        ctx.paramToSliceOffset[skel.blockRowParam[i]] = skel.blockData[i];
+        ctx.paramToSliceOffset[skel.sliceRowSpan[i]] = skel.sliceData[i];
     }
 }
 
@@ -69,26 +69,24 @@ void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
                       SolverContext& ctx) const {
     auto start = hrc::now();
 
-    uint64_t aggregSize =
-        skel.aggregStart[aggreg + 1] - skel.aggregStart[aggreg];
-    uint64_t colStart = skel.blockColDataPtr[aggreg];
+    uint64_t aggregSize = skel.rangeStart[aggreg + 1] - skel.rangeStart[aggreg];
+    uint64_t colStart = skel.sliceColPtr[aggreg];
 
-    uint64_t gatheredStart = skel.blockColGatheredDataPtr[aggreg];
-    uint64_t gatheredEnd = skel.blockColGatheredDataPtr[aggreg + 1];
+    uint64_t gatheredStart = skel.slabColPtr[aggreg];
+    uint64_t gatheredEnd = skel.slabColPtr[aggreg + 1];
 
-    uint64_t targetAggreg = skel.blockRowAggreg[gatheredStart + slabIndexInSN];
-    uint64_t rowDataStart =
-        skel.blockRowAggregParamPtr[gatheredStart + slabIndexInSN];
+    uint64_t targetAggreg = skel.slabRowRange[gatheredStart + slabIndexInSN];
+    uint64_t rowDataStart = skel.slabSliceColOrd[gatheredStart + slabIndexInSN];
     uint64_t rowDataEnd0 =
-        skel.blockRowAggregParamPtr[gatheredStart + slabIndexInSN + 1];
-    uint64_t rowDataEnd1 = skel.blockRowAggregParamPtr[gatheredEnd - 1];
+        skel.slabSliceColOrd[gatheredStart + slabIndexInSN + 1];
+    uint64_t rowDataEnd1 = skel.slabSliceColOrd[gatheredEnd - 1];
 
-    uint64_t belowDiagStart = skel.blockData[colStart + rowDataStart];
+    uint64_t belowDiagStart = skel.sliceData[colStart + rowDataStart];
     uint64_t startRowInSuperNode =
-        skel.endBlockNumRowsAbove[colStart + rowDataStart - 1];
+        skel.sliceRowsTillEnd[colStart + rowDataStart - 1];
 
     uint64_t targetAggregSize =
-        skel.aggregStart[targetAggreg + 1] - skel.aggregStart[targetAggreg];
+        skel.rangeStart[targetAggreg + 1] - skel.rangeStart[targetAggreg];
 
     const double* matProduct = ctx.tempBuffer.data();
 
@@ -98,23 +96,23 @@ void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
     // TODO: multithread here
     for (uint64_t r = rowDataStart; r < rowDataEnd1; r++) {
         uint64_t rStart =
-            skel.endBlockNumRowsAbove[colStart + r - 1] - startRowInSuperNode;
-        uint64_t rSize = skel.endBlockNumRowsAbove[colStart + r] - rStart -
-                         startRowInSuperNode;
-        uint64_t rParam = skel.blockRowParam[colStart + r];
+            skel.sliceRowsTillEnd[colStart + r - 1] - startRowInSuperNode;
+        uint64_t rSize =
+            skel.sliceRowsTillEnd[colStart + r] - rStart - startRowInSuperNode;
+        uint64_t rParam = skel.sliceRowSpan[colStart + r];
         uint64_t rOffset = ctx.paramToSliceOffset[rParam];
         const double* matRowPtr = matProduct + rStart * ctx.stride;
 
         uint64_t cEnd = std::min(rowDataEnd0, r + 1);
         for (uint64_t c = rowDataStart; c < cEnd; c++) {
-            uint64_t cStart = skel.endBlockNumRowsAbove[colStart + c - 1] -
-                              startRowInSuperNode;
-            uint64_t cSize = skel.endBlockNumRowsAbove[colStart + c] - cStart -
+            uint64_t cStart =
+                skel.sliceRowsTillEnd[colStart + c - 1] - startRowInSuperNode;
+            uint64_t cSize = skel.sliceRowsTillEnd[colStart + c] - cStart -
                              startRowInSuperNode;
-            uint64_t cParam = skel.blockRowParam[colStart + c];
-            // CHECK_EQ(skel.paramToAggreg[cParam], targetAggreg);
+            uint64_t cParam = skel.sliceRowSpan[colStart + c];
+            // CHECK_EQ(skel.spanToRange[cParam], targetAggreg);
             uint64_t offsetInAggreg =
-                skel.paramStart[cParam] - skel.aggregStart[targetAggreg];
+                skel.spanStart[cParam] - skel.rangeStart[targetAggreg];
             uint64_t offset = rOffset + offsetInAggreg;
 
             // TODO: investigate why is Eigen MUCH slower here?!
@@ -145,25 +143,23 @@ void Solver::assemble(double* data, uint64_t aggreg, uint64_t slabIndexInSN,
 void Solver::eliminateAggregItem(double* data, uint64_t aggreg,
                                  uint64_t slabIndexInSN,
                                  SolverContext& ctx) const {
-    uint64_t aggregSize =
-        skel.aggregStart[aggreg + 1] - skel.aggregStart[aggreg];
-    uint64_t colStart = skel.blockColDataPtr[aggreg];
+    uint64_t aggregSize = skel.rangeStart[aggreg + 1] - skel.rangeStart[aggreg];
+    uint64_t colStart = skel.sliceColPtr[aggreg];
 
-    uint64_t gatheredStart = skel.blockColGatheredDataPtr[aggreg];
-    uint64_t gatheredEnd = skel.blockColGatheredDataPtr[aggreg + 1];
+    uint64_t gatheredStart = skel.slabColPtr[aggreg];
+    uint64_t gatheredEnd = skel.slabColPtr[aggreg + 1];
 
-    uint64_t rowDataStart =
-        skel.blockRowAggregParamPtr[gatheredStart + slabIndexInSN];
+    uint64_t rowDataStart = skel.slabSliceColOrd[gatheredStart + slabIndexInSN];
     uint64_t rowDataEnd0 =
-        skel.blockRowAggregParamPtr[gatheredStart + slabIndexInSN + 1];
-    uint64_t rowDataEnd1 = skel.blockRowAggregParamPtr[gatheredEnd - 1];
+        skel.slabSliceColOrd[gatheredStart + slabIndexInSN + 1];
+    uint64_t rowDataEnd1 = skel.slabSliceColOrd[gatheredEnd - 1];
 
-    uint64_t belowDiagStart = skel.blockData[colStart + rowDataStart];
-    uint64_t rowStart = skel.endBlockNumRowsAbove[colStart + rowDataStart - 1];
+    uint64_t belowDiagStart = skel.sliceData[colStart + rowDataStart];
+    uint64_t rowStart = skel.sliceRowsTillEnd[colStart + rowDataStart - 1];
     uint64_t numRowsSub =
-        skel.endBlockNumRowsAbove[colStart + rowDataEnd0 - 1] - rowStart;
+        skel.sliceRowsTillEnd[colStart + rowDataEnd0 - 1] - rowStart;
     uint64_t numRowsFull =
-        skel.endBlockNumRowsAbove[colStart + rowDataEnd1 - 1] - rowStart;
+        skel.sliceRowsTillEnd[colStart + rowDataEnd1 - 1] - rowStart;
 
     Eigen::Map<MatRMaj<double>> belowDiagBlockSub(data + belowDiagStart,
                                                   numRowsSub, aggregSize);
@@ -180,21 +176,20 @@ void Solver::eliminateAggregItem(double* data, uint64_t aggreg,
 
 void Solver::factor(double* data) const {
     SolverContext ctx;
-    for (uint64_t a = 0; a < skel.blockColDataPtr.size() - 1; a++) {
+    for (uint64_t a = 0; a < skel.sliceColPtr.size() - 1; a++) {
         prepareContextForTargetAggreg(a, ctx);
 
         //  iterate over columns having a non-trivial a-block
         for (uint64_t rPtr = skel.slabRowPtr[a],
-                      rEnd = skel.slabRowPtr[a + 1];       //
-             rPtr < rEnd && skel.slabAggregInd[rPtr] < a;  //
+                      rEnd = skel.slabRowPtr[a + 1];      //
+             rPtr < rEnd && skel.slabColRange[rPtr] < a;  //
              rPtr++) {
-            uint64_t origAggreg = skel.slabAggregInd[rPtr];
-            uint64_t slabIndexInSN = skel.slabColInd[rPtr];
-            uint64_t slabSNDataStart = skel.blockColGatheredDataPtr[origAggreg];
-            uint64_t slabSNDataEnd =
-                skel.blockColGatheredDataPtr[origAggreg + 1];
+            uint64_t origAggreg = skel.slabColRange[rPtr];
+            uint64_t slabIndexInSN = skel.slabColOrd[rPtr];
+            uint64_t slabSNDataStart = skel.slabColPtr[origAggreg];
+            uint64_t slabSNDataEnd = skel.slabColPtr[origAggreg + 1];
             CHECK_LT(slabIndexInSN, slabSNDataEnd - slabSNDataStart);
-            CHECK_EQ(a, skel.blockRowAggreg[slabSNDataStart + slabIndexInSN]);
+            CHECK_EQ(a, skel.slabRowRange[slabSNDataStart + slabIndexInSN]);
             eliminateAggregItem(data, origAggreg, slabIndexInSN, ctx);
         }
         factorAggreg(data, a);
@@ -209,17 +204,17 @@ void Solver::factor(double* data) const {
 
 uint64_t findLargestIndependentAggregSet(const BlockMatrixSkel& skel) {
     uint64_t limit = kInvalid;
-    for (uint64_t a = 0; a < skel.aggregParamStart.size() - 1; a++) {
+    for (uint64_t a = 0; a < skel.rangeToSpan.size() - 1; a++) {
         if (a >= limit) {
             break;
         }
-        uint64_t aPtrStart = skel.blockColGatheredDataPtr[a];
-        uint64_t aPtrEnd = skel.blockColGatheredDataPtr[a + 1];
-        CHECK_EQ(skel.blockRowAggreg[aPtrStart], a);
+        uint64_t aPtrStart = skel.slabColPtr[a];
+        uint64_t aPtrEnd = skel.slabColPtr[a + 1];
+        CHECK_EQ(skel.slabRowRange[aPtrStart], a);
         CHECK_LE(2, aPtrEnd - aPtrStart);
-        limit = std::min(skel.blockRowAggreg[aPtrStart + 1], limit);
+        limit = std::min(skel.slabRowRange[aPtrStart + 1], limit);
     }
-    return std::min(limit, skel.aggregParamStart.size());
+    return std::min(limit, skel.rangeToSpan.size());
 }
 
 SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
@@ -238,9 +233,9 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
     et.computeMerges();
     et.computeAggregateStruct();
 
-    // LOG(INFO) << "\naggregs: " << printVec(et.aggregParamStart);
+    // LOG(INFO) << "\naggregs: " << printVec(et.rangeToSpan);
 
-    BlockMatrixSkel skel(et.paramStart, et.aggregParamStart, et.colStart,
+    BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
                          et.rowParam);
 
     uint64_t largestIndep = findLargestIndependentAggregSet(skel);
