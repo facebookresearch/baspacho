@@ -14,7 +14,7 @@ using tdelta = chrono::duration<double>;
 
 std::pair<double, double> benchmarkSolver(
     const std::vector<uint64_t>& paramSize, const SparseStructure& ss,
-    bool verbose = true) {
+    uint64_t schurSize, bool verbose = true) {
     auto startAnalysis = hrc::now();
     SolverPtr solver = createSolver(paramSize, ss);
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
@@ -59,7 +59,7 @@ void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill,
         SparseStructure ss = columnsToCscStruct(columns).transpose();
 
         vector<uint64_t> paramSizes(size, paramSize);
-        auto timings = benchmarkSolver(paramSizes, ss, false);
+        auto timings = benchmarkSolver(paramSizes, ss, schurSize, false);
         analysisSolverTimings.push_back(timings.first);
         factorSolverTimings.push_back(timings.second);
     }

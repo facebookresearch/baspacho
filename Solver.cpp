@@ -20,9 +20,7 @@ Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimRanges_,
       elimRanges(std::move(elimRanges_)),
       ops(std::move(ops_)) {
     opMatrixSkel = ops->prepareMatrixSkel(skel);
-    LOG(INFO) << "wth? " << elimRanges.size();
     for (uint64_t r = 0; r + 1 < elimRanges.size(); r++) {
-        // ops->prepareElimination(skel, elimRanges[r], elimRanges[r + 1]);
         opElimination.push_back(
             ops->prepareElimination(skel, elimRanges[r], elimRanges[r + 1]));
     }
@@ -177,24 +175,38 @@ void Solver::eliminateAggregItem(double* data, uint64_t range,
 }
 
 void Solver::factor(double* data) const {
+    for (uint64_t r = 0; r + 1 < elimRanges.size(); r++) {
+        LOG(INFO) << "Elim " << r;
+        ops->doElimination(*opMatrixSkel, data, elimRanges[r],
+                           elimRanges[r + 1], *opElimination[r]);
+    }
+
+    uint64_t denseOpsFromRange =
+        elimRanges.size() ? elimRanges[elimRanges.size() - 1] : 0;
+    LOG(INFO) << "FactFrom " << denseOpsFromRange;
+
     SolverContext ctx;
-    for (uint64_t a = 0; a < skel.sliceColPtr.size() - 1; a++) {
-        prepareContextForTargetAggreg(a, ctx);
+    for (uint64_t r = denseOpsFromRange; r < skel.sliceColPtr.size() - 1; r++) {
+        prepareContextForTargetAggreg(r, ctx);
 
         //  iterate over columns having a non-trivial a-block
-        for (uint64_t rPtr = skel.slabRowPtr[a],
-                      rEnd = skel.slabRowPtr[a + 1];      //
-             rPtr < rEnd && skel.slabColRange[rPtr] < a;  //
+        for (uint64_t rPtr = skel.slabRowPtr[r],
+                      rEnd = skel.slabRowPtr[r + 1];      //
+             rPtr < rEnd && skel.slabColRange[rPtr] < r;  //
              rPtr++) {
             uint64_t origAggreg = skel.slabColRange[rPtr];
+            if (origAggreg < denseOpsFromRange) {
+                continue;
+            }
             uint64_t slabIndexInSN = skel.slabColOrd[rPtr];
             uint64_t slabSNDataStart = skel.slabColPtr[origAggreg];
             uint64_t slabSNDataEnd = skel.slabColPtr[origAggreg + 1];
             CHECK_LT(slabIndexInSN, slabSNDataEnd - slabSNDataStart);
-            CHECK_EQ(a, skel.slabRowRange[slabSNDataStart + slabIndexInSN]);
+            CHECK_EQ(r, skel.slabRowRange[slabSNDataStart + slabIndexInSN]);
             eliminateAggregItem(data, origAggreg, slabIndexInSN, ctx);
         }
-        factorAggreg(data, a);
+
+        factorAggreg(data, r);
     }
 
     LOG(INFO) << "solver stats:"
@@ -243,7 +255,8 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
     uint64_t largestIndep = findLargestIndependentAggregSet(skel);
     LOG(INFO) << "Largest indep set is 0.." << largestIndep;
 
-    return SolverPtr(new Solver(std::move(skel), std::vector<uint64_t>{},
+    return SolverPtr(new Solver(std::move(skel),
+                                std::vector<uint64_t>{0, largestIndep},
                                 blasOps()  // simpleOps()
                                 ));
 }
