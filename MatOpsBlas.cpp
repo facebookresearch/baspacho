@@ -1,12 +1,31 @@
 
-#include "MatOps.h"
-
+#include <dispenso/parallel_for.h>
 #include <glog/logging.h>
 
 #include <chrono>
 
-#include "TestingUtils.h"
+#include "MatOps.h"
 #include "Utils.h"
+
+// BLAS/LAPACK famously go without headers.
+extern "C" {
+
+#if 0
+#define BLAS_INT long
+#else
+#define BLAS_INT int
+#endif
+
+void dpotrf_(char* uplo, BLAS_INT* n, double* A, BLAS_INT* lda, BLAS_INT* info);
+
+void dtrsm_(char* side, char* uplo, char* transa, char* diag, BLAS_INT* m,
+            BLAS_INT* n, double* alpha, double* A, BLAS_INT* lda, double* B,
+            BLAS_INT* ldb);
+
+void dgemm_(char* transa, char* transb, BLAS_INT* m, BLAS_INT* n, BLAS_INT* k,
+            double* alpha, double* A, BLAS_INT* lda, double* B, BLAS_INT* ldb,
+            double* beta, double* C, BLAS_INT* ldc);
+}
 
 using namespace std;
 using hrc = chrono::high_resolution_clock;
@@ -22,6 +41,7 @@ static void factorAggreg(const BlockMatrixSkel& skel, double* data,
     // compute lower diag cholesky dec on diagonal block
     Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, rangeSize, rangeSize);
     { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
+
     uint64_t gatheredStart = skel.slabColPtr[range];
     uint64_t gatheredEnd = skel.slabColPtr[range + 1];
     uint64_t rowDataStart = skel.slabSliceColOrd[gatheredStart + 1];
@@ -53,13 +73,16 @@ using OuterStridedMatM = Eigen::Map<
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
     OuterStride>;
 
-// simple ops implemented using Eigen (therefore single thread)
-struct SimpleOps : Ops {
+struct BlasOps : Ops {
     // will just contain a reference to the skel
     struct OpaqueDataMatrixSkel : OpaqueData {
-        OpaqueDataMatrixSkel(const BlockMatrixSkel& skel) : skel(skel) {}
+        OpaqueDataMatrixSkel(const BlockMatrixSkel& skel)
+            : skel(skel), threadPool(dispenso::globalThreadPool()) {
+            threadPool.resize(16);
+        }
         virtual ~OpaqueDataMatrixSkel() {}
         const BlockMatrixSkel& skel;
+        dispenso::ThreadPool& threadPool;
     };
 
     virtual void printStats() const override {
@@ -88,6 +111,7 @@ struct SimpleOps : Ops {
         // per-row pointers to slices in a rectagle:
         // * span-rows from rangeToSpan[rangesEnd],
         // * slab cols in interval rangesBegin:rangesEnd
+        uint64_t spanRowBegin;
         vector<uint64_t> rowPtr;       // row data pointer
         vector<uint64_t> colRange;     // col-range
         vector<uint64_t> sliceColOrd;  // order in col slice elements
@@ -132,7 +156,71 @@ struct SimpleOps : Ops {
             }
         }
         rewind(elim->rowPtr);
+        elim->spanRowBegin = spanRowBegin;
         return OpaqueDataPtr(elim);
+    }
+
+    struct ElimContext {
+        std::vector<double> tempBuffer;
+        std::vector<uint64_t> spanToSliceOffset;
+    };
+
+    static void eliminateRowSlice(const OpaqueDataElimData& elim,
+                                  const BlockMatrixSkel& skel, double* data,
+                                  uint64_t sRel, ElimContext& ctx) {
+        uint64_t s = sRel + elim.spanRowBegin;
+        uint64_t targetRange = skel.spanToRange[s];
+        uint64_t targetRangeSize =
+            skel.rangeStart[targetRange + 1] - skel.rangeStart[targetRange];
+        uint64_t spanOffsetInRange =
+            skel.spanStart[s] - skel.rangeStart[targetRange];
+        prepareContextForTargetAggreg(skel, targetRange, ctx.spanToSliceOffset);
+
+        // iterate over slices present in this row
+        for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
+             i < iEnd; i++) {
+            uint64_t range = elim.colRange[i];
+            uint64_t sliceColOrd = elim.sliceColOrd[i];
+            CHECK_GE(sliceColOrd, 1);  // there must be a diagonal block
+
+            uint64_t ptrStart = skel.sliceColPtr[range] + sliceColOrd;
+            uint64_t ptrEnd = skel.sliceColPtr[range + 1];
+            CHECK_EQ(skel.sliceRowSpan[ptrStart], s);
+
+            uint64_t nRowsAbove = skel.sliceRowsTillEnd[ptrStart - 1];
+            uint64_t nRowsSlice = skel.sliceRowsTillEnd[ptrStart] - nRowsAbove;
+            uint64_t nRowsOnward = skel.sliceRowsTillEnd[ptrEnd - 1];
+            uint64_t dataOffset = skel.sliceData[ptrStart];
+            CHECK_EQ(nRowsSlice, skel.spanStart[s + 1] - skel.spanStart[s]);
+            uint64_t rangeSize =
+                skel.rangeStart[range + 1] - skel.rangeStart[range];
+
+            Eigen::Map<MatRMaj<double>> sliceSubMat(data + dataOffset,
+                                                    nRowsSlice, rangeSize);
+            Eigen::Map<MatRMaj<double>> sliceOnwardSubMat(
+                data + dataOffset, nRowsOnward, rangeSize);
+
+            ctx.tempBuffer.resize(nRowsOnward * nRowsSlice);
+            Eigen::Map<MatRMaj<double>> prod(ctx.tempBuffer.data(), nRowsOnward,
+                                             nRowsSlice);
+            prod = sliceOnwardSubMat * sliceSubMat.transpose();
+
+            // assemble blocks, iterating on slice and below slices
+            for (uint64_t ptr = ptrStart; ptr < ptrEnd; ptr++) {
+                uint64_t s2 = skel.sliceRowSpan[ptr];
+                uint64_t relRow = skel.sliceRowsTillEnd[ptr - 1] - nRowsAbove;
+                uint64_t s2_size =
+                    skel.sliceRowsTillEnd[ptr] - nRowsAbove - relRow;
+                CHECK_EQ(s2_size, skel.spanStart[s2 + 1] - skel.spanStart[s2]);
+
+                double* targetData =
+                    data + spanOffsetInRange + ctx.spanToSliceOffset[s2];
+
+                OuterStridedMatM targetBlock(targetData, s2_size, nRowsSlice,
+                                             OuterStride(targetRangeSize));
+                targetBlock -= prod.block(relRow, 0, s2_size, nRowsSlice);
+            }
+        }
     }
 
     virtual void doElimination(const OpaqueData& ref, double* data,
@@ -147,166 +235,29 @@ struct SimpleOps : Ops {
         const BlockMatrixSkel& skel = pSkel->skel;
         const OpaqueDataElimData& elim = *pElim;
 
-        // TODO: parallel
-        for (uint64_t a = rangesBegin; a < rangesEnd; a++) {
-            factorAggreg(skel, data, a);
-        }
+        dispenso::TaskSet taskSet(pSkel->threadPool);
+        dispenso::parallel_for(
+            taskSet, dispenso::makeChunkedRange(rangesBegin, rangesEnd, 5UL),
+            [&](int64_t rStart, int64_t rEnd) {
+                for (int64_t r = rStart; r < rEnd; r++) {
+                    factorAggreg(skel, data, r);
+                }
+            });
 
         // TODO: parallel2
-        std::vector<double> tempBuffer;           // ctx
-        std::vector<uint64_t> spanToSliceOffset;  // ctx
+        vector<ElimContext> contexts;
 
-        uint64_t spanRowBegin = skel.rangeToSpan[rangesEnd];
-        for (uint64_t sRel = 0; sRel < elim.rowPtr.size() - 1; sRel++) {
-            uint64_t s = sRel + spanRowBegin;
-            uint64_t targetRange = skel.spanToRange[s];
-            uint64_t targetRangeSize =
-                skel.rangeStart[targetRange + 1] - skel.rangeStart[targetRange];
-            uint64_t spanOffsetInRange =
-                skel.spanStart[s] - skel.rangeStart[targetRange];
-            prepareContextForTargetAggreg(skel, targetRange, spanToSliceOffset);
-
-            // iterate over slices present in this row
-            for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
-                 i < iEnd; i++) {
-                uint64_t range = elim.colRange[i];
-                uint64_t sliceColOrd = elim.sliceColOrd[i];
-                CHECK_GE(sliceColOrd, 1);  // there must be a diagonal block
-
-                uint64_t ptrStart = skel.sliceColPtr[range] + sliceColOrd;
-                uint64_t ptrEnd = skel.sliceColPtr[range + 1];
-                CHECK_EQ(skel.sliceRowSpan[ptrStart], s);
-
-                uint64_t nRowsAbove = skel.sliceRowsTillEnd[ptrStart - 1];
-                uint64_t nRowsSlice =
-                    skel.sliceRowsTillEnd[ptrStart] - nRowsAbove;
-                uint64_t nRowsOnward = skel.sliceRowsTillEnd[ptrEnd - 1];
-                uint64_t dataOffset = skel.sliceData[ptrStart];
-                CHECK_EQ(nRowsSlice, skel.spanStart[s + 1] - skel.spanStart[s]);
-                uint64_t rangeSize =
-                    skel.rangeStart[range + 1] - skel.rangeStart[range];
-
-                Eigen::Map<MatRMaj<double>> sliceSubMat(data + dataOffset,
-                                                        nRowsSlice, rangeSize);
-                Eigen::Map<MatRMaj<double>> sliceOnwardSubMat(
-                    data + dataOffset, nRowsOnward, rangeSize);
-
-                tempBuffer.resize(nRowsOnward * nRowsSlice);
-                Eigen::Map<MatRMaj<double>> prod(tempBuffer.data(), nRowsOnward,
-                                                 nRowsSlice);
-                prod = sliceOnwardSubMat * sliceSubMat.transpose();
-
-                // assemble blocks, iterating on slice and below slices
-                for (uint64_t ptr = ptrStart; ptr < ptrEnd; ptr++) {
-                    uint64_t s2 = skel.sliceRowSpan[ptr];
-                    uint64_t relRow =
-                        skel.sliceRowsTillEnd[ptr - 1] - nRowsAbove;
-                    uint64_t s2_size =
-                        skel.sliceRowsTillEnd[ptr] - nRowsAbove - relRow;
-                    CHECK_EQ(s2_size,
-                             skel.spanStart[s2 + 1] - skel.spanStart[s2]);
-
-                    double* targetData =
-                        data + spanOffsetInRange + spanToSliceOffset[s2];
-
-                    OuterStridedMatM targetBlock(targetData, s2_size,
-                                                 nRowsSlice,
-                                                 OuterStride(targetRangeSize));
-                    targetBlock -= prod.block(relRow, 0, s2_size, nRowsSlice);
+        dispenso::TaskSet taskSet1(pSkel->threadPool);
+        dispenso::parallel_for(
+            taskSet1, contexts, []() -> ElimContext { return ElimContext(); },
+            dispenso::makeChunkedRange(0UL, elim.rowPtr.size() - 1, 5UL),
+            [&, this](ElimContext& ctx, size_t sBegin, size_t sEnd) {
+                for (uint64_t sRel = sBegin; sRel < sEnd; sRel++) {
+                    eliminateRowSlice(elim, skel, data, sRel, ctx);
                 }
-            }
-        }
+            });
     }
 
-    virtual void potrf(uint64_t n, double* A) override {
-        auto start = hrc::now();
-
-        Eigen::Map<MatRMaj<double>> matA(A, n, n);
-        Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(matA);
-
-        potrfLastCallTime = tdelta(hrc::now() - start).count();
-        potrfCalls++;
-        potrfTotTime += potrfLastCallTime;
-        potrfMaxCallTime = std::max(potrfMaxCallTime, potrfLastCallTime);
-        potrfBiggestN = std::max(potrfBiggestN, n);
-    }
-
-    virtual void trsm(uint64_t n, uint64_t k, const double* A,
-                      double* B) override {
-        auto start = hrc::now();
-
-        using MatCMajD = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                                       Eigen::ColMajor>;
-
-        // col-major's upper = (row-major's lower).transpose()
-        Eigen::Map<const MatCMajD> matA(A, n, n);
-        Eigen::Map<MatRMaj<double>> matB(B, k, n);
-        matA.triangularView<Eigen::Upper>().solveInPlace<Eigen::OnTheRight>(
-            matB);
-
-        trsmLastCallTime = tdelta(hrc::now() - start).count();
-        trsmCalls++;
-        trsmTotTime += trsmLastCallTime;
-        trsmMaxCallTime = std::max(trsmMaxCallTime, trsmLastCallTime);
-    }
-
-    // C = A * B'
-    virtual void gemm(uint64_t m, uint64_t n, uint64_t k, const double* A,
-                      const double* B, double* C) override {
-        auto start = hrc::now();
-
-        Eigen::Map<const MatRMaj<double>> matA(A, m, k);
-        Eigen::Map<const MatRMaj<double>> matB(B, n, k);
-        Eigen::Map<MatRMaj<double>> matC(C, n, m);
-        matC = matB * matA.transpose();
-
-        gemmLastCallTime = tdelta(hrc::now() - start).count();
-        gemmCalls++;
-        gemmTotTime += gemmLastCallTime;
-        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
-    }
-
-    uint64_t potrfBiggestN = 0;
-    uint64_t potrfCalls = 0;
-    double potrfTotTime = 0.0;
-    double potrfLastCallTime;
-    double potrfMaxCallTime = 0.0;
-    uint64_t trsmCalls = 0;
-    double trsmTotTime = 0.0;
-    double trsmLastCallTime;
-    double trsmMaxCallTime = 0.0;
-    uint64_t gemmCalls = 0;
-    double gemmTotTime = 0.0;
-    double gemmLastCallTime;
-    double gemmMaxCallTime = 0.0;
-
-    // TODO
-    // virtual void assemble();
-};
-
-OpsPtr simpleOps() { return OpsPtr(new SimpleOps); }
-
-// BLAS/LAPACK famously go without headers.
-extern "C" {
-
-#if 0
-#define BLAS_INT long
-#else
-#define BLAS_INT int
-#endif
-
-void dpotrf_(char* uplo, BLAS_INT* n, double* A, BLAS_INT* lda, BLAS_INT* info);
-
-void dtrsm_(char* side, char* uplo, char* transa, char* diag, BLAS_INT* m,
-            BLAS_INT* n, double* alpha, double* A, BLAS_INT* lda, double* B,
-            BLAS_INT* ldb);
-
-void dgemm_(char* transa, char* transb, BLAS_INT* m, BLAS_INT* n, BLAS_INT* k,
-            double* alpha, double* A, BLAS_INT* lda, double* B, BLAS_INT* ldb,
-            double* beta, double* C, BLAS_INT* ldc);
-}
-
-struct BlasOps : SimpleOps {
     virtual void potrf(uint64_t n, double* A) override {
         auto start = hrc::now();
 
@@ -371,6 +322,20 @@ struct BlasOps : SimpleOps {
         gemmTotTime += gemmLastCallTime;
         gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
     }
+
+    uint64_t potrfBiggestN = 0;
+    uint64_t potrfCalls = 0;
+    double potrfTotTime = 0.0;
+    double potrfLastCallTime;
+    double potrfMaxCallTime = 0.0;
+    uint64_t trsmCalls = 0;
+    double trsmTotTime = 0.0;
+    double trsmLastCallTime;
+    double trsmMaxCallTime = 0.0;
+    uint64_t gemmCalls = 0;
+    double gemmTotTime = 0.0;
+    double gemmLastCallTime;
+    double gemmMaxCallTime = 0.0;
 };
 
 OpsPtr blasOps() { return OpsPtr(new BlasOps); }

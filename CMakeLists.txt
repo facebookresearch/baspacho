@@ -64,7 +64,10 @@ FetchContent_Declare(
   GIT_REPOSITORY git@github.com:facebookincubator/dispenso.git
   GIT_TAG 22ff47d07c32303a5059bfec26304a68dff01e65
 	)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_MakeAvailable(dispenso)
+unset(CMAKE_POSITION_INDEPENDENT_CODE)
+include_directories(${dispenso_SOURCE_DIR} ${dispenso_SOURCE_DIR}/dispenso/third-party/moodycamel)
 message("Dispenso Source = " ${dispenso_SOURCE_DIR})
 message("Dispenso Library Dir = " ${dispenso_BINARY_DIR})
 
@@ -126,12 +129,14 @@ add_library(BaSpaCho
             BlockMatrix.cpp
             EliminationTree.cpp
             Factor.cpp
-            MatOps.cpp
+            MatOpsBlas.cpp
+            MatOpsRef.cpp
             Solver.cpp
             SparseStructure.cpp
             TestingUtils.cpp
             Utils.cpp)
-target_link_libraries (BaSpaCho glog::glog dispenso ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
+target_link_libraries (BaSpaCho glog::glog dispenso
+ ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
 
 # IF have blas
 target_link_libraries (BaSpaCho ${BLAS_LIBRARIES})

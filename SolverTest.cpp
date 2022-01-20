@@ -16,7 +16,7 @@
 
 using namespace std;
 
-TEST(Solver, Solver0) {
+void testSolver(OpsPtr&& ops) {
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
@@ -36,7 +36,7 @@ TEST(Solver, Solver0) {
     Eigen::MatrixXd verifyMat = skel.densify(data);
     Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-    Solver solver(std::move(skel), std::vector<uint64_t>{}, simpleOps());
+    Solver solver(std::move(skel), std::vector<uint64_t>{}, std::move(ops));
     solver.factor(data.data());
 
     Eigen::MatrixXd computedMat = solver.skel.densify(data);
@@ -48,7 +48,11 @@ TEST(Solver, Solver0) {
                 0, 1e-5);
 }
 
-TEST(Solver, SolverXt1) {
+TEST(Solver, Solver_Blas) { testSolver(blasOps()); }
+
+TEST(Solver, Solver_Ref) { testSolver(simpleOps()); }
+
+void testSolverXt(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.037, 57 + i);
         SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
@@ -81,10 +85,7 @@ TEST(Solver, SolverXt1) {
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
         // std::cout << "VERIF:\n" << verifyMat << std::endl;
 
-        Solver solver(std::move(skel), std::vector<uint64_t>{},  //
-                      blasOps()
-                      // simpleOps()
-        );
+        Solver solver(std::move(skel), std::vector<uint64_t>{}, genOps());
         solver.factor(data.data());
 
         Eigen::MatrixXd computedMat = solver.skel.densify(data);
@@ -98,9 +99,17 @@ TEST(Solver, SolverXt1) {
     }
 }
 
+TEST(Solver, SolverXt_Blas) {
+    testSolverXt([] { return blasOps(); });
+}
+
+TEST(Solver, SolverXt_Ref) {
+    testSolverXt([] { return simpleOps(); });
+}
+
 uint64_t findLargestIndependentAggregSet(const BlockMatrixSkel& skel);
 
-TEST(Solver, SolverXtElim) {
+void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.03, 57 + i);
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
@@ -141,8 +150,7 @@ TEST(Solver, SolverXtElim) {
 
         Solver solver(std::move(skel),
                       std::vector<uint64_t>{0, largestIndep},  //
-                      // blasOps()
-                      simpleOps());
+                      genOps());
         solver.ops->doElimination(*solver.opMatrixSkel, data.data(), 0,
                                   largestIndep, *solver.opElimination[0]);
         // solver.factor(data.data());
@@ -159,4 +167,12 @@ TEST(Solver, SolverXtElim) {
                 .norm(),
             0, 1e-5);
     }
+}
+
+TEST(Solver, SolverXtElim_Blas) {
+    testSolverXtElim([] { return blasOps(); });
+}
+
+TEST(Solver, SolverXtElim_Ref) {
+    testSolverXtElim([] { return simpleOps(); });
 }
