@@ -35,7 +35,7 @@ SparseStructure SparseStructure::transpose(bool sortIndices) const {
         }
     }
 
-    uint64_t tot = cumSum(retv.ptrs);
+    uint64_t tot = cumSumVec(retv.ptrs);
     retv.inds.resize(tot);
 
     for (uint64_t i = 0; i < ord; i++) {
@@ -49,7 +49,7 @@ SparseStructure SparseStructure::transpose(bool sortIndices) const {
         }
     }
 
-    rewind(retv.ptrs);
+    rewindVec(retv.ptrs);
 
     if (sortIndices) {
         retv.sortIndices();
@@ -77,7 +77,7 @@ SparseStructure SparseStructure::clear(bool lowerHalf) const {
         }
     }
 
-    uint64_t tot = cumSum(retv.ptrs);
+    uint64_t tot = cumSumVec(retv.ptrs);
     retv.inds.resize(tot);
 
     for (uint64_t i = 0; i < ord; i++) {
@@ -94,7 +94,7 @@ SparseStructure SparseStructure::clear(bool lowerHalf) const {
         }
     }
 
-    rewind(retv.ptrs);
+    rewindVec(retv.ptrs);
 
     return retv;
 }
@@ -123,7 +123,7 @@ SparseStructure SparseStructure::symmetricPermutation(
         }
     }
 
-    uint64_t tot = cumSum(retv.ptrs);
+    uint64_t tot = cumSumVec(retv.ptrs);
     retv.inds.resize(tot);
 
     for (uint64_t i = 0; i < ord; i++) {
@@ -143,7 +143,7 @@ SparseStructure SparseStructure::symmetricPermutation(
         }
     }
 
-    rewind(retv.ptrs);
+    rewindVec(retv.ptrs);
 
     if (sortIndices) {
         retv.sortIndices();
@@ -251,7 +251,7 @@ SparseStructure SparseStructure::addFullEliminationFill() const {
     }
 
     // cumulate-sum ptrs: sizes -> pointers
-    uint64_t tot = cumSum(retv.ptrs);
+    uint64_t tot = cumSumVec(retv.ptrs);
     retv.inds.resize(tot);
 
     // walk again, saving entries in rows
@@ -280,7 +280,7 @@ SparseStructure SparseStructure::addFullEliminationFill() const {
         }
     }
 
-    rewind(retv.ptrs);
+    rewindVec(retv.ptrs);
 
     retv.sortIndices();
 
@@ -324,7 +324,7 @@ SparseStructure SparseStructure::extractRightBottom(uint64_t startRow) {
         }
     }
 
-    uint64_t tot = cumSum(retv.ptrs);
+    uint64_t tot = cumSumVec(retv.ptrs);
     retv.inds.resize(tot);
 
     for (uint64_t i = 0; i < ord; i++) {
@@ -340,6 +340,6 @@ SparseStructure SparseStructure::extractRightBottom(uint64_t startRow) {
         }
     }
 
-    rewind(retv.ptrs);
+    rewindVec(retv.ptrs);
     return retv;
 }

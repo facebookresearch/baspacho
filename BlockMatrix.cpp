@@ -102,7 +102,7 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
             boardRowPtr[rowAggreg]++;
         }
     }
-    uint64_t numBoards = cumSum(boardRowPtr);
+    uint64_t numBoards = cumSumVec(boardRowPtr);
     boardColLump.resize(numBoards);
     boardColOrd.resize(numBoards);
     for (size_t a = 0; a < numLumps; a++) {
@@ -113,7 +113,7 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
             boardRowPtr[rowAggreg]++;
         }
     }
-    rewind(boardRowPtr);
+    rewindVec(boardRowPtr);
 }
 
 Eigen::MatrixXd BlockMatrixSkel::densify(const std::vector<double>& data) {

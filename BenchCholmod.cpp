@@ -21,7 +21,7 @@ std::pair<double, double> benchmarkCholmodSolve(
     vector<double> val;
     vector<uint64_t> spanStart = paramSize;
     spanStart.push_back(0);
-    uint64_t totSize = cumSum(spanStart);
+    uint64_t totSize = cumSumVec(spanStart);
     rowPtr.push_back(0);
 
     mt19937 gen(37);

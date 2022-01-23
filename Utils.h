@@ -28,6 +28,7 @@ std::vector<uint64_t> composePermutations(const std::vector<uint64_t>& v,
 
 std::vector<uint64_t> inversePermutation(const std::vector<uint64_t>& v);
 
-uint64_t cumSum(std::vector<uint64_t>& v);
+uint64_t cumSumVec(std::vector<uint64_t>& v);
 
-void rewind(std::vector<uint64_t>& v, uint64_t downTo = 0, uint64_t value = 0);
+void rewindVec(std::vector<uint64_t>& v, uint64_t downTo = 0,
+               uint64_t value = 0);

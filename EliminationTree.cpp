@@ -148,8 +148,8 @@ void EliminationTree::computeAggregateStruct() {
     CHECK_EQ(agIdx, 0);
 
     // cum-sum lumpStart
-    cumSum(lumpToSpan);
-    uint64_t tot = cumSum(lumpStart);
+    cumSumVec(lumpToSpan);
+    uint64_t tot = cumSumVec(lumpStart);
     permInverse = inversePermutation(permutation);
 
     SparseStructure tperm =  // lower-half csc
@@ -177,9 +177,9 @@ void EliminationTree::computeAggregateStruct() {
         colStart.push_back(rowParam.size());
     }
 
-    // set spanStart to cumSum of paramSize
+    // set spanStart to cumSumVec of paramSize
     spanStart.reserve(paramSize.size() + 1);
     spanStart = paramSize;
     spanStart.push_back(0);
-    cumSum(spanStart);
+    cumSumVec(spanStart);
 }

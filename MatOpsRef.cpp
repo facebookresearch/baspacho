@@ -113,7 +113,7 @@ struct SimpleOps : Ops {
                 elim->rowPtr[sRel]++;
             }
         }
-        uint64_t totNumChains = cumSum(elim->rowPtr);
+        uint64_t totNumChains = cumSumVec(elim->rowPtr);
         elim->colLump.resize(totNumChains);
         elim->chainColOrd.resize(totNumChains);
         for (uint64_t l = lumpsBegin; l < lumpsEnd; l++) {
@@ -130,7 +130,7 @@ struct SimpleOps : Ops {
                 elim->rowPtr[sRel]++;
             }
         }
-        rewind(elim->rowPtr);
+        rewindVec(elim->rowPtr);
         return OpaqueDataPtr(elim);
     }
 
