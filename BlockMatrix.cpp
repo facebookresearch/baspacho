@@ -26,12 +26,12 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
 
     spanToLump.resize(numSpans);
     lumpStart.resize(numLumps + 1);
-    for (size_t a = 0; a < numLumps; a++) {
-        uint64_t aStart = lumpToSpan[a];
-        uint64_t aEnd = lumpToSpan[a + 1];
-        lumpStart[a] = spanStart[aStart];
-        for (size_t i = aStart; i < aEnd; i++) {
-            spanToLump[i] = a;
+    for (size_t l = 0; l < numLumps; l++) {
+        uint64_t sBegin = lumpToSpan[l];
+        uint64_t sEnd = lumpToSpan[l + 1];
+        lumpStart[l] = spanStart[sBegin];
+        for (size_t s = sBegin; s < sEnd; s++) {
+            spanToLump[s] = l;
         }
     }
     lumpStart[numLumps] = totSize;
@@ -45,33 +45,33 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
     boardChainColOrd.clear();
     uint64_t dataPtr = 0;
     uint64_t gatheredDataPtr = 0;
-    for (size_t a = 0; a < numLumps; a++) {
-        uint64_t colStart = colPtr[a];
-        uint64_t colEnd = colPtr[a + 1];
+    for (size_t l = 0; l < numLumps; l++) {
+        uint64_t colStart = colPtr[l];
+        uint64_t colEnd = colPtr[l + 1];
         CHECK(isStrictlyIncreasing(rowInd, colStart, colEnd));
-        uint64_t aParamStart = lumpToSpan[a];
-        uint64_t aParamEnd = lumpToSpan[a + 1];
-        uint64_t aParamSize = aParamEnd - aParamStart;
-        uint64_t aDataSize = lumpStart[a + 1] - lumpStart[a];
+        uint64_t lSpanBegin = lumpToSpan[l];
+        uint64_t lSpanEnd = lumpToSpan[l + 1];
+        uint64_t lSpanSize = lSpanEnd - lSpanBegin;
+        uint64_t lDataSize = lumpStart[l + 1] - lumpStart[l];
 
         // check the initial section is the set of params from `a`, and
         // therefore the full diagonal block is contained in the matrix
-        CHECK_GE(colEnd - colStart, aParamSize)
+        CHECK_GE(colEnd - colStart, lSpanSize)
             << "Column must contain full diagonal block";
-        CHECK_EQ(rowInd[colStart], aParamStart)
+        CHECK_EQ(rowInd[colStart], lSpanBegin)
             << "Column data must start at diagonal block";
-        CHECK_EQ(rowInd[colStart + aParamSize - 1], aParamEnd - 1)
+        CHECK_EQ(rowInd[colStart + lSpanSize - 1], lSpanEnd - 1)
             << "Column must contain full diagonal block";
 
-        chainColPtr[a] = chainRowSpan.size();
-        boardColPtr[a] = boardRowLump.size();
+        chainColPtr[l] = chainRowSpan.size();
+        boardColPtr[l] = boardRowLump.size();
         uint64_t currentRowAggreg = kInvalid;
         uint64_t numRowsSkipped = 0;
         for (size_t i = colStart; i < colEnd; i++) {
             uint64_t p = rowInd[i];
             chainRowSpan.push_back(p);
             chainData.push_back(dataPtr);
-            dataPtr += aDataSize * (spanStart[p + 1] - spanStart[p]);
+            dataPtr += lDataSize * (spanStart[p + 1] - spanStart[p]);
             numRowsSkipped += spanStart[p + 1] - spanStart[p];
             chainRowsTillEnd.push_back(numRowsSkipped);
 
@@ -89,28 +89,22 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
     boardColPtr[numLumps] = boardRowLump.size();
     chainData.push_back(dataPtr);
 
-    /*
-    std::vector<uint64_t> boardRowPtr;
-    std::vector<uint64_t> boardColLump;
-    std::vector<uint64_t> boardChainColOrd;
-    */
-
     boardRowPtr.assign(numLumps + 1, 0);
-    for (size_t a = 0; a < numLumps; a++) {
-        for (uint64_t i = boardColPtr[a]; i < boardColPtr[a + 1] - 1; i++) {
-            uint64_t rowAggreg = boardRowLump[i];
-            boardRowPtr[rowAggreg]++;
+    for (size_t l = 0; l < numLumps; l++) {
+        for (uint64_t i = boardColPtr[l]; i < boardColPtr[l + 1] - 1; i++) {
+            uint64_t rowLump = boardRowLump[i];
+            boardRowPtr[rowLump]++;
         }
     }
     uint64_t numBoards = cumSumVec(boardRowPtr);
     boardColLump.resize(numBoards);
     boardColOrd.resize(numBoards);
-    for (size_t a = 0; a < numLumps; a++) {
-        for (uint64_t i = boardColPtr[a]; i < boardColPtr[a + 1] - 1; i++) {
-            uint64_t rowAggreg = boardRowLump[i];
-            boardColLump[boardRowPtr[rowAggreg]] = a;
-            boardColOrd[boardRowPtr[rowAggreg]] = i - boardColPtr[a];
-            boardRowPtr[rowAggreg]++;
+    for (size_t l = 0; l < numLumps; l++) {
+        for (uint64_t i = boardColPtr[l]; i < boardColPtr[l + 1] - 1; i++) {
+            uint64_t rowLump = boardRowLump[i];
+            boardColLump[boardRowPtr[rowLump]] = l;
+            boardColOrd[boardRowPtr[rowLump]] = i - boardColPtr[l];
+            boardRowPtr[rowLump]++;
         }
     }
     rewindVec(boardRowPtr);
@@ -125,8 +119,8 @@ Eigen::MatrixXd BlockMatrixSkel::densify(const std::vector<double>& data) {
     retv.setZero();
 
     for (size_t a = 0; a < chainColPtr.size() - 1; a++) {
-        uint64_t aStart = lumpStart[a];
-        uint64_t aSize = lumpStart[a + 1] - aStart;
+        uint64_t lBegin = lumpStart[a];
+        uint64_t lSize = lumpStart[a + 1] - lBegin;
         uint64_t colStart = chainColPtr[a];
         uint64_t colEnd = chainColPtr[a + 1];
         for (uint64_t i = colStart; i < colEnd; i++) {
@@ -135,9 +129,9 @@ Eigen::MatrixXd BlockMatrixSkel::densify(const std::vector<double>& data) {
             uint64_t pSize = spanStart[p + 1] - pStart;
             uint64_t dataPtr = chainData[i];
 
-            retv.block(pStart, aStart, pSize, aSize) =
+            retv.block(pStart, lBegin, pSize, lSize) =
                 Eigen::Map<const MatRMaj<double>>(data.data() + dataPtr, pSize,
-                                                  aSize);
+                                                  lSize);
         }
     }
 

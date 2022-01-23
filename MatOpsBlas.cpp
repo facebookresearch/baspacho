@@ -31,8 +31,8 @@ using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
-static void factorAggreg(const BlockMatrixSkel& skel, double* data,
-                         uint64_t lump) {
+static void factorLump(const BlockMatrixSkel& skel, double* data,
+                       uint64_t lump) {
     uint64_t lumpStart = skel.lumpStart[lump];
     uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
     uint64_t colStart = skel.chainColPtr[lump];
@@ -239,7 +239,7 @@ struct BlasOps : Ops {
             taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
             [&](int64_t lBegin, int64_t lEnd) {
                 for (int64_t l = lBegin; l < lEnd; l++) {
-                    factorAggreg(skel, data, l);
+                    factorLump(skel, data, l);
                 }
             });
 

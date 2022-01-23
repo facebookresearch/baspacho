@@ -5,36 +5,36 @@
 #include <Eigen/Eigenvalues>
 
 void factor(const BlockMatrixSkel& skel, std::vector<double>& data) {
-    for (size_t a = 0; a < skel.chainColPtr.size() - 1; a++) {
-        factorAggreg(skel, data, a);
+    for (size_t l = 0; l < skel.lumpToSpan.size() - 1; l++) {
+        factorLump(skel, data, l);
 
-        uint64_t rowAggregStart = skel.boardColPtr[a];
-        uint64_t rowNumAggregs = skel.boardColPtr[a + 1] - rowAggregStart;
+        uint64_t ptrBegin = skel.boardColPtr[l];
+        uint64_t numBoards = skel.boardColPtr[l + 1] - ptrBegin;
 
-        CHECK_EQ(skel.boardRowLump[rowAggregStart], a);
+        CHECK_EQ(skel.boardRowLump[ptrBegin], l);
 
-        for (uint64_t i = 1; i < rowNumAggregs - 1; i++) {
-            eliminateAggregItem(skel, data, a, i);
+        for (uint64_t i = 1; i < numBoards - 1; i++) {
+            eliminateBoard(skel, data, l, i);
         }
     }
 }
 
-void factorAggreg(const BlockMatrixSkel& skel, std::vector<double>& data,
-                  uint64_t aggreg) {
-    LOG(INFO) << "a: " << aggreg;
-    uint64_t lumpStart = skel.lumpStart[aggreg];
-    uint64_t aggregSize = skel.lumpStart[aggreg + 1] - lumpStart;
-    uint64_t colStart = skel.chainColPtr[aggreg];
+void factorLump(const BlockMatrixSkel& skel, std::vector<double>& data,
+                uint64_t lump) {
+    LOG(INFO) << "a: " << lump;
+    uint64_t lumpStart = skel.lumpStart[lump];
+    uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+    uint64_t colStart = skel.chainColPtr[lump];
     uint64_t dataPtr = skel.chainData[colStart];
 
     // compute lower diag cholesky dec on diagonal block
     LOG(INFO) << "d: " << data.data() << ", ptr: " << dataPtr
-              << ", asz: " << aggregSize;
-    Eigen::Map<MatRMaj<double>> diagBlock(data.data() + dataPtr, aggregSize,
-                                          aggregSize);
+              << ", asz: " << lumpSize;
+    Eigen::Map<MatRMaj<double>> diagBlock(data.data() + dataPtr, lumpSize,
+                                          lumpSize);
     { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
-    uint64_t gatheredStart = skel.boardColPtr[aggreg];
-    uint64_t gatheredEnd = skel.boardColPtr[aggreg + 1];
+    uint64_t gatheredStart = skel.boardColPtr[lump];
+    uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
     uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + 1];
     uint64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
     uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
@@ -44,7 +44,7 @@ void factorAggreg(const BlockMatrixSkel& skel, std::vector<double>& data,
     LOG(INFO) << "d: " << data.data() << ", ptr: " << belowDiagStart
               << ", nrows: " << numRows;
     Eigen::Map<MatRMaj<double>> belowDiagBlock(data.data() + belowDiagStart,
-                                               numRows, aggregSize);
+                                               numRows, lumpSize);
     diagBlock.triangularView<Eigen::Lower>()
         .transpose()
         .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
@@ -66,17 +66,17 @@ uint64_t bisect(const uint64_t* array, uint64_t size, uint64_t needle) {
 // returns (offset, stride)
 std::pair<uint64_t, uint64_t> findBlock(const BlockMatrixSkel& skel,
                                         uint64_t cParam, uint64_t rParam) {
-    uint64_t aggreg = skel.spanToLump[cParam];
-    uint64_t aggregSize = skel.lumpStart[aggreg + 1] - skel.lumpStart[aggreg];
-    uint64_t offsetInAggreg = skel.spanStart[cParam] - skel.lumpStart[aggreg];
-    uint64_t start = skel.chainColPtr[aggreg];
-    uint64_t end = skel.chainColPtr[aggreg + 1];
+    uint64_t lump = skel.spanToLump[cParam];
+    uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
+    uint64_t offsetInAggreg = skel.spanStart[cParam] - skel.lumpStart[lump];
+    uint64_t start = skel.chainColPtr[lump];
+    uint64_t end = skel.chainColPtr[lump + 1];
     // bisect to find rParam in chainRowSpan[start:end]
     uint64_t pos =
         bisect(skel.chainRowSpan.data() + start, end - start, rParam);
     CHECK_EQ(skel.chainRowSpan[start + pos], rParam);
     return std::make_pair(skel.chainData[start + pos] + offsetInAggreg,
-                          aggregSize);
+                          lumpSize);
 }
 
 using OuterStride = Eigen::OuterStride<>;
@@ -84,14 +84,14 @@ using OuterStridedMatM = Eigen::Map<
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
     OuterStride>;
 
-void eliminateAggregItem(const BlockMatrixSkel& skel, std::vector<double>& data,
-                         uint64_t aggreg, uint64_t rowItem) {
-    uint64_t lumpStart = skel.lumpStart[aggreg];
-    uint64_t aggregSize = skel.lumpStart[aggreg + 1] - lumpStart;
-    uint64_t colStart = skel.chainColPtr[aggreg];
+void eliminateBoard(const BlockMatrixSkel& skel, std::vector<double>& data,
+                    uint64_t lump, uint64_t rowItem) {
+    uint64_t lumpStart = skel.lumpStart[lump];
+    uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+    uint64_t colStart = skel.chainColPtr[lump];
 
-    uint64_t gatheredStart = skel.boardColPtr[aggreg];
-    uint64_t gatheredEnd = skel.boardColPtr[aggreg + 1];
+    uint64_t gatheredStart = skel.boardColPtr[lump];
+    uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
     uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + rowItem];
     uint64_t rowDataEnd0 = skel.boardChainColOrd[gatheredStart + rowItem + 1];
     uint64_t rowDataEnd1 = skel.boardChainColOrd[gatheredEnd - 1];
@@ -102,13 +102,13 @@ void eliminateAggregItem(const BlockMatrixSkel& skel, std::vector<double>& data,
     uint64_t numRowsFull =
         skel.chainRowsTillEnd[colStart + rowDataEnd1 - 1] - rowStart;
 
-    // LOG(INFO) << "aggreg: " << aggreg << ", item: " << rowItem;
+    // LOG(INFO) << "lump: " << lump << ", item: " << rowItem;
     // LOG(INFO) << "sizes: " << numRowsSub << " " << numRowsFull << " " <<
-    // aggregSize;
+    // lumpSize;
     Eigen::Map<MatRMaj<double>> belowDiagBlockSub(data.data() + belowDiagStart,
-                                                  numRowsSub, aggregSize);
+                                                  numRowsSub, lumpSize);
     Eigen::Map<MatRMaj<double>> belowDiagBlockFull(data.data() + belowDiagStart,
-                                                   numRowsFull, aggregSize);
+                                                   numRowsFull, lumpSize);
 
     // LOG(INFO) << "sub:\n" << belowDiagBlockSub;
     // LOG(INFO) << "full:\n" << belowDiagBlockFull;

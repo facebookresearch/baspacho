@@ -9,7 +9,7 @@ struct Solver {
     Solver(BlockMatrixSkel&& skel, std::vector<uint64_t>&& elimLumps,
            OpsPtr&& ops);
 
-    void factorAggreg(double* data, uint64_t lump) const;
+    void factorLump(double* data, uint64_t lump) const;
 
     void factor(double* data) const;
 
@@ -22,9 +22,8 @@ struct Solver {
     void prepareContextForTargetAggreg(uint64_t targetAggreg,
                                        SolverContext& ctx) const;
 
-    void eliminateAggregItem(double* data, uint64_t lump,
-                             uint64_t boardIndexInCol,
-                             SolverContext& ctx) const;
+    void eliminateBoard(double* data, uint64_t lump, uint64_t boardIndexInCol,
+                        SolverContext& ctx) const;
 
     void assemble(double* data, uint64_t lump, uint64_t boardIndexInCol,
                   SolverContext& ctx) const;

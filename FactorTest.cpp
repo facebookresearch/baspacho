@@ -30,7 +30,7 @@ TEST(Factor, FactorAggreg) {
     Eigen::MatrixXd verifyMat = skel.densify(data);
     Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-    factorAggreg(skel, data, 0);
+    factorLump(skel, data, 0);
     Eigen::MatrixXd computedMat = skel.densify(data);
     std::cout << computedMat << std::endl;
     ASSERT_NEAR((verifyMat - computedMat).leftCols(5).norm(), 0, 1e-5);

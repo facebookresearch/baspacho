@@ -26,7 +26,7 @@ Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimLumps_,
     }
 }
 
-void Solver::factorAggreg(double* data, uint64_t lump) const {
+void Solver::factorLump(double* data, uint64_t lump) const {
     uint64_t lumpStart = skel.lumpStart[lump];
     uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
     uint64_t chainColBegin = skel.chainColPtr[lump];
@@ -142,9 +142,8 @@ void Solver::assemble(double* data, uint64_t lump, uint64_t boardIndexInSN,
     assembleMaxCallTime = std::max(assembleMaxCallTime, assembleLastCallTime);
 }
 
-void Solver::eliminateAggregItem(double* data, uint64_t lump,
-                                 uint64_t boardIndexInSN,
-                                 SolverContext& ctx) const {
+void Solver::eliminateBoard(double* data, uint64_t lump,
+                            uint64_t boardIndexInSN, SolverContext& ctx) const {
     uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
     uint64_t chainColBegin = skel.chainColPtr[lump];
 
@@ -203,10 +202,10 @@ void Solver::factor(double* data) const {
             uint64_t boardSNDataEnd = skel.boardColPtr[origAggreg + 1];
             CHECK_LT(boardIndexInSN, boardSNDataEnd - boardSNDataStart);
             CHECK_EQ(l, skel.boardRowLump[boardSNDataStart + boardIndexInSN]);
-            eliminateAggregItem(data, origAggreg, boardIndexInSN, ctx);
+            eliminateBoard(data, origAggreg, boardIndexInSN, ctx);
         }
 
-        factorAggreg(data, l);
+        factorLump(data, l);
     }
 
     LOG(INFO) << "solver stats:"
