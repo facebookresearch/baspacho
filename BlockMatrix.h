@@ -18,13 +18,13 @@ using MatRMaj =
     * an `lump` is formed by a few consecutive params
     Block data:
     * a `block` is `span rows` x `span cols`
-    * a `slice` is `span rows` x `lump cols`
+    * a `chain` is `span rows` x `lump cols`
     * a `slab` is (non-empty) and formed by:
       `all the spans belonging to an lump of rows` x `lump cols`
 
-    Note that numeric data in a column of slices are a row-major
-    matrix. In this way we can refer to the slice sub-matrix,
-    or to the whole set of columns as the slice data are consecutive.
+    Note that numeric data in a column of chains are a row-major
+    matrix. In this way we can refer to the chain sub-matrix,
+    or to the whole set of columns as the chain data are consecutive.
 */
 struct BlockMatrixSkel {
     BlockMatrixSkel(const std::vector<uint64_t>& spanStart,
@@ -41,16 +41,16 @@ struct BlockMatrixSkel {
     std::vector<uint64_t> lumpStart;   // (with final el)
     std::vector<uint64_t> lumpToSpan;  // (with final el)
 
-    // per-slice data, column-ordered
-    std::vector<uint64_t> sliceColPtr;       // slab col data start (with end)
-    std::vector<uint64_t> sliceRowSpan;      // row-span id
-    std::vector<uint64_t> sliceData;         // numeric data offset
-    std::vector<uint64_t> sliceRowsTillEnd;  // num of rows till end
+    // per-chain data, column-ordered
+    std::vector<uint64_t> chainColPtr;       // slab col data start (with end)
+    std::vector<uint64_t> chainRowSpan;      // row-span id
+    std::vector<uint64_t> chainData;         // numeric data offset
+    std::vector<uint64_t> chainRowsTillEnd;  // num of rows till end
 
     // per-slab data, column-ordered, colums have a final element
     std::vector<uint64_t> slabColPtr;       // slab col data start (with end)
     std::vector<uint64_t> slabRowLump;      // row-lump id (end = invalid)
-    std::vector<uint64_t> slabSliceColOrd;  // slice ord in col (end = #slices)
+    std::vector<uint64_t> slabChainColOrd;  // chain ord in col (end = #chains)
 
     // per-slab data, row-ordered
     std::vector<uint64_t> slabRowPtr;   // slab row data start (with end)

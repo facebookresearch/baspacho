@@ -26,7 +26,7 @@ void testSolver(OpsPtr&& ops) {
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
 
-    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
 
@@ -70,7 +70,7 @@ void testSolverXt(const std::function<OpsPtr()>& genOps) {
         BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
                              et.rowParam);
 
-        uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+        uint64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData);
 
         mt19937 gen(39 + i);
@@ -128,7 +128,7 @@ void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
         BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
                              et.rowParam);
 
-        uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+        uint64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData);
 
         mt19937 gen(39 + i);
@@ -196,7 +196,7 @@ void testSolverXtElFact(const std::function<OpsPtr()>& genOps) {
         BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
                              et.rowParam);
 
-        uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+        uint64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData);
 
         mt19937 gen(39 + i);

@@ -22,7 +22,7 @@ TEST(Factor, FactorAggreg) {
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
-    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
     skel.damp(data, 5, 50);
@@ -46,7 +46,7 @@ TEST(Factor, Factor) {
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
 
-    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
 

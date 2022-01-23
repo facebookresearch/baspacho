@@ -95,7 +95,7 @@ void experiment(Data& data) {
 
     LOG(INFO) << "Block mat";
     BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart, et.rowParam);
-    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     LOG(INFO) << "cam-cam blocky (with fill): " << totData << " ("
               << (100.0 * totData / (numCams * numCams)) << "%)";
 
@@ -104,7 +104,7 @@ void experiment(Data& data) {
         LOG(INFO) << "a." << a
                   << ": size=" << skel.lumpToSpan[a + 1] - skel.lumpToSpan[a]
                   << ", nBlockRows="
-                  << skel.slabSliceColOrd[skel.slabColPtr[a + 1] - 1];
+                  << skel.slabChainColOrd[skel.slabColPtr[a + 1] - 1];
     }
 
     LOG(INFO) << "Testing Cholmod...";

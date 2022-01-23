@@ -21,7 +21,7 @@ std::pair<double, double> benchmarkSolver(
 
     // mock data
     uint64_t totData =
-        solver->skel.sliceData[solver->skel.sliceData.size() - 1];
+        solver->skel.chainData[solver->skel.chainData.size() - 1];
     vector<double> data(totData);
 
     mt19937 gen(39);

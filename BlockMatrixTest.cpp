@@ -54,8 +54,8 @@ TEST(BlockMatrix, BasicAssertions) {
     ASSERT_THAT(skel.spanToLump, ElementsAre(0, 1, 1, 2, 3, 3, 4, 5, 5));
     ASSERT_THAT(skel.lumpStart, ElementsAre(0, 1, 4, 5, 9, 12, 16));
 
-    ASSERT_THAT(skel.sliceColPtr, ElementsAre(0, 5, 10, 14, 17, 19, 21));
-    ASSERT_THAT(skel.sliceRowSpan, ElementsAre(0, 1, 2, 5, 8,  //
+    ASSERT_THAT(skel.chainColPtr, ElementsAre(0, 5, 10, 14, 17, 19, 21));
+    ASSERT_THAT(skel.chainRowSpan, ElementsAre(0, 1, 2, 5, 8,  //
                                                1, 2, 3, 6, 7,  //
                                                3, 4, 5, 8,     //
                                                4, 5, 7,        //
@@ -63,10 +63,10 @@ TEST(BlockMatrix, BasicAssertions) {
                                                7, 8));
     // 1x{1, 1, 2, 2, 2}, 3x{1, 2, 1, 3, 2}, 1x{1, 2, 2, 2}, 4x{2, 2, 2}, 3x{3,
     // 2}, 4x{2, 2}
-    ASSERT_THAT(skel.sliceData,
+    ASSERT_THAT(skel.chainData,
                 ElementsAre(0, 1, 2, 4, 6, 8, 11, 17, 20, 29, 35, 36, 38, 40,
                             42, 50, 58, 66, 75, 81, 89, 97));
-    ASSERT_THAT(skel.sliceRowsTillEnd,
+    ASSERT_THAT(skel.chainRowsTillEnd,
                 ElementsAre(1, 2, 4, 6, 8, 1, 3, 4, 7, 9, 1, 3, 5, 7, 2, 4, 6,
                             3, 5, 2, 4));
 
@@ -85,7 +85,7 @@ TEST(BlockMatrix, BasicAssertions) {
                                               3, 5, kInvalid,        //
                                               4, 5, kInvalid,        //
                                               5, kInvalid));
-    ASSERT_THAT(skel.slabSliceColOrd, ElementsAre(0, 1, 3, 4, 5,  //
+    ASSERT_THAT(skel.slabChainColOrd, ElementsAre(0, 1, 3, 4, 5,  //
                                                   0, 2, 3, 4, 5,  //
                                                   0, 1, 3, 4,     //
                                                   0, 2, 3,        //
@@ -116,7 +116,7 @@ TEST(BlockMatrix, Densify) {
     SparseStructure sStruct = columnsToCscStruct(columnParams);
     BlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs, sStruct.inds);
 
-    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
     Eigen::MatrixXd mat = skel.densify(data);
@@ -153,7 +153,7 @@ TEST(BlockMatrix, Damp) {
     SparseStructure sStruct = columnsToCscStruct(columnParams);
     BlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs, sStruct.inds);
 
-    uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
+    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
 

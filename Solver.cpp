@@ -29,21 +29,21 @@ Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimLumps_,
 void Solver::factorAggreg(double* data, uint64_t lump) const {
     uint64_t lumpStart = skel.lumpStart[lump];
     uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
-    uint64_t sliceColBegin = skel.sliceColPtr[lump];
-    uint64_t diagBlockOffset = skel.sliceData[sliceColBegin];
+    uint64_t chainColBegin = skel.chainColPtr[lump];
+    uint64_t diagBlockOffset = skel.chainData[chainColBegin];
 
     // compute lower diag cholesky dec on diagonal block
     ops->potrf(lumpSize, data + diagBlockOffset);
 
     uint64_t slabColBegin = skel.slabColPtr[lump];
     uint64_t slabColEnd = skel.slabColPtr[lump + 1];
-    uint64_t belowDiagSliceColOrd = skel.slabSliceColOrd[slabColBegin + 1];
-    uint64_t numColSlices = skel.slabSliceColOrd[slabColEnd - 1];
+    uint64_t belowDiagChainColOrd = skel.slabChainColOrd[slabColBegin + 1];
+    uint64_t numColChains = skel.slabChainColOrd[slabColEnd - 1];
     uint64_t belowDiagOffset =
-        skel.sliceData[sliceColBegin + belowDiagSliceColOrd];
+        skel.chainData[chainColBegin + belowDiagChainColOrd];
     uint64_t numRowsBelowDiag =
-        skel.sliceRowsTillEnd[sliceColBegin + numColSlices - 1] -
-        skel.sliceRowsTillEnd[sliceColBegin + belowDiagSliceColOrd - 1];
+        skel.chainRowsTillEnd[chainColBegin + numColChains - 1] -
+        skel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
     if (numRowsBelowDiag == 0) {
         return;
     }
@@ -58,11 +58,11 @@ using OuterStridedMatK = Eigen::Map<const MatRMaj<double>, 0, OuterStride>;
 
 void Solver::prepareContextForTargetAggreg(uint64_t targetAggreg,
                                            SolverContext& ctx) const {
-    ctx.paramToSliceOffset.assign(skel.spanStart.size() - 1, 999999);
-    for (uint64_t i = skel.sliceColPtr[targetAggreg],
-                  iEnd = skel.sliceColPtr[targetAggreg + 1];
+    ctx.paramToChainOffset.assign(skel.spanStart.size() - 1, 999999);
+    for (uint64_t i = skel.chainColPtr[targetAggreg],
+                  iEnd = skel.chainColPtr[targetAggreg + 1];
          i < iEnd; i++) {
-        ctx.paramToSliceOffset[skel.sliceRowSpan[i]] = skel.sliceData[i];
+        ctx.paramToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
     }
 }
 
@@ -70,22 +70,22 @@ void Solver::assemble(double* data, uint64_t lump, uint64_t slabIndexInSN,
                       SolverContext& ctx) const {
     auto start = hrc::now();
 
-    uint64_t sliceColBegin = skel.sliceColPtr[lump];
+    uint64_t chainColBegin = skel.chainColPtr[lump];
 
     uint64_t slabColBegin = skel.slabColPtr[lump];
     uint64_t slabColEnd = skel.slabColPtr[lump + 1];
 
     uint64_t targetAggreg = skel.slabRowLump[slabColBegin + slabIndexInSN];
-    uint64_t belowDiagSliceColOrd =
-        skel.slabSliceColOrd[slabColBegin + slabIndexInSN];
+    uint64_t belowDiagChainColOrd =
+        skel.slabChainColOrd[slabColBegin + slabIndexInSN];
     uint64_t rowDataEnd0 =
-        skel.slabSliceColOrd[slabColBegin + slabIndexInSN + 1];
-    uint64_t rowDataEnd1 = skel.slabSliceColOrd[slabColEnd - 1];
+        skel.slabChainColOrd[slabColBegin + slabIndexInSN + 1];
+    uint64_t rowDataEnd1 = skel.slabChainColOrd[slabColEnd - 1];
 
     uint64_t belowDiagStart =
-        skel.sliceData[sliceColBegin + belowDiagSliceColOrd];
+        skel.chainData[chainColBegin + belowDiagChainColOrd];
     uint64_t startRowInSuperNode =
-        skel.sliceRowsTillEnd[sliceColBegin + belowDiagSliceColOrd - 1];
+        skel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
 
     uint64_t targetAggregSize =
         skel.lumpStart[targetAggreg + 1] - skel.lumpStart[targetAggreg];
@@ -96,22 +96,22 @@ void Solver::assemble(double* data, uint64_t lump, uint64_t slabIndexInSN,
     uint64_t srcStride = ctx.stride;
 
     // TODO: multithread here
-    for (uint64_t r = belowDiagSliceColOrd; r < rowDataEnd1; r++) {
-        uint64_t rStart =
-            skel.sliceRowsTillEnd[sliceColBegin + r - 1] - startRowInSuperNode;
-        uint64_t rSize = skel.sliceRowsTillEnd[sliceColBegin + r] - rStart -
+    for (uint64_t r = belowDiagChainColOrd; r < rowDataEnd1; r++) {
+        uint64_t rBegin =
+            skel.chainRowsTillEnd[chainColBegin + r - 1] - startRowInSuperNode;
+        uint64_t rSize = skel.chainRowsTillEnd[chainColBegin + r] - rBegin -
                          startRowInSuperNode;
-        uint64_t rParam = skel.sliceRowSpan[sliceColBegin + r];
-        uint64_t rOffset = ctx.paramToSliceOffset[rParam];
-        const double* matRowPtr = matProduct + rStart * ctx.stride;
+        uint64_t rParam = skel.chainRowSpan[chainColBegin + r];
+        uint64_t rOffset = ctx.paramToChainOffset[rParam];
+        const double* matRowPtr = matProduct + rBegin * ctx.stride;
 
         uint64_t cEnd = std::min(rowDataEnd0, r + 1);
-        for (uint64_t c = belowDiagSliceColOrd; c < cEnd; c++) {
-            uint64_t cStart = skel.sliceRowsTillEnd[sliceColBegin + c - 1] -
+        for (uint64_t c = belowDiagChainColOrd; c < cEnd; c++) {
+            uint64_t cStart = skel.chainRowsTillEnd[chainColBegin + c - 1] -
                               startRowInSuperNode;
-            uint64_t cSize = skel.sliceRowsTillEnd[sliceColBegin + c] - cStart -
+            uint64_t cSize = skel.chainRowsTillEnd[chainColBegin + c] - cStart -
                              startRowInSuperNode;
-            uint64_t cParam = skel.sliceRowSpan[sliceColBegin + c];
+            uint64_t cParam = skel.chainRowSpan[chainColBegin + c];
             // CHECK_EQ(skel.spanToLump[cParam], targetAggreg);
             uint64_t offsetInAggreg =
                 skel.spanStart[cParam] - skel.lumpStart[targetAggreg];
@@ -146,25 +146,25 @@ void Solver::eliminateAggregItem(double* data, uint64_t lump,
                                  uint64_t slabIndexInSN,
                                  SolverContext& ctx) const {
     uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
-    uint64_t sliceColBegin = skel.sliceColPtr[lump];
+    uint64_t chainColBegin = skel.chainColPtr[lump];
 
     uint64_t slabColBegin = skel.slabColPtr[lump];
     uint64_t slabColEnd = skel.slabColPtr[lump + 1];
 
-    uint64_t belowDiagSliceColOrd =
-        skel.slabSliceColOrd[slabColBegin + slabIndexInSN];
+    uint64_t belowDiagChainColOrd =
+        skel.slabChainColOrd[slabColBegin + slabIndexInSN];
     uint64_t rowDataEnd0 =
-        skel.slabSliceColOrd[slabColBegin + slabIndexInSN + 1];
-    uint64_t rowDataEnd1 = skel.slabSliceColOrd[slabColEnd - 1];
+        skel.slabChainColOrd[slabColBegin + slabIndexInSN + 1];
+    uint64_t rowDataEnd1 = skel.slabChainColOrd[slabColEnd - 1];
 
     uint64_t belowDiagStart =
-        skel.sliceData[sliceColBegin + belowDiagSliceColOrd];
+        skel.chainData[chainColBegin + belowDiagChainColOrd];
     uint64_t rowStart =
-        skel.sliceRowsTillEnd[sliceColBegin + belowDiagSliceColOrd - 1];
+        skel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
     uint64_t numRowsSub =
-        skel.sliceRowsTillEnd[sliceColBegin + rowDataEnd0 - 1] - rowStart;
+        skel.chainRowsTillEnd[chainColBegin + rowDataEnd0 - 1] - rowStart;
     uint64_t numRowsFull =
-        skel.sliceRowsTillEnd[sliceColBegin + rowDataEnd1 - 1] - rowStart;
+        skel.chainRowsTillEnd[chainColBegin + rowDataEnd1 - 1] - rowStart;
 
     ctx.stride = numRowsSub;
     ctx.tempBuffer.resize(numRowsSub * numRowsFull);
@@ -186,7 +186,7 @@ void Solver::factor(double* data) const {
     LOG(INFO) << "FactFrom " << denseOpsFromLump;
 
     SolverContext ctx;
-    for (uint64_t l = denseOpsFromLump; l < skel.sliceColPtr.size() - 1; l++) {
+    for (uint64_t l = denseOpsFromLump; l < skel.chainColPtr.size() - 1; l++) {
         prepareContextForTargetAggreg(l, ctx);
 
         //  iterate over columns having a non-trivial a-block

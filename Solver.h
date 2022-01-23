@@ -14,7 +14,7 @@ struct Solver {
     void factor(double* data) const;
 
     struct SolverContext {
-        std::vector<uint64_t> paramToSliceOffset;
+        std::vector<uint64_t> paramToChainOffset;
         uint64_t stride;
         std::vector<double> tempBuffer;
     };

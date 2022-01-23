@@ -35,8 +35,8 @@ static void factorAggreg(const BlockMatrixSkel& skel, double* data,
                          uint64_t lump) {
     uint64_t lumpStart = skel.lumpStart[lump];
     uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
-    uint64_t colStart = skel.sliceColPtr[lump];
-    uint64_t dataPtr = skel.sliceData[colStart];
+    uint64_t colStart = skel.chainColPtr[lump];
+    uint64_t dataPtr = skel.chainData[colStart];
 
     // compute lower diag cholesky dec on diagonal block
     Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, lumpSize, lumpSize);
@@ -44,11 +44,11 @@ static void factorAggreg(const BlockMatrixSkel& skel, double* data,
 
     uint64_t gatheredStart = skel.slabColPtr[lump];
     uint64_t gatheredEnd = skel.slabColPtr[lump + 1];
-    uint64_t rowDataStart = skel.slabSliceColOrd[gatheredStart + 1];
-    uint64_t rowDataEnd = skel.slabSliceColOrd[gatheredEnd - 1];
-    uint64_t belowDiagStart = skel.sliceData[colStart + rowDataStart];
-    uint64_t numRows = skel.sliceRowsTillEnd[colStart + rowDataEnd - 1] -
-                       skel.sliceRowsTillEnd[colStart + rowDataStart - 1];
+    uint64_t rowDataStart = skel.slabChainColOrd[gatheredStart + 1];
+    uint64_t rowDataEnd = skel.slabChainColOrd[gatheredEnd - 1];
+    uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
+    uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
+                       skel.chainRowsTillEnd[colStart + rowDataStart - 1];
 
     Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart, numRows,
                                                lumpSize);
@@ -59,12 +59,12 @@ static void factorAggreg(const BlockMatrixSkel& skel, double* data,
 
 static void prepareContextForTargetAggreg(const BlockMatrixSkel& skel,
                                           uint64_t targetLump,
-                                          vector<uint64_t>& spanToSliceOffset) {
-    spanToSliceOffset.assign(skel.spanStart.size() - 1, 999999);
-    for (uint64_t i = skel.sliceColPtr[targetLump],
-                  iEnd = skel.sliceColPtr[targetLump + 1];
+                                          vector<uint64_t>& spanToChainOffset) {
+    spanToChainOffset.assign(skel.spanStart.size() - 1, 999999);
+    for (uint64_t i = skel.chainColPtr[targetLump],
+                  iEnd = skel.chainColPtr[targetLump + 1];
          i < iEnd; i++) {
-        spanToSliceOffset[skel.sliceRowSpan[i]] = skel.sliceData[i];
+        spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
     }
 }
 
@@ -108,13 +108,13 @@ struct BlasOps : Ops {
         OpaqueDataElimData() {}
         virtual ~OpaqueDataElimData() {}
 
-        // per-row pointers to slices in a rectagle:
+        // per-row pointers to chains in a rectagle:
         // * span-rows from lumpToSpan[lumpsEnd],
         // * slab cols in interval lumpsBegin:lumpsEnd
         uint64_t spanRowBegin;
         vector<uint64_t> rowPtr;       // row data pointer
         vector<uint64_t> colLump;      // col-lump
-        vector<uint64_t> sliceColOrd;  // order in col slice elements
+        vector<uint64_t> chainColOrd;  // order in col chain elements
     };
 
     // TODO: unit test
@@ -127,10 +127,10 @@ struct BlasOps : Ops {
         uint64_t numSpanRows = skel.spanStart.size() - 1 - spanRowBegin;
         elim->rowPtr.assign(numSpanRows + 1, 0);
         for (uint64_t l = lumpsBegin; l < lumpsEnd; l++) {
-            for (uint64_t i = skel.sliceColPtr[l],
-                          iEnd = skel.sliceColPtr[l + 1];
+            for (uint64_t i = skel.chainColPtr[l],
+                          iEnd = skel.chainColPtr[l + 1];
                  i < iEnd; i++) {
-                uint64_t s = skel.sliceRowSpan[i];
+                uint64_t s = skel.chainRowSpan[i];
                 if (s < spanRowBegin) {
                     continue;
                 }
@@ -138,20 +138,20 @@ struct BlasOps : Ops {
                 elim->rowPtr[sRel]++;
             }
         }
-        uint64_t totNumSlices = cumSum(elim->rowPtr);
-        elim->colLump.resize(totNumSlices);
-        elim->sliceColOrd.resize(totNumSlices);
+        uint64_t totNumChains = cumSum(elim->rowPtr);
+        elim->colLump.resize(totNumChains);
+        elim->chainColOrd.resize(totNumChains);
         for (uint64_t l = lumpsBegin; l < lumpsEnd; l++) {
-            for (uint64_t iBegin = skel.sliceColPtr[l],
-                          iEnd = skel.sliceColPtr[l + 1], i = iBegin;
+            for (uint64_t iBegin = skel.chainColPtr[l],
+                          iEnd = skel.chainColPtr[l + 1], i = iBegin;
                  i < iEnd; i++) {
-                uint64_t s = skel.sliceRowSpan[i];
+                uint64_t s = skel.chainRowSpan[i];
                 if (s < spanRowBegin) {
                     continue;
                 }
                 uint64_t sRel = s - spanRowBegin;
                 elim->colLump[elim->rowPtr[sRel]] = l;
-                elim->sliceColOrd[elim->rowPtr[sRel]] = i - iBegin;
+                elim->chainColOrd[elim->rowPtr[sRel]] = i - iBegin;
                 elim->rowPtr[sRel]++;
             }
         }
@@ -162,10 +162,10 @@ struct BlasOps : Ops {
 
     struct ElimContext {
         std::vector<double> tempBuffer;
-        std::vector<uint64_t> spanToSliceOffset;
+        std::vector<uint64_t> spanToChainOffset;
     };
 
-    static void eliminateRowSlice(const OpaqueDataElimData& elim,
+    static void eliminateRowChain(const OpaqueDataElimData& elim,
                                   const BlockMatrixSkel& skel, double* data,
                                   uint64_t sRel, ElimContext& ctx) {
         uint64_t s = sRel + elim.spanRowBegin;
@@ -174,50 +174,50 @@ struct BlasOps : Ops {
             skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
         uint64_t spanOffsetInLump =
             skel.spanStart[s] - skel.lumpStart[targetLump];
-        prepareContextForTargetAggreg(skel, targetLump, ctx.spanToSliceOffset);
+        prepareContextForTargetAggreg(skel, targetLump, ctx.spanToChainOffset);
 
-        // iterate over slices present in this row
+        // iterate over chains present in this row
         for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
              i < iEnd; i++) {
             uint64_t lump = elim.colLump[i];
-            uint64_t sliceColOrd = elim.sliceColOrd[i];
-            CHECK_GE(sliceColOrd, 1);  // there must be a diagonal block
+            uint64_t chainColOrd = elim.chainColOrd[i];
+            CHECK_GE(chainColOrd, 1);  // there must be a diagonal block
 
-            uint64_t ptrStart = skel.sliceColPtr[lump] + sliceColOrd;
-            uint64_t ptrEnd = skel.sliceColPtr[lump + 1];
-            CHECK_EQ(skel.sliceRowSpan[ptrStart], s);
+            uint64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
+            uint64_t ptrEnd = skel.chainColPtr[lump + 1];
+            CHECK_EQ(skel.chainRowSpan[ptrStart], s);
 
-            uint64_t nRowsAbove = skel.sliceRowsTillEnd[ptrStart - 1];
-            uint64_t nRowsSlice = skel.sliceRowsTillEnd[ptrStart] - nRowsAbove;
-            uint64_t nRowsOnward = skel.sliceRowsTillEnd[ptrEnd - 1];
-            uint64_t dataOffset = skel.sliceData[ptrStart];
-            CHECK_EQ(nRowsSlice, skel.spanStart[s + 1] - skel.spanStart[s]);
+            uint64_t nRowsAbove = skel.chainRowsTillEnd[ptrStart - 1];
+            uint64_t nRowsChain = skel.chainRowsTillEnd[ptrStart] - nRowsAbove;
+            uint64_t nRowsOnward = skel.chainRowsTillEnd[ptrEnd - 1];
+            uint64_t dataOffset = skel.chainData[ptrStart];
+            CHECK_EQ(nRowsChain, skel.spanStart[s + 1] - skel.spanStart[s]);
             uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
 
-            Eigen::Map<MatRMaj<double>> sliceSubMat(data + dataOffset,
-                                                    nRowsSlice, lumpSize);
-            Eigen::Map<MatRMaj<double>> sliceOnwardSubMat(
+            Eigen::Map<MatRMaj<double>> chainSubMat(data + dataOffset,
+                                                    nRowsChain, lumpSize);
+            Eigen::Map<MatRMaj<double>> chainOnwardSubMat(
                 data + dataOffset, nRowsOnward, lumpSize);
 
-            ctx.tempBuffer.resize(nRowsOnward * nRowsSlice);
+            ctx.tempBuffer.resize(nRowsOnward * nRowsChain);
             Eigen::Map<MatRMaj<double>> prod(ctx.tempBuffer.data(), nRowsOnward,
-                                             nRowsSlice);
-            prod = sliceOnwardSubMat * sliceSubMat.transpose();
+                                             nRowsChain);
+            prod = chainOnwardSubMat * chainSubMat.transpose();
 
-            // assemble blocks, iterating on slice and below slices
+            // assemble blocks, iterating on chain and below chains
             for (uint64_t ptr = ptrStart; ptr < ptrEnd; ptr++) {
-                uint64_t s2 = skel.sliceRowSpan[ptr];
-                uint64_t relRow = skel.sliceRowsTillEnd[ptr - 1] - nRowsAbove;
+                uint64_t s2 = skel.chainRowSpan[ptr];
+                uint64_t relRow = skel.chainRowsTillEnd[ptr - 1] - nRowsAbove;
                 uint64_t s2_size =
-                    skel.sliceRowsTillEnd[ptr] - nRowsAbove - relRow;
+                    skel.chainRowsTillEnd[ptr] - nRowsAbove - relRow;
                 CHECK_EQ(s2_size, skel.spanStart[s2 + 1] - skel.spanStart[s2]);
 
                 double* targetData =
-                    data + spanOffsetInLump + ctx.spanToSliceOffset[s2];
+                    data + spanOffsetInLump + ctx.spanToChainOffset[s2];
 
-                OuterStridedMatM targetBlock(targetData, s2_size, nRowsSlice,
+                OuterStridedMatM targetBlock(targetData, s2_size, nRowsChain,
                                              OuterStride(targetLumpSize));
-                targetBlock -= prod.block(relRow, 0, s2_size, nRowsSlice);
+                targetBlock -= prod.block(relRow, 0, s2_size, nRowsChain);
             }
         }
     }
@@ -237,8 +237,8 @@ struct BlasOps : Ops {
         dispenso::TaskSet taskSet(pSkel->threadPool);
         dispenso::parallel_for(
             taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
-            [&](int64_t rStart, int64_t rEnd) {
-                for (int64_t l = rStart; l < rEnd; l++) {
+            [&](int64_t lBegin, int64_t lEnd) {
+                for (int64_t l = lBegin; l < lEnd; l++) {
                     factorAggreg(skel, data, l);
                 }
             });
@@ -252,7 +252,7 @@ struct BlasOps : Ops {
             dispenso::makeChunkedRange(0UL, elim.rowPtr.size() - 1, 5UL),
             [&, this](ElimContext& ctx, size_t sBegin, size_t sEnd) {
                 for (uint64_t sRel = sBegin; sRel < sEnd; sRel++) {
-                    eliminateRowSlice(elim, skel, data, sRel, ctx);
+                    eliminateRowChain(elim, skel, data, sRel, ctx);
                 }
             });
     }
