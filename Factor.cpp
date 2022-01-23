@@ -8,10 +8,10 @@ void factor(const BlockMatrixSkel& skel, std::vector<double>& data) {
     for (size_t a = 0; a < skel.chainColPtr.size() - 1; a++) {
         factorAggreg(skel, data, a);
 
-        uint64_t rowAggregStart = skel.slabColPtr[a];
-        uint64_t rowNumAggregs = skel.slabColPtr[a + 1] - rowAggregStart;
+        uint64_t rowAggregStart = skel.boardColPtr[a];
+        uint64_t rowNumAggregs = skel.boardColPtr[a + 1] - rowAggregStart;
 
-        CHECK_EQ(skel.slabRowLump[rowAggregStart], a);
+        CHECK_EQ(skel.boardRowLump[rowAggregStart], a);
 
         for (uint64_t i = 1; i < rowNumAggregs - 1; i++) {
             eliminateAggregItem(skel, data, a, i);
@@ -33,10 +33,10 @@ void factorAggreg(const BlockMatrixSkel& skel, std::vector<double>& data,
     Eigen::Map<MatRMaj<double>> diagBlock(data.data() + dataPtr, aggregSize,
                                           aggregSize);
     { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
-    uint64_t gatheredStart = skel.slabColPtr[aggreg];
-    uint64_t gatheredEnd = skel.slabColPtr[aggreg + 1];
-    uint64_t rowDataStart = skel.slabChainColOrd[gatheredStart + 1];
-    uint64_t rowDataEnd = skel.slabChainColOrd[gatheredEnd - 1];
+    uint64_t gatheredStart = skel.boardColPtr[aggreg];
+    uint64_t gatheredEnd = skel.boardColPtr[aggreg + 1];
+    uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + 1];
+    uint64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
     uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
     uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
                        skel.chainRowsTillEnd[colStart + rowDataStart - 1];
@@ -90,11 +90,11 @@ void eliminateAggregItem(const BlockMatrixSkel& skel, std::vector<double>& data,
     uint64_t aggregSize = skel.lumpStart[aggreg + 1] - lumpStart;
     uint64_t colStart = skel.chainColPtr[aggreg];
 
-    uint64_t gatheredStart = skel.slabColPtr[aggreg];
-    uint64_t gatheredEnd = skel.slabColPtr[aggreg + 1];
-    uint64_t rowDataStart = skel.slabChainColOrd[gatheredStart + rowItem];
-    uint64_t rowDataEnd0 = skel.slabChainColOrd[gatheredStart + rowItem + 1];
-    uint64_t rowDataEnd1 = skel.slabChainColOrd[gatheredEnd - 1];
+    uint64_t gatheredStart = skel.boardColPtr[aggreg];
+    uint64_t gatheredEnd = skel.boardColPtr[aggreg + 1];
+    uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + rowItem];
+    uint64_t rowDataEnd0 = skel.boardChainColOrd[gatheredStart + rowItem + 1];
+    uint64_t rowDataEnd1 = skel.boardChainColOrd[gatheredEnd - 1];
     uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
     uint64_t rowStart = skel.chainRowsTillEnd[colStart + rowDataStart - 1];
     uint64_t numRowsSub =

@@ -23,9 +23,10 @@ struct Solver {
                                        SolverContext& ctx) const;
 
     void eliminateAggregItem(double* data, uint64_t lump,
-                             uint64_t slabIndexInCol, SolverContext& ctx) const;
+                             uint64_t boardIndexInCol,
+                             SolverContext& ctx) const;
 
-    void assemble(double* data, uint64_t lump, uint64_t slabIndexInCol,
+    void assemble(double* data, uint64_t lump, uint64_t boardIndexInCol,
                   SolverContext& ctx) const;
 
     BlockMatrixSkel skel;

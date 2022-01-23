@@ -19,7 +19,7 @@ using MatRMaj =
     Block data:
     * a `block` is `span rows` x `span cols`
     * a `chain` is `span rows` x `lump cols`
-    * a `slab` is (non-empty) and formed by:
+    * a `board` is (non-empty) and formed by:
       `all the spans belonging to an lump of rows` x `lump cols`
 
     Note that numeric data in a column of chains are a row-major
@@ -42,20 +42,20 @@ struct BlockMatrixSkel {
     std::vector<uint64_t> lumpToSpan;  // (with final el)
 
     // per-chain data, column-ordered
-    std::vector<uint64_t> chainColPtr;       // slab col data start (with end)
+    std::vector<uint64_t> chainColPtr;       // board col data start (with end)
     std::vector<uint64_t> chainRowSpan;      // row-span id
     std::vector<uint64_t> chainData;         // numeric data offset
     std::vector<uint64_t> chainRowsTillEnd;  // num of rows till end
 
-    // per-slab data, column-ordered, colums have a final element
-    std::vector<uint64_t> slabColPtr;       // slab col data start (with end)
-    std::vector<uint64_t> slabRowLump;      // row-lump id (end = invalid)
-    std::vector<uint64_t> slabChainColOrd;  // chain ord in col (end = #chains)
+    // per-board data, column-ordered, colums have a final element
+    std::vector<uint64_t> boardColPtr;       // board col data start (with end)
+    std::vector<uint64_t> boardRowLump;      // row-lump id (end = invalid)
+    std::vector<uint64_t> boardChainColOrd;  // chain ord in col (end = #chains)
 
-    // per-slab data, row-ordered
-    std::vector<uint64_t> slabRowPtr;   // slab row data start (with end)
-    std::vector<uint64_t> slabColLump;  // slab's col lump
-    std::vector<uint64_t> slabColOrd;   // slab order in col
+    // per-board data, row-ordered
+    std::vector<uint64_t> boardRowPtr;   // board row data start (with end)
+    std::vector<uint64_t> boardColLump;  // board's col lump
+    std::vector<uint64_t> boardColOrd;   // board order in col
 };
 
 BlockMatrixSkel initBlockMatrixSkel(const std::vector<uint64_t>& spanStart,

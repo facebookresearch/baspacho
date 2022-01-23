@@ -42,10 +42,10 @@ static void factorAggreg(const BlockMatrixSkel& skel, double* data,
     Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, lumpSize, lumpSize);
     { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
 
-    uint64_t gatheredStart = skel.slabColPtr[lump];
-    uint64_t gatheredEnd = skel.slabColPtr[lump + 1];
-    uint64_t rowDataStart = skel.slabChainColOrd[gatheredStart + 1];
-    uint64_t rowDataEnd = skel.slabChainColOrd[gatheredEnd - 1];
+    uint64_t gatheredStart = skel.boardColPtr[lump];
+    uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
+    uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + 1];
+    uint64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
     uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
     uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
                        skel.chainRowsTillEnd[colStart + rowDataStart - 1];
@@ -110,7 +110,7 @@ struct BlasOps : Ops {
 
         // per-row pointers to chains in a rectagle:
         // * span-rows from lumpToSpan[lumpsEnd],
-        // * slab cols in interval lumpsBegin:lumpsEnd
+        // * board cols in interval lumpsBegin:lumpsEnd
         uint64_t spanRowBegin;
         vector<uint64_t> rowPtr;       // row data pointer
         vector<uint64_t> colLump;      // col-lump

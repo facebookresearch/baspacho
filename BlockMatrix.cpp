@@ -40,9 +40,9 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
     chainRowSpan.clear();
     chainData.clear();
 
-    slabColPtr.resize(numLumps + 1);
-    slabRowLump.clear();
-    slabChainColOrd.clear();
+    boardColPtr.resize(numLumps + 1);
+    boardRowLump.clear();
+    boardChainColOrd.clear();
     uint64_t dataPtr = 0;
     uint64_t gatheredDataPtr = 0;
     for (size_t a = 0; a < numLumps; a++) {
@@ -64,7 +64,7 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
             << "Column must contain full diagonal block";
 
         chainColPtr[a] = chainRowSpan.size();
-        slabColPtr[a] = slabRowLump.size();
+        boardColPtr[a] = boardRowLump.size();
         uint64_t currentRowAggreg = kInvalid;
         uint64_t numRowsSkipped = 0;
         for (size_t i = colStart; i < colEnd; i++) {
@@ -78,42 +78,42 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
             uint64_t rowAggreg = spanToLump[p];
             if (rowAggreg != currentRowAggreg) {
                 currentRowAggreg = rowAggreg;
-                slabRowLump.push_back(rowAggreg);
-                slabChainColOrd.push_back(i - colStart);
+                boardRowLump.push_back(rowAggreg);
+                boardChainColOrd.push_back(i - colStart);
             }
         }
-        slabRowLump.push_back(kInvalid);
-        slabChainColOrd.push_back(colEnd - colStart);
+        boardRowLump.push_back(kInvalid);
+        boardChainColOrd.push_back(colEnd - colStart);
     }
     chainColPtr[numLumps] = chainRowSpan.size();
-    slabColPtr[numLumps] = slabRowLump.size();
+    boardColPtr[numLumps] = boardRowLump.size();
     chainData.push_back(dataPtr);
 
     /*
-    std::vector<uint64_t> slabRowPtr;
-    std::vector<uint64_t> slabColLump;
-    std::vector<uint64_t> slabChainColOrd;
+    std::vector<uint64_t> boardRowPtr;
+    std::vector<uint64_t> boardColLump;
+    std::vector<uint64_t> boardChainColOrd;
     */
 
-    slabRowPtr.assign(numLumps + 1, 0);
+    boardRowPtr.assign(numLumps + 1, 0);
     for (size_t a = 0; a < numLumps; a++) {
-        for (uint64_t i = slabColPtr[a]; i < slabColPtr[a + 1] - 1; i++) {
-            uint64_t rowAggreg = slabRowLump[i];
-            slabRowPtr[rowAggreg]++;
+        for (uint64_t i = boardColPtr[a]; i < boardColPtr[a + 1] - 1; i++) {
+            uint64_t rowAggreg = boardRowLump[i];
+            boardRowPtr[rowAggreg]++;
         }
     }
-    uint64_t numSlabs = cumSum(slabRowPtr);
-    slabColLump.resize(numSlabs);
-    slabColOrd.resize(numSlabs);
+    uint64_t numBoards = cumSum(boardRowPtr);
+    boardColLump.resize(numBoards);
+    boardColOrd.resize(numBoards);
     for (size_t a = 0; a < numLumps; a++) {
-        for (uint64_t i = slabColPtr[a]; i < slabColPtr[a + 1] - 1; i++) {
-            uint64_t rowAggreg = slabRowLump[i];
-            slabColLump[slabRowPtr[rowAggreg]] = a;
-            slabColOrd[slabRowPtr[rowAggreg]] = i - slabColPtr[a];
-            slabRowPtr[rowAggreg]++;
+        for (uint64_t i = boardColPtr[a]; i < boardColPtr[a + 1] - 1; i++) {
+            uint64_t rowAggreg = boardRowLump[i];
+            boardColLump[boardRowPtr[rowAggreg]] = a;
+            boardColOrd[boardRowPtr[rowAggreg]] = i - boardColPtr[a];
+            boardRowPtr[rowAggreg]++;
         }
     }
-    rewind(slabRowPtr);
+    rewind(boardRowPtr);
 }
 
 Eigen::MatrixXd BlockMatrixSkel::densify(const std::vector<double>& data) {

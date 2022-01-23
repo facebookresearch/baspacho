@@ -104,7 +104,7 @@ void experiment(Data& data) {
         LOG(INFO) << "a." << a
                   << ": size=" << skel.lumpToSpan[a + 1] - skel.lumpToSpan[a]
                   << ", nBlockRows="
-                  << skel.slabChainColOrd[skel.slabColPtr[a + 1] - 1];
+                  << skel.boardChainColOrd[skel.boardColPtr[a + 1] - 1];
     }
 
     LOG(INFO) << "Testing Cholmod...";

@@ -78,33 +78,33 @@ TEST(BlockMatrix, BasicAssertions) {
         _ X _ _ X
         X X X X X X
     */
-    ASSERT_THAT(skel.slabColPtr, ElementsAre(0, 5, 10, 14, 17, 20, 22));
-    ASSERT_THAT(skel.slabRowLump, ElementsAre(0, 1, 3, 5, kInvalid,  //
-                                              1, 2, 4, 5, kInvalid,  //
-                                              2, 3, 5, kInvalid,     //
-                                              3, 5, kInvalid,        //
-                                              4, 5, kInvalid,        //
-                                              5, kInvalid));
-    ASSERT_THAT(skel.slabChainColOrd, ElementsAre(0, 1, 3, 4, 5,  //
-                                                  0, 2, 3, 4, 5,  //
-                                                  0, 1, 3, 4,     //
-                                                  0, 2, 3,        //
-                                                  0, 1, 2,        //
-                                                  0, 2));
+    ASSERT_THAT(skel.boardColPtr, ElementsAre(0, 5, 10, 14, 17, 20, 22));
+    ASSERT_THAT(skel.boardRowLump, ElementsAre(0, 1, 3, 5, kInvalid,  //
+                                               1, 2, 4, 5, kInvalid,  //
+                                               2, 3, 5, kInvalid,     //
+                                               3, 5, kInvalid,        //
+                                               4, 5, kInvalid,        //
+                                               5, kInvalid));
+    ASSERT_THAT(skel.boardChainColOrd, ElementsAre(0, 1, 3, 4, 5,  //
+                                                   0, 2, 3, 4, 5,  //
+                                                   0, 1, 3, 4,     //
+                                                   0, 2, 3,        //
+                                                   0, 1, 2,        //
+                                                   0, 2));
 
-    ASSERT_THAT(skel.slabRowPtr, ElementsAre(0, 1, 3, 5, 8, 10, 16));
-    ASSERT_THAT(skel.slabColLump, ElementsAre(0,        //
-                                              0, 1,     //
-                                              1, 2,     //
-                                              0, 2, 3,  //
-                                              1, 4,     //
-                                              0, 1, 2, 3, 4, 5));
-    ASSERT_THAT(skel.slabColOrd, ElementsAre(0,        //
-                                             1, 0,     //
-                                             1, 0,     //
-                                             2, 1, 0,  //
-                                             2, 0,     //
-                                             3, 3, 2, 1, 1, 0));
+    ASSERT_THAT(skel.boardRowPtr, ElementsAre(0, 1, 3, 5, 8, 10, 16));
+    ASSERT_THAT(skel.boardColLump, ElementsAre(0,        //
+                                               0, 1,     //
+                                               1, 2,     //
+                                               0, 2, 3,  //
+                                               1, 4,     //
+                                               0, 1, 2, 3, 4, 5));
+    ASSERT_THAT(skel.boardColOrd, ElementsAre(0,        //
+                                              1, 0,     //
+                                              1, 0,     //
+                                              2, 1, 0,  //
+                                              2, 0,     //
+                                              3, 3, 2, 1, 1, 0));
 }
 
 TEST(BlockMatrix, Densify) {
