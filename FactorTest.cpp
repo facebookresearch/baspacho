@@ -18,11 +18,10 @@ TEST(Factor, FactorAggreg) {
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
     vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> rangeToSpan{0, 2, 4, 6};
+    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
-        columnsToCscStruct(joinColums(csrStructToColumns(ss), rangeToSpan));
-    BlockMatrixSkel skel(spanStart, rangeToSpan, groupedSs.ptrs,
-                         groupedSs.inds);
+        columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
+    BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
     uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
@@ -42,11 +41,10 @@ TEST(Factor, Factor) {
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
     vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> rangeToSpan{0, 2, 4, 6};
+    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
-        columnsToCscStruct(joinColums(csrStructToColumns(ss), rangeToSpan));
-    BlockMatrixSkel skel(spanStart, rangeToSpan, groupedSs.ptrs,
-                         groupedSs.inds);
+        columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
+    BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
 
     uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
     vector<double> data(totData);

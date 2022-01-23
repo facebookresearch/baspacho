@@ -16,12 +16,12 @@ struct Ops {
 
     // prepares data for a parallel elimination op
     virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
-                                             uint64_t rangesBegin,
-                                             uint64_t rangesEnd) = 0;
+                                             uint64_t lumpsBegin,
+                                             uint64_t lumpsEnd) = 0;
 
-    // does (possibly parallel) elimination on a range of aggregs
+    // does (possibly parallel) elimination on a lump of aggregs
     virtual void doElimination(const OpaqueData& skel, double* data,
-                               uint64_t rangesBegin, uint64_t rangesEnd,
+                               uint64_t lumpsBegin, uint64_t lumpsEnd,
                                const OpaqueData& elimData) = 0;
 
     // dense Cholesky on dense row-major matrix A (in place)

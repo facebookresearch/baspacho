@@ -36,7 +36,7 @@ TEST(EliminationTree, Build) {
 
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
+        BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
                              et.rowParam);
         uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
         vector<double> data(totData, 1);

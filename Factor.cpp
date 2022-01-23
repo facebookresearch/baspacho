@@ -11,7 +11,7 @@ void factor(const BlockMatrixSkel& skel, std::vector<double>& data) {
         uint64_t rowAggregStart = skel.slabColPtr[a];
         uint64_t rowNumAggregs = skel.slabColPtr[a + 1] - rowAggregStart;
 
-        CHECK_EQ(skel.slabRowRange[rowAggregStart], a);
+        CHECK_EQ(skel.slabRowLump[rowAggregStart], a);
 
         for (uint64_t i = 1; i < rowNumAggregs - 1; i++) {
             eliminateAggregItem(skel, data, a, i);
@@ -22,8 +22,8 @@ void factor(const BlockMatrixSkel& skel, std::vector<double>& data) {
 void factorAggreg(const BlockMatrixSkel& skel, std::vector<double>& data,
                   uint64_t aggreg) {
     LOG(INFO) << "a: " << aggreg;
-    uint64_t rangeStart = skel.rangeStart[aggreg];
-    uint64_t aggregSize = skel.rangeStart[aggreg + 1] - rangeStart;
+    uint64_t lumpStart = skel.lumpStart[aggreg];
+    uint64_t aggregSize = skel.lumpStart[aggreg + 1] - lumpStart;
     uint64_t colStart = skel.sliceColPtr[aggreg];
     uint64_t dataPtr = skel.sliceData[colStart];
 
@@ -66,9 +66,9 @@ uint64_t bisect(const uint64_t* array, uint64_t size, uint64_t needle) {
 // returns (offset, stride)
 std::pair<uint64_t, uint64_t> findBlock(const BlockMatrixSkel& skel,
                                         uint64_t cParam, uint64_t rParam) {
-    uint64_t aggreg = skel.spanToRange[cParam];
-    uint64_t aggregSize = skel.rangeStart[aggreg + 1] - skel.rangeStart[aggreg];
-    uint64_t offsetInAggreg = skel.spanStart[cParam] - skel.rangeStart[aggreg];
+    uint64_t aggreg = skel.spanToLump[cParam];
+    uint64_t aggregSize = skel.lumpStart[aggreg + 1] - skel.lumpStart[aggreg];
+    uint64_t offsetInAggreg = skel.spanStart[cParam] - skel.lumpStart[aggreg];
     uint64_t start = skel.sliceColPtr[aggreg];
     uint64_t end = skel.sliceColPtr[aggreg + 1];
     // bisect to find rParam in sliceRowSpan[start:end]
@@ -86,8 +86,8 @@ using OuterStridedMatM = Eigen::Map<
 
 void eliminateAggregItem(const BlockMatrixSkel& skel, std::vector<double>& data,
                          uint64_t aggreg, uint64_t rowItem) {
-    uint64_t rangeStart = skel.rangeStart[aggreg];
-    uint64_t aggregSize = skel.rangeStart[aggreg + 1] - rangeStart;
+    uint64_t lumpStart = skel.lumpStart[aggreg];
+    uint64_t aggregSize = skel.lumpStart[aggreg + 1] - lumpStart;
     uint64_t colStart = skel.sliceColPtr[aggreg];
 
     uint64_t gatheredStart = skel.slabColPtr[aggreg];

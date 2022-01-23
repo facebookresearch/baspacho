@@ -190,7 +190,7 @@ SparseStructure SparseStructure::addIndependentEliminationFill(
                 tags[i] = k;
             }
 
-            // for i in elim range, walk rows in same column
+            // for i in elim lump, walk rows in same column
             if (i >= elimStart && i < elimEnd) {
                 uint64_t tStart = tThis.ptrs[i];
                 uint64_t tEnd = tThis.ptrs[i + 1];

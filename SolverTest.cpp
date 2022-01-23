@@ -21,11 +21,10 @@ void testSolver(OpsPtr&& ops) {
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
     vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> rangeToSpan{0, 2, 4, 6};
+    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
-        columnsToCscStruct(joinColums(csrStructToColumns(ss), rangeToSpan));
-    BlockMatrixSkel skel(spanStart, rangeToSpan, groupedSs.ptrs,
-                         groupedSs.inds);
+        columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
+    BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
 
     uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
     vector<double> data(totData);
@@ -68,7 +67,7 @@ void testSolverXt(const std::function<OpsPtr()>& genOps) {
         et.computeMerges();
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
+        BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
                              et.rowParam);
 
         uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
@@ -126,7 +125,7 @@ void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
         et.computeMerges();
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
+        BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
                              et.rowParam);
 
         uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
@@ -145,8 +144,8 @@ void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
 
         uint64_t largestIndep = findLargestIndependentAggregSet(skel);
         cout << "Largest indep set is 0.." << largestIndep
-             << " (nAggregs: " << et.rangeToSpan.size() - 1 << ")"
-             << "\naggregs:" << printVec(et.rangeToSpan) << endl;
+             << " (nAggregs: " << et.lumpToSpan.size() - 1 << ")"
+             << "\naggregs:" << printVec(et.lumpToSpan) << endl;
 
         Solver solver(std::move(skel),
                       std::vector<uint64_t>{0, largestIndep},  //
@@ -194,7 +193,7 @@ void testSolverXtElFact(const std::function<OpsPtr()>& genOps) {
         et.computeMerges();
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.spanStart, et.rangeToSpan, et.colStart,
+        BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
                              et.rowParam);
 
         uint64_t totData = skel.sliceData[skel.sliceData.size() - 1];
@@ -213,8 +212,8 @@ void testSolverXtElFact(const std::function<OpsPtr()>& genOps) {
 
         uint64_t largestIndep = findLargestIndependentAggregSet(skel);
         cout << "Largest indep set is 0.." << largestIndep
-             << " (nAggregs: " << et.rangeToSpan.size() - 1 << ")"
-             << "\naggregs:" << printVec(et.rangeToSpan) << endl;
+             << " (nAggregs: " << et.lumpToSpan.size() - 1 << ")"
+             << "\naggregs:" << printVec(et.lumpToSpan) << endl;
 
         Solver solver(std::move(skel),
                       std::vector<uint64_t>{0, largestIndep},  //

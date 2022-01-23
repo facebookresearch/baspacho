@@ -118,38 +118,38 @@ void EliminationTree::computeAggregateStruct() {
     }
 
     // straightening permutation
-    uint64_t numRanges = ord - numMerges;
-    vector<uint64_t> spanToRange(ord);
+    uint64_t numLumps = ord - numMerges;
+    vector<uint64_t> spanToLump(ord);
     uint64_t pIdx = ord;
-    uint64_t agIdx = numRanges;
+    uint64_t agIdx = numLumps;
     permutation.resize(ord);
-    rangeStart.resize(numRanges + 1);
-    rangeToSpan.assign(numRanges + 1, 0);
+    lumpStart.resize(numLumps + 1);
+    lumpToSpan.assign(numLumps + 1, 0);
     for (int64_t k = ord - 1; k >= 0; k--) {
         if (mergeWith[k] != -1) {
             continue;
         }
 
         CHECK_GT(agIdx, 0);
-        rangeStart[--agIdx] = nodeSize[k];
+        lumpStart[--agIdx] = nodeSize[k];
 
         CHECK_GT(pIdx, 0);
         permutation[--pIdx] = k;
-        spanToRange[k] = agIdx;
-        rangeToSpan[agIdx]++;
+        spanToLump[k] = agIdx;
+        lumpToSpan[agIdx]++;
         for (int64_t q = firstMergeChild[k]; q != -1; q = nextMergeSibling[q]) {
             CHECK_GT(pIdx, 0);
             permutation[--pIdx] = q;
-            spanToRange[q] = agIdx;
-            rangeToSpan[agIdx]++;
+            spanToLump[q] = agIdx;
+            lumpToSpan[agIdx]++;
         }
     }
     CHECK_EQ(pIdx, 0);
     CHECK_EQ(agIdx, 0);
 
-    // cum-sum rangeStart
-    cumSum(rangeToSpan);
-    uint64_t tot = cumSum(rangeStart);
+    // cum-sum lumpStart
+    cumSum(lumpToSpan);
+    uint64_t tot = cumSum(lumpStart);
     permInverse = inversePermutation(permutation);
 
     SparseStructure tperm =  // lower-half csc
@@ -160,9 +160,9 @@ void EliminationTree::computeAggregateStruct() {
 
     vector<int64_t> tags(ord, -1);  // check if row el was added already
     colStart.push_back(0);
-    for (uint64_t a = 0; a < numRanges; a++) {
-        uint64_t aStart = rangeToSpan[a];
-        uint64_t aEnd = rangeToSpan[a + 1];
+    for (uint64_t a = 0; a < numLumps; a++) {
+        uint64_t aStart = lumpToSpan[a];
+        uint64_t aEnd = lumpToSpan[a + 1];
         uint64_t pStart = tperm.ptrs[aStart];
         uint64_t pEnd = tperm.ptrs[aEnd];
         for (uint64_t i = pStart; i < pEnd; i++) {

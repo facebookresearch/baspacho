@@ -15,12 +15,12 @@ using MatRMaj =
     Notation for block matrix with grouped columns:
     Linear data:
     * a `span` is the basic grouping of data (at creation)
-    * an `range` is formed by a few consecutive params
+    * an `lump` is formed by a few consecutive params
     Block data:
     * a `block` is `span rows` x `span cols`
-    * a `slice` is `span rows` x `range cols`
+    * a `slice` is `span rows` x `lump cols`
     * a `slab` is (non-empty) and formed by:
-      `all the spans belonging to an range of rows` x `range cols`
+      `all the spans belonging to an lump of rows` x `lump cols`
 
     Note that numeric data in a column of slices are a row-major
     matrix. In this way we can refer to the slice sub-matrix,
@@ -28,7 +28,7 @@ using MatRMaj =
 */
 struct BlockMatrixSkel {
     BlockMatrixSkel(const std::vector<uint64_t>& spanStart,
-                    const std::vector<uint64_t>& rangeToSpan,
+                    const std::vector<uint64_t>& lumpToSpan,
                     const std::vector<uint64_t>& colPtr,
                     const std::vector<uint64_t>& rowInd);
 
@@ -37,9 +37,9 @@ struct BlockMatrixSkel {
     void damp(std::vector<double>& data, double alpha, double beta);
 
     std::vector<uint64_t> spanStart;  // (with final el)
-    std::vector<uint64_t> spanToRange;
-    std::vector<uint64_t> rangeStart;   // (with final el)
-    std::vector<uint64_t> rangeToSpan;  // (with final el)
+    std::vector<uint64_t> spanToLump;
+    std::vector<uint64_t> lumpStart;   // (with final el)
+    std::vector<uint64_t> lumpToSpan;  // (with final el)
 
     // per-slice data, column-ordered
     std::vector<uint64_t> sliceColPtr;       // slab col data start (with end)
@@ -49,17 +49,17 @@ struct BlockMatrixSkel {
 
     // per-slab data, column-ordered, colums have a final element
     std::vector<uint64_t> slabColPtr;       // slab col data start (with end)
-    std::vector<uint64_t> slabRowRange;     // row-range id (end = invalid)
+    std::vector<uint64_t> slabRowLump;      // row-lump id (end = invalid)
     std::vector<uint64_t> slabSliceColOrd;  // slice ord in col (end = #slices)
 
     // per-slab data, row-ordered
-    std::vector<uint64_t> slabRowPtr;    // slab row data start (with end)
-    std::vector<uint64_t> slabColRange;  // slab's col range
-    std::vector<uint64_t> slabColOrd;    // slab order in col
+    std::vector<uint64_t> slabRowPtr;   // slab row data start (with end)
+    std::vector<uint64_t> slabColLump;  // slab's col lump
+    std::vector<uint64_t> slabColOrd;   // slab order in col
 };
 
 BlockMatrixSkel initBlockMatrixSkel(const std::vector<uint64_t>& spanStart,
-                                    const std::vector<uint64_t>& rangeToSpan,
+                                    const std::vector<uint64_t>& lumpToSpan,
                                     const std::vector<uint64_t>& colPtr,
                                     const std::vector<uint64_t>& rowInd);
 

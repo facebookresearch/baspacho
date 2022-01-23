@@ -31,8 +31,8 @@ struct EliminationTree {
     std::vector<uint64_t> permutation;
     std::vector<uint64_t> permInverse;
     std::vector<uint64_t> spanStart;
-    std::vector<uint64_t> rangeStart;
-    std::vector<uint64_t> rangeToSpan;
+    std::vector<uint64_t> lumpStart;
+    std::vector<uint64_t> lumpToSpan;
     std::vector<uint64_t> colStart;
     std::vector<uint64_t> rowParam;
 };
