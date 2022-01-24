@@ -11,7 +11,7 @@ struct Solver {
 
     void factorLump(double* data, uint64_t lump) const;
 
-    void factor(double* data) const;
+    void factor(double* data, bool verbose = false) const;
 
     struct SolverContext {
         std::vector<uint64_t> paramToChainOffset;
@@ -19,8 +19,8 @@ struct Solver {
         std::vector<double> tempBuffer;
     };
 
-    void prepareContextForTargetAggreg(uint64_t targetAggreg,
-                                       SolverContext& ctx) const;
+    void prepareContextForTargetLump(uint64_t targetAggreg,
+                                     SolverContext& ctx) const;
 
     void eliminateBoard(double* data, uint64_t lump, uint64_t boardIndexInCol,
                         SolverContext& ctx) const;
@@ -44,4 +44,4 @@ struct Solver {
 using SolverPtr = std::unique_ptr<Solver>;
 
 SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
-                       const SparseStructure& ss);
+                       const SparseStructure& ss, bool verbose = false);

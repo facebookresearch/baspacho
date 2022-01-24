@@ -1,6 +1,7 @@
 #pragma once
 
 #include <limits>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -11,6 +12,15 @@ std::vector<uint64_t> randomPermutation(size_t size, uint64_t seed);
 
 std::vector<uint64_t> randomVec(size_t size, uint64_t low, uint64_t high,
                                 uint64_t seed);
+
+std::vector<uint64_t> randomVec(size_t size, uint64_t low, uint64_t high,
+                                std::mt19937& gen);
+
+std::vector<double> randomData(size_t size, double low, double high,
+                               uint64_t seed);
+
+std::vector<double> randomData(size_t size, double low, double high,
+                               std::mt19937& gen);
 
 std::vector<uint64_t> randomPartition(size_t weight, uint64_t low,
                                       uint64_t high, uint64_t seed);

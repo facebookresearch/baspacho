@@ -19,10 +19,31 @@ vector<uint64_t> randomPermutation(size_t size, uint64_t seed) {
 vector<uint64_t> randomVec(size_t size, uint64_t low, uint64_t high,
                            uint64_t seed) {
     mt19937 gen(seed);
+    return randomVec(size, low, high, gen);
+}
+
+vector<uint64_t> randomVec(size_t size, uint64_t low, uint64_t high,
+                           std::mt19937& gen) {
     vector<uint64_t> retv(size);
     uniform_int_distribution el(low, high);
     for (uint64_t i = 0; i < size; i++) {
         retv[i] = el(gen);
+    }
+    return retv;
+}
+
+std::vector<double> randomData(size_t size, double low, double high,
+                               uint64_t seed) {
+    mt19937 gen(seed);
+    return randomData(size, low, high, gen);
+}
+
+std::vector<double> randomData(size_t size, double low, double high,
+                               std::mt19937& gen) {
+    vector<double> retv(size);
+    uniform_real_distribution<> dis(low, high);
+    for (uint64_t i = 0; i < size; i++) {
+        retv[i] = dis(gen);
     }
     return retv;
 }

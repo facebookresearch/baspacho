@@ -31,6 +31,7 @@ using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
+// helper for elimination
 static void factorLump(const BlockMatrixSkel& skel, double* data,
                        uint64_t lump) {
     uint64_t lumpStart = skel.lumpStart[lump];
@@ -57,9 +58,9 @@ static void factorLump(const BlockMatrixSkel& skel, double* data,
         .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
 }
 
-static void prepareContextForTargetAggreg(const BlockMatrixSkel& skel,
-                                          uint64_t targetLump,
-                                          vector<uint64_t>& spanToChainOffset) {
+static void prepareContextForTargetLump(const BlockMatrixSkel& skel,
+                                        uint64_t targetLump,
+                                        vector<uint64_t>& spanToChainOffset) {
     spanToChainOffset.assign(skel.spanStart.size() - 1, 999999);
     for (uint64_t i = skel.chainColPtr[targetLump],
                   iEnd = skel.chainColPtr[targetLump + 1];
@@ -87,6 +88,9 @@ struct BlasOps : Ops {
 
     virtual void printStats() const override {
         LOG(INFO) << "matOp stats:"
+                  << "\nelim: #=" << elimCalls << ", time=" << elimTotTime
+                  << "s, last=" << elimLastCallTime
+                  << "s, max=" << elimMaxCallTime << "s"
                   << "\nBiggest dense block: " << potrfBiggestN
                   << "\npotrf: #=" << potrfCalls << ", time=" << potrfTotTime
                   << "s, last=" << potrfLastCallTime
@@ -174,7 +178,7 @@ struct BlasOps : Ops {
             skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
         uint64_t spanOffsetInLump =
             skel.spanStart[s] - skel.lumpStart[targetLump];
-        prepareContextForTargetAggreg(skel, targetLump, ctx.spanToChainOffset);
+        prepareContextForTargetLump(skel, targetLump, ctx.spanToChainOffset);
 
         // iterate over chains present in this row
         for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
@@ -225,6 +229,7 @@ struct BlasOps : Ops {
     virtual void doElimination(const OpaqueData& ref, double* data,
                                uint64_t lumpsBegin, uint64_t lumpsEnd,
                                const OpaqueData& elimData) override {
+        auto start = hrc::now();
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         const OpaqueDataElimData* pElim =
@@ -255,6 +260,11 @@ struct BlasOps : Ops {
                     eliminateRowChain(elim, skel, data, sRel, ctx);
                 }
             });
+
+        elimLastCallTime = tdelta(hrc::now() - start).count();
+        elimCalls++;
+        elimTotTime += elimLastCallTime;
+        elimMaxCallTime = std::max(elimMaxCallTime, elimLastCallTime);
     }
 
     virtual void potrf(uint64_t n, double* A) override {
@@ -322,6 +332,10 @@ struct BlasOps : Ops {
         gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
     }
 
+    uint64_t elimCalls = 0;
+    double elimTotTime = 0.0;
+    double elimLastCallTime;
+    double elimMaxCallTime = 0.0;
     uint64_t potrfBiggestN = 0;
     uint64_t potrfCalls = 0;
     double potrfTotTime = 0.0;

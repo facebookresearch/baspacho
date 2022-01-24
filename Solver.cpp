@@ -5,6 +5,7 @@
 
 #include <Eigen/Eigenvalues>
 #include <chrono>
+#include <iostream>
 
 #include "EliminationTree.h"
 #include "TestingUtils.h"
@@ -56,9 +57,9 @@ using OuterStride = Eigen::OuterStride<>;
 using OuterStridedMatM = Eigen::Map<MatRMaj<double>, 0, OuterStride>;
 using OuterStridedMatK = Eigen::Map<const MatRMaj<double>, 0, OuterStride>;
 
-void Solver::prepareContextForTargetAggreg(uint64_t targetAggreg,
-                                           SolverContext& ctx) const {
-    ctx.paramToChainOffset.assign(skel.spanStart.size() - 1, 999999);
+void Solver::prepareContextForTargetLump(uint64_t targetAggreg,
+                                         SolverContext& ctx) const {
+    ctx.paramToChainOffset.resize(skel.spanStart.size() - 1);
     for (uint64_t i = skel.chainColPtr[targetAggreg],
                   iEnd = skel.chainColPtr[targetAggreg + 1];
          i < iEnd; i++) {
@@ -173,20 +174,21 @@ void Solver::eliminateBoard(double* data, uint64_t lump,
     assemble(data, lump, boardIndexInSN, ctx);
 }
 
-void Solver::factor(double* data) const {
+void Solver::factor(double* data, bool verbose) const {
     for (uint64_t l = 0; l + 1 < elimLumps.size(); l++) {
-        LOG(INFO) << "Elim " << l;
+        LOG_IF(INFO, verbose) << "Elim set: " << l << " (" << elimLumps[l]
+                              << ".." << elimLumps[l + 1] << ")";
         ops->doElimination(*opMatrixSkel, data, elimLumps[l], elimLumps[l + 1],
                            *opElimination[l]);
     }
 
     uint64_t denseOpsFromLump =
         elimLumps.size() ? elimLumps[elimLumps.size() - 1] : 0;
-    LOG(INFO) << "FactFrom " << denseOpsFromLump;
+    LOG_IF(INFO, verbose) << "Block-Fact from: " << denseOpsFromLump;
 
     SolverContext ctx;
     for (uint64_t l = denseOpsFromLump; l < skel.chainColPtr.size() - 1; l++) {
-        prepareContextForTargetAggreg(l, ctx);
+        prepareContextForTargetLump(l, ctx);
 
         //  iterate over columns having a non-trivial a-block
         for (uint64_t rPtr = skel.boardRowPtr[l],
@@ -208,11 +210,11 @@ void Solver::factor(double* data) const {
         factorLump(data, l);
     }
 
-    LOG(INFO) << "solver stats:"
-              << "\nassemble: #=" << assembleCalls
-              << ", time=" << assembleTotTime
-              << "s, last=" << assembleLastCallTime
-              << "s, max=" << assembleMaxCallTime << "s";
+    LOG_IF(INFO, verbose) << "solver stats:"
+                          << "\nassemble: #=" << assembleCalls
+                          << ", time=" << assembleTotTime
+                          << "s, last=" << assembleLastCallTime
+                          << "s, max=" << assembleMaxCallTime << "s";
 }
 
 uint64_t findLargestIndependentAggregSet(const BlockMatrixSkel& skel) {
@@ -231,7 +233,7 @@ uint64_t findLargestIndependentAggregSet(const BlockMatrixSkel& skel) {
 }
 
 SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
-                       const SparseStructure& ss) {
+                       const SparseStructure& ss, bool verbose) {
     vector<uint64_t> permutation = ss.fillReducingPermutation();
     vector<uint64_t> invPerm = inversePermutation(permutation);
     SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
@@ -246,12 +248,12 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
     et.computeMerges();
     et.computeAggregateStruct();
 
-    // LOG(INFO) << "\naggregs: " << printVec(et.lumpToSpan);
-
     BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart, et.rowParam);
 
     uint64_t largestIndep = findLargestIndependentAggregSet(skel);
-    LOG(INFO) << "Largest indep set is 0.." << largestIndep;
+
+    LOG_IF(INFO, verbose) << "Lumps:\n" << printVec(et.lumpToSpan) << endl;
+    LOG_IF(INFO, verbose) << "Largest indep set is 0.." << largestIndep << endl;
 
     return SolverPtr(new Solver(std::move(skel),
                                 std::vector<uint64_t>{0, largestIndep},

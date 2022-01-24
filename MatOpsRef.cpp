@@ -36,9 +36,9 @@ static void factorLump(const BlockMatrixSkel& skel, double* data,
         .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
 }
 
-static void prepareContextForTargetAggreg(const BlockMatrixSkel& skel,
-                                          uint64_t targetLump,
-                                          vector<uint64_t>& spanToChainOffset) {
+static void prepareContextForTargetLump(const BlockMatrixSkel& skel,
+                                        uint64_t targetLump,
+                                        vector<uint64_t>& spanToChainOffset) {
     spanToChainOffset.assign(skel.spanStart.size() - 1, 999999);
     for (uint64_t i = skel.chainColPtr[targetLump],
                   iEnd = skel.chainColPtr[targetLump + 1];
@@ -163,7 +163,7 @@ struct SimpleOps : Ops {
                 skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
             uint64_t spanOffsetInLump =
                 skel.spanStart[s] - skel.lumpStart[targetLump];
-            prepareContextForTargetAggreg(skel, targetLump, spanToChainOffset);
+            prepareContextForTargetLump(skel, targetLump, spanToChainOffset);
 
             // iterate over chains present in this row
             for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
