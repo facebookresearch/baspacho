@@ -264,3 +264,100 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
                                 blasOps()  // simpleOps()
                                 ));
 }
+
+SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
+                            const SparseStructure& ss_,
+                            const std::vector<uint64_t>& elimLumps,
+                            bool verbose) {
+    CHECK_GE(elimLumps.size(), 2);
+    SparseStructure ss =
+        ss_.addIndependentEliminationFill(elimLumps[0], elimLumps[1]);
+    for (uint64_t e = 1; e < elimLumps.size() - 1; e++) {
+        ss = ss.addIndependentEliminationFill(elimLumps[e], elimLumps[e + 1]);
+    }
+
+    uint64_t elimEnd = elimLumps[elimLumps.size() - 1];
+    SparseStructure ssBottom = ss.extractRightBottom(elimEnd);
+
+    // find best permutation for right-bottom corner that is left
+    vector<uint64_t> permutation = ssBottom.fillReducingPermutation();
+    vector<uint64_t> invPerm = inversePermutation(permutation);
+    SparseStructure sortedSsBottom =
+        ssBottom.symmetricPermutation(invPerm, false);
+
+    // apply permutation to param size of right-bottom corner
+    std::vector<uint64_t> sortedBottomParamSize(paramSize.size() - elimEnd);
+    for (size_t i = elimEnd; i < paramSize.size(); i++) {
+        sortedBottomParamSize[invPerm[i - elimEnd]] = paramSize[i - elimEnd];
+    }
+
+    // compute as ordinary elimination tree on br-corner
+    EliminationTree et(sortedBottomParamSize, sortedSsBottom);
+    et.buildTree();
+    et.computeMerges();
+    et.computeAggregateStruct();
+
+    // full sorted param size
+    std::vector<uint64_t> sortedFullParamSize;
+    sortedFullParamSize.reserve(paramSize.size());
+    sortedFullParamSize.insert(sortedFullParamSize.begin(), paramSize.begin(),
+                               paramSize.begin() + elimEnd);
+    sortedFullParamSize.insert(sortedFullParamSize.begin(),
+                               sortedBottomParamSize.begin(),
+                               sortedBottomParamSize.end());
+
+    CHECK_EQ(et.spanStart.size() - 1, et.lumpToSpan[et.lumpToSpan.size() - 1]);
+
+    // compute span start as cumSum of `sortedFullParamSize`
+    vector<uint64_t> fullSpanStart;
+    fullSpanStart.reserve(sortedFullParamSize.size() + 1);
+    fullSpanStart.insert(fullSpanStart.begin(), sortedFullParamSize.begin(),
+                         sortedFullParamSize.end());
+    fullSpanStart.push_back(0);
+    cumSumVec(fullSpanStart);
+
+    // compute lump to span, knowing up to elimEnd it's the identity
+    vector<uint64_t> fullLumpToSpan(elimEnd + et.lumpToSpan.size());
+    iota(fullLumpToSpan.begin(), fullLumpToSpan.begin() + elimEnd, 0);
+    for (size_t i = 0; i < et.lumpToSpan.size(); i++) {
+        fullLumpToSpan[i + elimEnd] = elimEnd + et.lumpToSpan[i];
+    }
+    CHECK_EQ(fullSpanStart.size() - 1,
+             fullLumpToSpan[fullLumpToSpan.size() - 1]);
+
+    // colStart are aggregate lump columns
+    // ss last rows are to be permuted according to invPerm
+    // TODO: optimize if slow
+    vector<uint64_t> fullInvPerm(elimEnd + invPerm.size());
+    iota(fullInvPerm.begin(), fullInvPerm.begin() + elimEnd, 0);
+    for (size_t i = 0; i < invPerm.size(); i++) {
+        fullInvPerm[i + elimEnd] = elimEnd + invPerm[i];
+    }
+    SparseStructure sortedSsT =
+        ss.symmetricPermutation(fullInvPerm, false).transpose(true);
+    vector<uint64_t> fullColStart;
+    fullColStart.reserve(elimEnd + et.colStart.size());
+    fullColStart.insert(fullColStart.begin(), sortedSsT.ptrs.begin(),
+                        sortedSsT.ptrs.begin() + elimEnd);
+    uint64_t elimEndDataPtr = sortedSsT.ptrs[elimEnd];
+    for (size_t i = 0; i < et.colStart.size(); i++) {
+        fullColStart.push_back(elimEndDataPtr + et.colStart[i]);
+    }
+    CHECK_EQ(fullColStart.size(), fullLumpToSpan.size());
+
+    vector<uint64_t> fullRowParam;
+    fullRowParam.reserve(elimEndDataPtr + et.rowParam.size());
+    fullRowParam.insert(fullRowParam.begin(), sortedSsT.inds.begin(),
+                        sortedSsT.inds.begin() + elimEndDataPtr);
+    for (size_t i = 0; i < et.rowParam.size(); i++) {
+        fullRowParam.push_back(et.rowParam[i] + elimEnd);
+    }
+    CHECK_EQ(fullRowParam.size(), fullColStart[fullColStart.size() - 1]);
+
+    BlockMatrixSkel skel(fullSpanStart, fullLumpToSpan, fullColStart,
+                         fullRowParam);
+
+    return SolverPtr(new Solver(std::move(skel), vector<uint64_t>(elimLumps),
+                                blasOps()  // simpleOps()
+                                ));
+}

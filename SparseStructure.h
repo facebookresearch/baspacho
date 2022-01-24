@@ -43,7 +43,4 @@ struct SparseStructure {
     std::vector<uint64_t> fillReducingPermutation() const;
 
     SparseStructure extractRightBottom(uint64_t start);
-
-    SparseStructure replaceRightBottom(uint64_t start,
-                                       const SparseStructure& rb);
 };

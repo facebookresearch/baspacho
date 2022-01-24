@@ -1,16 +1,21 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
+
 #include "BaAtLarge.h"
 #include "BenchCholmod.h"
 #include "BlockMatrix.h"
 #include "EliminationTree.h"
+#include "Solver.h"
 #include "SparseStructure.h"
 #include "TestingUtils.h"
 #include "Utils.h"
 
 using namespace ba_at_large;
 using namespace std;
+using hrc = chrono::high_resolution_clock;
+using tdelta = chrono::duration<double>;
 
 void computeCost(Data& data) {
     double totCost = 0;
@@ -22,6 +27,50 @@ void computeCost(Data& data) {
         totCost += 0.5 * err.squaredNorm();
     }
     LOG(INFO) << "tot cost: " << totCost;
+}
+
+void experiment2(Data& data) {
+    uint64_t numPts = data.points.size();
+    uint64_t numCams = data.cameras.size();
+    uint64_t totNumParams = numPts + numCams;
+
+    LOG(INFO) << "Build struct...";
+    vector<uint64_t> paramSize(totNumParams);
+    vector<set<uint64_t>> colBlocks(totNumParams);
+    for (uint64_t i = 0; i < numPts; i++) {  // points go first
+        paramSize[i] = 3;
+        colBlocks[i].insert(i);
+    }
+    for (uint64_t i = numPts; i < totNumParams; i++) {  // then cams
+        paramSize[i] = 6;
+        colBlocks[i].insert(i);
+    }
+    for (auto& obs : data.observations) {
+        colBlocks[obs.ptIdx].insert(numPts + obs.camIdx);
+    }
+
+    LOG(INFO) << "Building ss...";
+    SparseStructure origSs = columnsToCscStruct(colBlocks).transpose();
+
+    bool verbose = 1;
+    auto solver = createSolverSchur(paramSize, origSs,
+                                    vector<uint64_t>{0, numPts}, verbose);
+
+    // generate mock data
+    uint64_t totData =
+        solver->skel.chainData[solver->skel.chainData.size() - 1];
+    vector<double> matData = randomData(totData, -1.0, 1.0, 37);
+    uint64_t order = solver->skel.spanStart[solver->skel.spanStart.size() - 1];
+    solver->skel.damp(matData, 0, order * 1.2);  // make positive def
+
+    auto startFactor = hrc::now();
+    solver->factor(matData.data(), verbose);
+    double factorTime = tdelta(hrc::now() - startFactor).count();
+
+    if (verbose) {
+        solver->ops->printStats();
+        LOG_IF(INFO, verbose) << "factor: " << factorTime << endl;
+    }
 }
 
 void experiment(Data& data) {
@@ -121,7 +170,7 @@ int main(int argc, char* argv[]) {
     data.load(argv[1], true);
 
     // computeCost(data);
-    experiment(data);
+    experiment2(data);
 
     return 0;
 }

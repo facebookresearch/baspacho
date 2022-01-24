@@ -45,3 +45,8 @@ using SolverPtr = std::unique_ptr<Solver>;
 
 SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
                        const SparseStructure& ss, bool verbose = false);
+
+SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
+                            const SparseStructure& ss,
+                            const std::vector<uint64_t>& elimLumps,
+                            bool verbose = false);
