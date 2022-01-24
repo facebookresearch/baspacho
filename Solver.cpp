@@ -187,8 +187,11 @@ void Solver::factor(double* data, bool verbose) const {
     LOG_IF(INFO, verbose) << "Block-Fact from: " << denseOpsFromLump;
 
     SolverContext ctx;
+    double totPrepares = 0.0;
     for (uint64_t l = denseOpsFromLump; l < skel.chainColPtr.size() - 1; l++) {
+        auto start = hrc::now();
         prepareContextForTargetLump(l, ctx);
+        totPrepares += tdelta(hrc::now() - start).count();
 
         //  iterate over columns having a non-trivial a-block
         for (uint64_t rPtr = skel.boardRowPtr[l],
@@ -211,13 +214,14 @@ void Solver::factor(double* data, bool verbose) const {
     }
 
     LOG_IF(INFO, verbose) << "solver stats:"
+                          << "\nprepares: " << totPrepares
                           << "\nassemble: #=" << assembleCalls
                           << ", time=" << assembleTotTime
                           << "s, last=" << assembleLastCallTime
                           << "s, max=" << assembleMaxCallTime << "s";
 }
 
-uint64_t findLargestIndependentAggregSet(const BlockMatrixSkel& skel) {
+uint64_t findLargestIndependentLumpSet(const BlockMatrixSkel& skel) {
     uint64_t limit = kInvalid;
     for (uint64_t a = 0; a < skel.lumpToSpan.size() - 1; a++) {
         if (a >= limit) {
@@ -250,9 +254,9 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
 
     BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart, et.rowParam);
 
-    uint64_t largestIndep = findLargestIndependentAggregSet(skel);
+    uint64_t largestIndep = findLargestIndependentLumpSet(skel);
 
-    LOG_IF(INFO, verbose) << "Lumps:\n" << printVec(et.lumpToSpan) << endl;
+    // LOG_IF(INFO, verbose) << "Lumps:\n" << printVec(et.lumpToSpan) << endl;
     LOG_IF(INFO, verbose) << "Largest indep set is 0.." << largestIndep << endl;
 
     return SolverPtr(new Solver(std::move(skel),

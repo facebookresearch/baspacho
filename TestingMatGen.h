@@ -14,6 +14,8 @@ struct SparseMatGenerator {
 
     void addSparseConnections(double fill);
 
+    void addSchurSet(int64_t size, double fill);
+
     static SparseMatGenerator genFlat(int64_t size, double fill,
                                       int64_t seed = 37);
 

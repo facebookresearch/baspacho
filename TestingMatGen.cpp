@@ -45,6 +45,26 @@ void SparseMatGenerator::addSparseConnections(double fill) {
     connectRanges(0, columns.size(), 0, columns.size(), fill);
 }
 
+void SparseMatGenerator::addSchurSet(int64_t size, double fill) {
+    vector<set<uint64_t>> newCols(size + columns.size());
+    uniform_real_distribution<> dis(0.0, 1.0);
+    for (int64_t i = 0; i < size; i++) {
+        newCols[i].insert(i);
+        for (int64_t j = size; j < (int64_t)newCols.size(); j++) {
+            if (fill >= 1.0 || fill > dis(gen)) {
+                newCols[i].insert(j);
+            }
+        }
+    }
+    // shift
+    for (uint64_t i = 0; i < columns.size(); i++) {
+        for (uint64_t j : columns[i]) {
+            newCols[i + size].insert(j + size);
+        }
+    }
+    swap(newCols, columns);
+}
+
 SparseMatGenerator SparseMatGenerator::genFlat(int64_t size, double fill,
                                                int64_t seed) {
     SparseMatGenerator retv(size, seed);

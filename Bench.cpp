@@ -60,11 +60,21 @@ SparseProblem matGenToSparseProblem(SparseMatGenerator& gen, uint64_t pSizeMin,
 }
 
 map<string, function<SparseProblem(int64_t)>> problemGenerators = {
+#if 1
     {"flat_size=1000_fill=0.1_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
+#endif
+#if 0
+    {"flat_size=1000_fill=0.1_bsize=3_schursize=50000_schurfill=0.02",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
+         gen.addSchurSet(50000, 0.02);
+         return matGenToSparseProblem(gen, 3, 3);
+     }},  //
+#endif
 };
 
 map<string, function<pair<double, double>(const SparseProblem&, bool)>>
@@ -120,7 +130,7 @@ void runBenchmarks(int numIterations, bool verbose = true, int seed = 37) {
     }
 }
 
-#if 0
+#if 1
 // todo: try with different generator with different sparse topologies
 void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill,
                   uint64_t schurSize = 0) {
@@ -137,7 +147,10 @@ void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill,
         SparseStructure ss = columnsToCscStruct(columns).transpose();
 
         vector<uint64_t> paramSizes(size, paramSize);
-        auto timings = benchmarkSolver(paramSizes, ss, schurSize, false);
+        SparseProblem prob;
+        prob.paramSize = paramSizes;
+        prob.sparseStruct = ss;
+        auto timings = benchmarkSolver(prob, false);
         analysisSolverTimings.push_back(timings.first);
         factorSolverTimings.push_back(timings.second);
     }
@@ -175,7 +188,7 @@ void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill,
 #endif
 
 int main(int argc, char* argv[]) {
-    runBenchmarks(10);
+    runBenchmarks(3);
     // runBenchmark(10, 1000, 3, 1);
     // runBenchmark(1, 10000, 2, 0.05, 7500);
     // runBenchmark(10, 2000, 3, 1);
