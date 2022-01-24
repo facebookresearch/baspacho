@@ -52,29 +52,3 @@ void naiveAddEliminationEntries(std::vector<std::set<uint64_t>>& columns,
 
 std::vector<std::set<uint64_t>> makeIndependentElimSet(
     std::vector<std::set<uint64_t>>& columns, uint64_t start, uint64_t end);
-
-//
-class SparseMatGenerator {
-    SparseMatGenerator(int64_t size, int64_t seed = 37);
-
-    void connectRanges(int64_t begin1, int64_t end1, int64_t begin2,
-                       int64_t end2, double fill,
-                       int64_t maxOffset = std::numeric_limits<int64_t>::max());
-
-    static SparseMatGenerator genFlat(int64_t size, double fill,
-                                      int64_t seed = 37);
-
-    // topology is roughly a line, entries in band are set with a probability
-    static SparseMatGenerator genLine(int64_t size, double fill,
-                                      int64_t bandSize, int64_t seed = 37);
-
-    // topology is a set of meridians (connecting north and south poles)
-    static SparseMatGenerator genMeridians(int64_t num, int64_t lineLen,
-                                           double fill, int64_t bandSize,
-                                           int64_t nPoleHairs,
-                                           int64_t sPoleHairs,
-                                           int64_t seed = 37);
-
-    mt19937 gen;
-    std::vector<std::set<uint64_t>> columns;
-};

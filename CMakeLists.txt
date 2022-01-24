@@ -133,6 +133,7 @@ add_library(BaSpaCho
             MatOpsRef.cpp
             Solver.cpp
             SparseStructure.cpp
+            TestingMatGen.cpp
             TestingUtils.cpp
             Utils.cpp)
 target_link_libraries (BaSpaCho glog::glog dispenso

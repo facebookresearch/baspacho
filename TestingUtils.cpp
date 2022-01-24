@@ -80,6 +80,7 @@ string printPattern(const SparseStructure& mat, bool sym) {
     return ss.str();
 }
 
+// print sparse structure after collapsing columns according to lumpStart
 string printAggreg(vector<uint64_t> ptrs,  // csc
                    vector<uint64_t> inds, vector<uint64_t> lumpStart) {
     CHECK_EQ(ptrs.size(), lumpStart.size());
@@ -200,75 +201,4 @@ vector<set<uint64_t>> makeIndependentElimSet(vector<set<uint64_t>>& columns,
         }
     }
     return retvCols;
-}
-
-SparseMatGenerator::SparseMatGenerator(uint64_t size, int64_t seed)
-    : gen(seed), columns(size) {
-    for (uint64_t i = 0; i < size; i++) {
-        columns[i].insert(i);
-    }
-}
-
-void SparseMatGenerator::connectRanges(int64_t begin1, int64_t end1,
-                                       int64_t begin2, int64_t end2,
-                                       double fill, int64_t maxOffset) {
-    if (begin1 > begin2) {
-        connectRanges(begin2, end2, begin1, end1, fill, maxOffset);
-        return;
-    }
-
-    if (end1 > end2) {
-        connectRanges(begin2, end2, end2, end1, fill, maxOffset);
-    }
-
-    uniform_real_distribution<> dis(0.0, 1.0);
-    for (int64_t i = begin1; i < end1; i++) {
-        int64_t dBegin = min(maxOffset, max(begin2 - i, 1L));
-        int64_t dEnd = min(maxOffset, end2 - i);
-        for (int64_t j = i + dBegin; j < i + dEnd; j++) {
-            if (fill >= 1.0 || fill > dis(gen)) {
-                columns[i].insert(j);
-            }
-        }
-    }
-}
-
-SparseMatGenerator SparseMatGenerator::genFlat(int64_t size, double fill,
-                                               int64_t seed) {
-    SparseMatGenerator retv(size, seed);
-    retv.connectRanges(0, size, 0, size, fill);
-    return retv;
-}
-
-// topology is roughly a line, entries in band are set with a probability
-SparseMatGenerator SparseMatGenerator::genLine(int64_t size, double fill,
-                                               int64_t bandSize, int64_t seed) {
-    SparseMatGenerator retv(size, seed);
-    retv.connectRanges(0, size, 0, size, fill);
-    return retv;
-}
-
-// topology is a set of meridians (connecting north and south poles)
-SparseMatGenerator SparseMatGenerator::genMeridians(
-    int64_t num, int64_t lineLen, double fill, int64_t bandSize,
-    int64_t hairLen, int64_t nPoleHairs, int64_t sPoleHairs, int64_t seed) {
-    int64_t totHairs = nPoleHairs + sPoleHairs;
-    int64_t size = lineLen * num + hairLen * totHairs;
-    int64_t endMeridians = lineLen * num;
-    SparseMatGenerator retv(size, seed);
-    // build structure of meridians and hairs
-    for (int64_t i = 0; i < num; i++) {
-        retv.connectRanges(lineLen * i, lineLen, lineLen * i, lineLen, fill,
-                           bandSize);
-    }
-    for (int64_t i = 0; i < totHairs; i++) {
-        retv.connectRanges(endMeridians + hairLen * i, hairLen,
-                           endMeridians + hairLen * i, hairLen, fill, bandSize);
-    }
-    // connect meridians meeting at pole
-    for (int64_t i = 0; i < num; i++) {
-        for (uint64_t j = 0; j < i; j++) {
-        }
-    }
-    return retv;
 }
