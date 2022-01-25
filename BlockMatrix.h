@@ -40,6 +40,7 @@ struct BlockMatrixSkel {
     std::vector<uint64_t> spanToLump;
     std::vector<uint64_t> lumpStart;   // (with final el)
     std::vector<uint64_t> lumpToSpan;  // (with final el)
+    std::vector<uint64_t> spanOffsetInLump;
 
     // per-chain data, column-ordered
     std::vector<uint64_t> chainColPtr;       // board col data start (with end)

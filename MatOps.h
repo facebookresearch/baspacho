@@ -34,8 +34,20 @@ struct Ops {
     virtual void gemm(uint64_t m, uint64_t n, uint64_t k, const double* A,
                       const double* B, double* C) = 0;
 
-    // TODO
-    // virtual void assemble();
+    virtual void gemmToTemp(OpaqueData& assCtx, uint64_t m, uint64_t n,
+                            uint64_t k, const double* A, const double* B) = 0;
+
+    virtual OpaqueDataPtr createAssembleContext(const OpaqueData& skel) = 0;
+
+    virtual void prepareAssembleContext(const OpaqueData& skel,
+                                        OpaqueData& assCtx,
+                                        uint64_t targetLump) = 0;
+
+    virtual void assemble(const OpaqueData& skel, const OpaqueData& assCtx,
+                          double* data, uint64_t rectRowBegin,
+                          uint64_t dstStride,  //
+                          uint64_t srcColDataOffset, uint64_t numBlockRows,
+                          uint64_t numBlockCols) = 0;
 };
 
 using OpsPtr = std::unique_ptr<Ops>;

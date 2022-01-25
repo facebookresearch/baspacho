@@ -35,6 +35,10 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
         }
     }
     lumpStart[numLumps] = totSize;
+    spanOffsetInLump.resize(numSpans);
+    for (uint64_t s = 0; s < numSpans; s++) {
+        spanOffsetInLump[s] = spanStart[s] - lumpStart[spanToLump[s]];
+    }
 
     chainColPtr.resize(numLumps + 1);
     chainRowSpan.clear();

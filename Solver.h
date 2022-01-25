@@ -19,14 +19,16 @@ struct Solver {
         std::vector<double> tempBuffer;
     };
 
-    void prepareContextForTargetLump(uint64_t targetAggreg,
+    void prepareContextForTargetLump(uint64_t targetLump,
                                      SolverContext& ctx) const;
 
     void eliminateBoard(double* data, uint64_t lump, uint64_t boardIndexInCol,
-                        SolverContext& ctx) const;
+                        // SolverContext& ctx
+                        OpaqueData& ax) const;
 
     void assemble(double* data, uint64_t lump, uint64_t boardIndexInCol,
-                  SolverContext& ctx) const;
+                  OpaqueData& ax) const;
+    // SolverContext& ctx) const;
 
     BlockMatrixSkel skel;
     std::vector<uint64_t> elimLumps;

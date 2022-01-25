@@ -74,6 +74,17 @@ using OuterStridedMatM = Eigen::Map<
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
     OuterStride>;
 
+inline void stridedMatSub(double* dst, uint64_t dstStride, const double* src,
+                          uint64_t srcStride, uint64_t rSize, uint64_t cSize) {
+    for (uint j = 0; j < rSize; j++) {
+        for (uint i = 0; i < cSize; i++) {
+            dst[i] -= src[i];
+        }
+        dst += dstStride;
+        src += srcStride;
+    }
+}
+
 struct BlasOps : Ops {
     // will just contain a reference to the skel
     struct OpaqueDataMatrixSkel : OpaqueData {
@@ -250,7 +261,6 @@ struct BlasOps : Ops {
 
         // TODO: parallel2
         vector<ElimContext> contexts;
-
         dispenso::TaskSet taskSet1(pSkel->threadPool);
         dispenso::parallel_for(
             taskSet1, contexts, []() -> ElimContext { return ElimContext(); },
@@ -330,6 +340,105 @@ struct BlasOps : Ops {
         gemmCalls++;
         gemmTotTime += gemmLastCallTime;
         gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
+    }
+
+    struct AssembleContext : OpaqueData {
+        std::vector<uint64_t> paramToChainOffset;
+        uint64_t stride;
+        std::vector<double> tempBuffer;
+    };
+
+    virtual void gemmToTemp(OpaqueData& assCtx, uint64_t m, uint64_t n,
+                            uint64_t k, const double* A,
+                            const double* B) override {
+        AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
+        CHECK_NOTNULL(pAx);
+        AssembleContext& ax = *pAx;
+
+        ax.stride = m;
+        ax.tempBuffer.resize(m * n);
+        this->gemm(m, n, k, A, B, ax.tempBuffer.data());
+    }
+
+    virtual OpaqueDataPtr createAssembleContext(
+        const OpaqueData& ref) override {
+        const OpaqueDataMatrixSkel* pSkel =
+            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
+        CHECK_NOTNULL(pSkel);
+        const BlockMatrixSkel& skel = pSkel->skel;
+        AssembleContext* ax = new AssembleContext;
+        ax->paramToChainOffset.resize(skel.spanStart.size() - 1);
+        return OpaqueDataPtr(ax);
+    }
+
+    virtual void prepareAssembleContext(const OpaqueData& ref,
+                                        OpaqueData& assCtx,
+                                        uint64_t targetLump) override {
+        const OpaqueDataMatrixSkel* pSkel =
+            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
+        AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
+        CHECK_NOTNULL(pSkel);
+        CHECK_NOTNULL(pAx);
+        const BlockMatrixSkel& skel = pSkel->skel;
+        AssembleContext& ax = *pAx;
+
+        for (uint64_t i = skel.chainColPtr[targetLump],
+                      iEnd = skel.chainColPtr[targetLump + 1];
+             i < iEnd; i++) {
+            ax.paramToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
+        }
+    }
+
+    virtual void assemble(const OpaqueData& ref, const OpaqueData& assCtx,
+                          double* data, uint64_t rectRowBegin,
+                          uint64_t dstStride,  //
+                          uint64_t srcColDataOffset, uint64_t numBlockRows,
+                          uint64_t numBlockCols) override {
+        const OpaqueDataMatrixSkel* pSkel =
+            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
+        const AssembleContext* pAx =
+            dynamic_cast<const AssembleContext*>(&assCtx);
+        CHECK_NOTNULL(pSkel);
+        CHECK_NOTNULL(pAx);
+        const BlockMatrixSkel& skel = pSkel->skel;
+        const AssembleContext& ax = *pAx;
+        const uint64_t* chainRowsTillEnd =
+            skel.chainRowsTillEnd.data() + srcColDataOffset;
+        const uint64_t* toSpan = skel.chainRowSpan.data() + srcColDataOffset;
+        const uint64_t* paramToChainOffset = ax.paramToChainOffset.data();
+        const uint64_t* spanOffsetInLump = skel.spanOffsetInLump.data();
+
+        uint64_t rectStride = ax.stride;
+        const double* matRectPtr = ax.tempBuffer.data();
+
+        dispenso::TaskSet taskSet(pSkel->threadPool);
+        dispenso::parallel_for(
+            taskSet, dispenso::makeChunkedRange(0, numBlockRows, 3UL),
+            [&](int64_t rFrom, int64_t rTo) {
+                for (uint64_t r = rFrom; r < rTo; r++) {
+                    // for (uint64_t r = 0; r < numBlockRows; r++) {
+                    uint64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
+                    uint64_t rSize =
+                        chainRowsTillEnd[r] - rBegin - rectRowBegin;
+                    uint64_t rParam = toSpan[r];
+                    uint64_t rOffset = paramToChainOffset[rParam];
+                    const double* matRowPtr = matRectPtr + rBegin * rectStride;
+
+                    uint64_t cEnd = std::min(numBlockCols, r + 1);
+                    for (uint64_t c = 0; c < cEnd; c++) {
+                        uint64_t cStart =
+                            chainRowsTillEnd[c - 1] - rectRowBegin;
+                        uint64_t cSize =
+                            chainRowsTillEnd[c] - cStart - rectRowBegin;
+                        uint64_t offset = rOffset + spanOffsetInLump[toSpan[c]];
+
+                        double* dst = data + offset;
+                        const double* src = matRowPtr + cStart;
+                        stridedMatSub(dst, dstStride, src, rectStride, rSize,
+                                      cSize);
+                    }
+                }
+            });
     }
 
     uint64_t elimCalls = 0;
