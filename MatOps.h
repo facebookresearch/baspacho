@@ -45,9 +45,8 @@ struct Ops {
 
     virtual void assemble(const OpaqueData& skel, const OpaqueData& assCtx,
                           double* data, uint64_t rectRowBegin,
-                          uint64_t dstStride,  //
-                          uint64_t srcColDataOffset, uint64_t numBlockRows,
-                          uint64_t numBlockCols) = 0;
+                          uint64_t dstStride, uint64_t srcColDataOffset,
+                          uint64_t numBlockRows, uint64_t numBlockCols) = 0;
 };
 
 using OpsPtr = std::unique_ptr<Ops>;

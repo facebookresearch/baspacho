@@ -39,7 +39,7 @@ static void factorLump(const BlockMatrixSkel& skel, double* data,
 static void prepareContextForTargetLump(const BlockMatrixSkel& skel,
                                         uint64_t targetLump,
                                         vector<uint64_t>& spanToChainOffset) {
-    spanToChainOffset.assign(skel.spanStart.size() - 1, 999999);
+    spanToChainOffset.assign(skel.spanStart.size() - 1, kInvalid);
     for (uint64_t i = skel.chainColPtr[targetLump],
                   iEnd = skel.chainColPtr[targetLump + 1];
          i < iEnd; i++) {
@@ -216,6 +216,7 @@ struct SimpleOps : Ops {
 
                     double* targetData =
                         data + spanOffsetInLump + spanToChainOffset[s2];
+                    CHECK(spanToChainOffset[s2] != kInvalid);
 
                     OuterStridedMatM targetBlock(targetData, s2_size,
                                                  nRowsChain,
@@ -326,6 +327,7 @@ struct SimpleOps : Ops {
                           uint64_t dstStride,  //
                           uint64_t srcColDataOffset, uint64_t numBlockRows,
                           uint64_t numBlockCols) override {
+        auto start = hrc::now();
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         const AssembleContext* pAx =
@@ -361,6 +363,11 @@ struct SimpleOps : Ops {
                 stridedMatSub(dst, dstStride, src, rectStride, rSize, cSize);
             }
         }
+
+        asmblLastCallTime = tdelta(hrc::now() - start).count();
+        asmblCalls++;
+        asmblTotTime += asmblLastCallTime;
+        asmblMaxCallTime = std::max(asmblMaxCallTime, asmblLastCallTime);
     }
 
     uint64_t potrfBiggestN = 0;
@@ -376,9 +383,10 @@ struct SimpleOps : Ops {
     double gemmTotTime = 0.0;
     double gemmLastCallTime;
     double gemmMaxCallTime = 0.0;
-
-    // TODO
-    // virtual void assemble();
+    uint64_t asmblCalls = 0;
+    double asmblTotTime = 0.0;
+    double asmblLastCallTime;
+    double asmblMaxCallTime = 0.0;
 };
 
 OpsPtr simpleOps() { return OpsPtr(new SimpleOps); }

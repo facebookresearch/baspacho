@@ -1,4 +1,5 @@
 
+#include <alloca.h>
 #include <dispenso/parallel_for.h>
 #include <glog/logging.h>
 
@@ -10,6 +11,7 @@
 // BLAS/LAPACK famously go without headers.
 extern "C" {
 
+// TODO: detect in build if blas type is long or int
 #if 0
 #define BLAS_INT long
 #else
@@ -58,22 +60,6 @@ static void factorLump(const BlockMatrixSkel& skel, double* data,
         .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
 }
 
-static void prepareContextForTargetLump(const BlockMatrixSkel& skel,
-                                        uint64_t targetLump,
-                                        vector<uint64_t>& spanToChainOffset) {
-    spanToChainOffset.assign(skel.spanStart.size() - 1, 999999);
-    for (uint64_t i = skel.chainColPtr[targetLump],
-                  iEnd = skel.chainColPtr[targetLump + 1];
-         i < iEnd; i++) {
-        spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
-    }
-}
-
-using OuterStride = Eigen::OuterStride<>;
-using OuterStridedMatM = Eigen::Map<
-    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
-    OuterStride>;
-
 inline void stridedMatSub(double* dst, uint64_t dstStride, const double* src,
                           uint64_t srcStride, uint64_t rSize, uint64_t cSize) {
     for (uint j = 0; j < rSize; j++) {
@@ -111,7 +97,10 @@ struct BlasOps : Ops {
                   << "s, max=" << trsmMaxCallTime << "s"
                   << "\ngemm: #=" << gemmCalls << ", time=" << gemmTotTime
                   << "s, last=" << gemmLastCallTime
-                  << "s, max=" << gemmMaxCallTime << "s";
+                  << "s, max=" << gemmMaxCallTime << "s"
+                  << "\nasmbl: #=" << asmblCalls << ", time=" << asmblTotTime
+                  << "s, last=" << asmblLastCallTime
+                  << "s, max=" << asmblMaxCallTime << "s";
     }
 
     virtual OpaqueDataPtr prepareMatrixSkel(
@@ -132,7 +121,6 @@ struct BlasOps : Ops {
         vector<uint64_t> chainColOrd;  // order in col chain elements
     };
 
-    // TODO: unit test
     virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
                                              uint64_t lumpsBegin,
                                              uint64_t lumpsEnd) override {
@@ -153,7 +141,13 @@ struct BlasOps : Ops {
                 elim->rowPtr[sRel]++;
             }
         }
+        /*size_t empty = 0;
+        for (int64_t q = 0; q < numSpanRows; q++) {
+            empty += !elim->rowPtr[q];
+        }*/
         uint64_t totNumChains = cumSumVec(elim->rowPtr);
+        // LOG(INFO) << "Empty rows: " << empty << " / " << numSpanRows
+        //          << ", to elim " << totNumChains << " blocks";
         elim->colLump.resize(totNumChains);
         elim->chainColOrd.resize(totNumChains);
         for (uint64_t l = lumpsBegin; l < lumpsEnd; l++) {
@@ -178,18 +172,53 @@ struct BlasOps : Ops {
     struct ElimContext {
         std::vector<double> tempBuffer;
         std::vector<uint64_t> spanToChainOffset;
+        ElimContext(uint64_t numSpans) : spanToChainOffset(numSpans) {}
     };
+
+    static void prepareContextForTargetLump(
+        const BlockMatrixSkel& skel, uint64_t targetLump,
+        vector<uint64_t>& spanToChainOffset) {
+        // incomment below if check is needed
+        // spanToChainOffset.assign(skel.spanStart.size() - 1, kInvalid);
+        for (uint64_t i = skel.chainColPtr[targetLump],
+                      iEnd = skel.chainColPtr[targetLump + 1];
+             i < iEnd; i++) {
+            spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
+        }
+    }
+
+    static uint64_t bisect(const uint64_t* array, uint64_t size,
+                           uint64_t needle) {
+        uint64_t a = 0, b = size;
+        while (b - a > 1) {
+            uint64_t m = (a + b) / 2;
+            if (needle >= array[m]) {
+                a = m;
+            } else {
+                b = m;
+            }
+        }
+        return a;
+    }
 
     static void eliminateRowChain(const OpaqueDataElimData& elim,
                                   const BlockMatrixSkel& skel, double* data,
                                   uint64_t sRel, ElimContext& ctx) {
         uint64_t s = sRel + elim.spanRowBegin;
+        if (elim.rowPtr[sRel] == elim.rowPtr[sRel + 1]) {
+            return;
+        }
         uint64_t targetLump = skel.spanToLump[s];
         uint64_t targetLumpSize =
             skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
         uint64_t spanOffsetInLump =
             skel.spanStart[s] - skel.lumpStart[targetLump];
         prepareContextForTargetLump(skel, targetLump, ctx.spanToChainOffset);
+
+#if 0
+        uint64_t bisectStart = skel.chainColPtr[targetLump];
+        uint64_t bisectEnd = skel.chainColPtr[targetLump + 1];
+#endif
 
         // iterate over chains present in this row
         for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
@@ -225,14 +254,78 @@ struct BlasOps : Ops {
                 uint64_t relRow = skel.chainRowsTillEnd[ptr - 1] - nRowsAbove;
                 uint64_t s2_size =
                     skel.chainRowsTillEnd[ptr] - nRowsAbove - relRow;
-                CHECK_EQ(s2_size, skel.spanStart[s2 + 1] - skel.spanStart[s2]);
 
+                // incomment below if check is needed
+                // CHECK(ctx.spanToChainOffset[s2] != kInvalid);
                 double* targetData =
                     data + spanOffsetInLump + ctx.spanToChainOffset[s2];
 
-                OuterStridedMatM targetBlock(targetData, s2_size, nRowsChain,
-                                             OuterStride(targetLumpSize));
-                targetBlock -= prod.block(relRow, 0, s2_size, nRowsChain);
+                stridedMatSub(targetData, targetLumpSize,
+                              ctx.tempBuffer.data() + nRowsChain * relRow,
+                              nRowsChain, s2_size, nRowsChain);
+            }
+        }
+    }
+
+    static void eliminateVerySparseRowChain(const OpaqueDataElimData& elim,
+                                            const BlockMatrixSkel& skel,
+                                            double* data, uint64_t sRel) {
+        uint64_t s = sRel + elim.spanRowBegin;
+        if (elim.rowPtr[sRel] == elim.rowPtr[sRel + 1]) {
+            return;
+        }
+        uint64_t targetLump = skel.spanToLump[s];
+        uint64_t targetLumpSize =
+            skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
+        uint64_t spanOffsetInLump =
+            skel.spanStart[s] - skel.lumpStart[targetLump];
+        uint64_t bisectStart = skel.chainColPtr[targetLump];
+        uint64_t bisectEnd = skel.chainColPtr[targetLump + 1];
+
+        // iterate over chains present in this row
+        for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
+             i < iEnd; i++) {
+            uint64_t lump = elim.colLump[i];
+            uint64_t chainColOrd = elim.chainColOrd[i];
+            CHECK_GE(chainColOrd, 1);  // there must be a diagonal block
+
+            uint64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
+            uint64_t ptrEnd = skel.chainColPtr[lump + 1];
+            CHECK_EQ(skel.chainRowSpan[ptrStart], s);
+
+            uint64_t nRowsAbove = skel.chainRowsTillEnd[ptrStart - 1];
+            uint64_t nRowsChain = skel.chainRowsTillEnd[ptrStart] - nRowsAbove;
+            uint64_t nRowsOnward = skel.chainRowsTillEnd[ptrEnd - 1];
+            uint64_t dataOffset = skel.chainData[ptrStart];
+            CHECK_EQ(nRowsChain, skel.spanStart[s + 1] - skel.spanStart[s]);
+            uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
+
+            Eigen::Map<MatRMaj<double>> chainSubMat(data + dataOffset,
+                                                    nRowsChain, lumpSize);
+            Eigen::Map<MatRMaj<double>> chainOnwardSubMat(
+                data + dataOffset, nRowsOnward, lumpSize);
+
+            double* tempBuffer =
+                (double*)alloca(sizeof(double) * nRowsOnward * nRowsChain);
+            Eigen::Map<MatRMaj<double>> prod(tempBuffer, nRowsOnward,
+                                             nRowsChain);
+            prod = chainOnwardSubMat * chainSubMat.transpose();
+
+            // assemble blocks, iterating on chain and below chains
+            for (uint64_t ptr = ptrStart; ptr < ptrEnd; ptr++) {
+                uint64_t s2 = skel.chainRowSpan[ptr];
+                uint64_t relRow = skel.chainRowsTillEnd[ptr - 1] - nRowsAbove;
+                uint64_t s2_size =
+                    skel.chainRowsTillEnd[ptr] - nRowsAbove - relRow;
+
+                uint64_t pos = bisect(skel.chainRowSpan.data() + bisectStart,
+                                      bisectEnd - bisectStart, s2);
+                uint64_t chainOffset = skel.chainData[bisectStart + pos];
+                double* targetData = data + spanOffsetInLump + chainOffset;
+
+                stridedMatSub(targetData, targetLumpSize,
+                              tempBuffer + nRowsChain * relRow, nRowsChain,
+                              s2_size, nRowsChain);
             }
         }
     }
@@ -260,16 +353,32 @@ struct BlasOps : Ops {
             });
 
         // TODO: parallel2
-        vector<ElimContext> contexts;
-        dispenso::TaskSet taskSet1(pSkel->threadPool);
-        dispenso::parallel_for(
-            taskSet1, contexts, []() -> ElimContext { return ElimContext(); },
-            dispenso::makeChunkedRange(0UL, elim.rowPtr.size() - 1, 5UL),
-            [&, this](ElimContext& ctx, size_t sBegin, size_t sEnd) {
-                for (uint64_t sRel = sBegin; sRel < sEnd; sRel++) {
-                    eliminateRowChain(elim, skel, data, sRel, ctx);
-                }
-            });
+        if (elim.colLump.size() > 3 * (elim.rowPtr.size() - 1)) {
+            LOG(INFO) << "Ordinary sparse elimination";
+            vector<ElimContext> contexts;
+            dispenso::TaskSet taskSet1(pSkel->threadPool);
+            uint64_t numSpans = skel.spanStart.size() - 1;
+            dispenso::parallel_for(
+                taskSet1, contexts,
+                [=]() -> ElimContext { return ElimContext(numSpans); },
+                dispenso::makeChunkedRange(0UL, elim.rowPtr.size() - 1, 5UL),
+                [&, this](ElimContext& ctx, size_t sBegin, size_t sEnd) {
+                    for (uint64_t sRel = sBegin; sRel < sEnd; sRel++) {
+                        eliminateRowChain(elim, skel, data, sRel, ctx);
+                    }
+                });
+        } else {
+            LOG(INFO) << "Very sparse elimination";
+            dispenso::TaskSet taskSet1(pSkel->threadPool);
+            dispenso::parallel_for(
+                taskSet1,
+                dispenso::makeChunkedRange(0UL, elim.rowPtr.size() - 1, 5UL),
+                [&, this](size_t sBegin, size_t sEnd) {
+                    for (uint64_t sRel = sBegin; sRel < sEnd; sRel++) {
+                        eliminateVerySparseRowChain(elim, skel, data, sRel);
+                    }
+                });
+        }
 
         elimLastCallTime = tdelta(hrc::now() - start).count();
         elimCalls++;
@@ -394,6 +503,7 @@ struct BlasOps : Ops {
                           uint64_t dstStride,  //
                           uint64_t srcColDataOffset, uint64_t numBlockRows,
                           uint64_t numBlockCols) override {
+        auto start = hrc::now();
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         const AssembleContext* pAx =
@@ -425,11 +535,11 @@ struct BlasOps : Ops {
                     const double* matRowPtr = matRectPtr + rBegin * rectStride;
 
                     uint64_t cEnd = std::min(numBlockCols, r + 1);
+                    uint64_t nextCStart = chainRowsTillEnd[-1] - rectRowBegin;
                     for (uint64_t c = 0; c < cEnd; c++) {
-                        uint64_t cStart =
-                            chainRowsTillEnd[c - 1] - rectRowBegin;
-                        uint64_t cSize =
-                            chainRowsTillEnd[c] - cStart - rectRowBegin;
+                        uint64_t cStart = nextCStart;
+                        nextCStart = chainRowsTillEnd[c] - rectRowBegin;
+                        uint64_t cSize = nextCStart - cStart;
                         uint64_t offset = rOffset + spanOffsetInLump[toSpan[c]];
 
                         double* dst = data + offset;
@@ -439,6 +549,11 @@ struct BlasOps : Ops {
                     }
                 }
             });
+
+        asmblLastCallTime = tdelta(hrc::now() - start).count();
+        asmblCalls++;
+        asmblTotTime += asmblLastCallTime;
+        asmblMaxCallTime = std::max(asmblMaxCallTime, asmblLastCallTime);
     }
 
     uint64_t elimCalls = 0;
@@ -458,6 +573,10 @@ struct BlasOps : Ops {
     double gemmTotTime = 0.0;
     double gemmLastCallTime;
     double gemmMaxCallTime = 0.0;
+    uint64_t asmblCalls = 0;
+    double asmblTotTime = 0.0;
+    double asmblLastCallTime;
+    double asmblMaxCallTime = 0.0;
 };
 
 OpsPtr blasOps() { return OpsPtr(new BlasOps); }
