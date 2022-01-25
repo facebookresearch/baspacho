@@ -57,100 +57,8 @@ using OuterStride = Eigen::OuterStride<>;
 using OuterStridedMatM = Eigen::Map<MatRMaj<double>, 0, OuterStride>;
 using OuterStridedMatK = Eigen::Map<const MatRMaj<double>, 0, OuterStride>;
 
-void Solver::prepareContextForTargetLump(uint64_t targetLump,
-                                         SolverContext& ctx) const {
-    ctx.paramToChainOffset.resize(skel.spanStart.size() - 1);
-    for (uint64_t i = skel.chainColPtr[targetLump],
-                  iEnd = skel.chainColPtr[targetLump + 1];
-         i < iEnd; i++) {
-        ctx.paramToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
-    }
-}
-
-inline void stridedMatSub(double* dst, uint64_t dstStride, const double* src,
-                          uint64_t srcStride, uint64_t rSize, uint64_t cSize) {
-    for (uint j = 0; j < rSize; j++) {
-        for (uint i = 0; i < cSize; i++) {
-            dst[i] -= src[i];
-        }
-        dst += dstStride;
-        src += srcStride;
-    }
-}
-
-// TODO: investigate why is Eigen MUCH slower here?!
-inline void stridedMatSubAlt(double* dst, uint64_t dstStride, const double* src,
-                             uint64_t srcStride, uint64_t rSize,
-                             uint64_t cSize) {
-    OuterStridedMatM target(dst, rSize, cSize, OuterStride(dstStride));
-    target -= OuterStridedMatK(src, rSize, cSize, OuterStride(srcStride));
-}
-
-#if 0
-void assembleCore(double* data) {
-    for (uint64_t r = belowDiagChainColOrd; r < rowDataEnd1; r++) {
-        uint64_t rBegin =
-            skel.chainRowsTillEnd[chainColBegin + r - 1] - startRowInSuperNode;
-        uint64_t rSize = skel.chainRowsTillEnd[chainColBegin + r] - rBegin -
-                         startRowInSuperNode;
-        uint64_t rParam = skel.chainRowSpan[chainColBegin + r];
-        uint64_t rOffset = ctx.paramToChainOffset[rParam];
-        const double* matRowPtr = matProduct + rBegin * ctx.stride;
-
-        uint64_t cEnd = std::min(rowDataEnd0, r + 1);
-        for (uint64_t c = belowDiagChainColOrd; c < cEnd; c++) {
-            uint64_t cStart = skel.chainRowsTillEnd[chainColBegin + c - 1] -
-                              startRowInSuperNode;
-            uint64_t cSize = skel.chainRowsTillEnd[chainColBegin + c] - cStart -
-                             startRowInSuperNode;
-            uint64_t cParam = skel.chainRowSpan[chainColBegin + c];
-            uint64_t offsetInAggreg =
-                skel.spanStart[cParam] - skel.lumpStart[targetLump];
-            uint64_t offset = rOffset + offsetInAggreg;
-
-            double* dst = data + offset;
-            const double* src = matRowPtr + cStart;
-            stridedMatSub(dst, dstStride, src, srcStride, rSize, cSize);
-        }
-    }
-
-    rowBegin = ...;
-    chainRowsTillEnd =
-        skel.chainRowsTillEnd + chainColBegin + belowDiagChainColOrd;
-    chainRowSpan = skel.chainRowSpan.data() + chainColBegin;
-    paramToChainOffset = ctx.paramToChainOffset.data();
-    spanOffsetInLump = skel.spanOffsetInLump.data();
-#endif
-
-void assembleCore(double* data, const uint64_t* paramToChainOffset,
-                  uint64_t rectRowBegin, uint64_t dstStride,  //
-                  const double* matRectPtr, const uint64_t* chainRowsTillEnd,
-                  uint64_t rectStride,                                       //
-                  const uint64_t* toSpan, const uint64_t* spanOffsetInLump,  //
-                  uint64_t numBlockRows, uint64_t numBlockCols) {
-    for (uint64_t r = 0; r < numBlockRows; r++) {
-        uint64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
-        uint64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
-        uint64_t rParam = toSpan[r];
-        uint64_t rOffset = paramToChainOffset[rParam];
-        const double* matRowPtr = matRectPtr + rBegin * rectStride;
-
-        uint64_t cEnd = std::min(numBlockCols, r + 1);
-        for (uint64_t c = 0; c < cEnd; c++) {
-            uint64_t cStart = chainRowsTillEnd[c - 1] - rectRowBegin;
-            uint64_t cSize = chainRowsTillEnd[c] - cStart - rectRowBegin;
-            uint64_t offset = rOffset + spanOffsetInLump[toSpan[c]];
-
-            double* dst = data + offset;
-            const double* src = matRowPtr + cStart;
-            stridedMatSub(dst, dstStride, src, rectStride, rSize, cSize);
-        }
-    }
-}
-
 void Solver::assemble(double* data, uint64_t lump, uint64_t boardIndexInSN,
                       OpaqueData& ax) const {
-    // SolverContext& ctx) const {
     auto start = hrc::now();
 
     uint64_t chainColBegin = skel.chainColPtr[lump];
@@ -182,57 +90,6 @@ void Solver::assemble(double* data, uint64_t lump, uint64_t boardIndexInSN,
                   dstStride,         //
                   srcColDataOffset,  //
                   numBlockRows, numBlockCols);
-#if 0
-    const double* matRectPtr = ctx.tempBuffer.data();
-
-    uint64_t dstStride = targetLumpSize;
-    uint64_t srcStride = ctx.stride;
-
-    uint64_t rectRowBegin = startRowInSuperNode;
-    uint64_t rectStride = ctx.stride;
-    const uint64_t* chainRowsTillEnd =
-        skel.chainRowsTillEnd.data() + chainColBegin + belowDiagChainColOrd;
-    const uint64_t* toSpan =
-        skel.chainRowSpan.data() + chainColBegin + belowDiagChainColOrd;
-    const uint64_t* paramToChainOffset = ctx.paramToChainOffset.data();
-    const uint64_t* spanOffsetInLump = skel.spanOffsetInLump.data();
-    uint64_t numBlockRows = rowDataEnd1 - belowDiagChainColOrd;
-    uint64_t numBlockCols = rowDataEnd0 - belowDiagChainColOrd;
-
-    assembleCore(data, paramToChainOffset, rectRowBegin, dstStride,  //
-                 matRectPtr, chainRowsTillEnd, rectStride,           //
-                 toSpan, spanOffsetInLump,                           //
-                 numBlockRows, numBlockCols);
-#endif
-
-#if 0
-    // TODO: multithread here
-    for (uint64_t r = belowDiagChainColOrd; r < rowDataEnd1; r++) {
-        uint64_t rBegin =
-            skel.chainRowsTillEnd[chainColBegin + r - 1] - startRowInSuperNode;
-        uint64_t rSize = skel.chainRowsTillEnd[chainColBegin + r] - rBegin -
-                         startRowInSuperNode;
-        uint64_t rParam = skel.chainRowSpan[chainColBegin + r];
-        uint64_t rOffset = ctx.paramToChainOffset[rParam];
-        const double* matRowPtr = matRectPtr + rBegin * srcStride;
-
-        uint64_t cEnd = std::min(rowDataEnd0, r + 1);
-        for (uint64_t c = belowDiagChainColOrd; c < cEnd; c++) {
-            uint64_t cStart = skel.chainRowsTillEnd[chainColBegin + c - 1] -
-                              startRowInSuperNode;
-            uint64_t cSize = skel.chainRowsTillEnd[chainColBegin + c] - cStart -
-                             startRowInSuperNode;
-            uint64_t cParam = skel.chainRowSpan[chainColBegin + c];
-            uint64_t offsetInAggreg =
-                skel.spanStart[cParam] - skel.lumpStart[targetLump];
-            uint64_t offset = rOffset + offsetInAggreg;
-
-            double* dst = data + offset;
-            const double* src = matRowPtr + cStart;
-            stridedMatSub(dst, dstStride, src, srcStride, rSize, cSize);
-        }
-    }
-#endif
 
     assembleLastCallTime = tdelta(hrc::now() - start).count();
     assembleCalls++;
@@ -242,7 +99,6 @@ void Solver::assemble(double* data, uint64_t lump, uint64_t boardIndexInSN,
 
 void Solver::eliminateBoard(double* data, uint64_t lump,
                             uint64_t boardIndexInSN, OpaqueData& ax) const {
-    // SolverContext& ctx) const {
     uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
     uint64_t chainColBegin = skel.chainColPtr[lump];
 
@@ -288,13 +144,11 @@ void Solver::factor(double* data, bool verbose) const {
         elimLumps.size() ? elimLumps[elimLumps.size() - 1] : 0;
     LOG_IF(INFO, verbose) << "Block-Fact from: " << denseOpsFromLump;
 
-    // SolverContext ctx;
     double totPrepares = 0.0;
     OpaqueDataPtr ax = ops->createAssembleContext(*opMatrixSkel);
     for (uint64_t l = denseOpsFromLump; l < skel.chainColPtr.size() - 1; l++) {
         auto start = hrc::now();
         ops->prepareAssembleContext(*opMatrixSkel, *ax, l);
-        // prepareContextForTargetLump(l, ctx);
         totPrepares += tdelta(hrc::now() - start).count();
 
         //  iterate over columns having a non-trivial a-block
