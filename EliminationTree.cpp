@@ -74,7 +74,7 @@ void EliminationTree::buildTree() {
 }
 
 // TODO: expand on merge settings
-static constexpr double kPropRows = 0.5;
+static constexpr double kPropRows = 0.8;
 
 void EliminationTree::computeMerges() {
     uint64_t ord = ss.order();
@@ -96,39 +96,55 @@ void EliminationTree::computeMerges() {
         }
 
         // do merge
-        mergeWith[k] = p;
+        mergeWith[k] = p;  // so it becomes direct merge
         nodeSize[p] += nodeSize[k];
         numMerges++;
     }
 }
 
 void EliminationTree::computeAggregateStruct() {
+    // compute childern list
     uint64_t ord = ss.order();
     vector<int64_t> firstMergeChild(ord, -1);
     vector<int64_t> nextMergeSibling(ord, -1);
     for (uint64_t k = 0; k < ord; k++) {
         int64_t p = mergeWith[k];
         if (p != -1) {
-            while (mergeWith[p] != -1) {
-                p = mergeWith[p];
-            }
             nextMergeSibling[k] = firstMergeChild[p];
             firstMergeChild[p] = k;
         }
     }
 
-    // straightening permutation
-    uint64_t numLumps = ord - numMerges;
-    vector<uint64_t> spanToLump(ord);
-    uint64_t pIdx = ord;
-    uint64_t agIdx = numLumps;
-    permutation.resize(ord);
-    lumpStart.resize(numLumps + 1);
-    lumpToSpan.assign(numLumps + 1, 0);
-    for (int64_t k = ord - 1; k >= 0; k--) {
+    // sort according to height (and secondly size)
+    vector<int64_t> height(ord, 0);
+    vector<tuple<int64_t, int64_t, int64_t>> heightNode;
+    heightNode.reserve(ord - numMerges);
+    for (uint64_t k = 0; k < ord; k++) {
         if (mergeWith[k] != -1) {
             continue;
         }
+        heightNode.emplace_back(height[k], nodeSize[k], k);
+
+        int64_t par = parent[k];
+        if (par == -1) {
+            continue;
+        }
+        int64_t mPar = mergeWith[par];
+        par = mPar != -1 ? mPar : par;
+        height[par] = max(height[par], height[k] + 1);
+    }
+    sort(heightNode.begin(), heightNode.end());
+
+    // straightening permutation, make merged nodes consecutive
+    uint64_t numLumps = ord - numMerges;
+    vector<uint64_t> spanToLump(ord);
+    permutation.resize(ord);
+    lumpStart.resize(numLumps + 1);
+    lumpToSpan.assign(numLumps + 1, 0);
+    uint64_t pIdx = ord;
+    uint64_t agIdx = numLumps;
+    for (int64_t idx = heightNode.size() - 1; idx >= 0; idx--) {
+        auto [_1, _2, k] = heightNode[idx];
 
         CHECK_GT(agIdx, 0);
         lumpStart[--agIdx] = nodeSize[k];

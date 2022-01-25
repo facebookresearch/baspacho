@@ -146,12 +146,10 @@ struct SimpleOps : Ops {
         const BlockMatrixSkel& skel = pSkel->skel;
         const OpaqueDataElimData& elim = *pElim;
 
-        // TODO: parallel
         for (uint64_t a = lumpsBegin; a < lumpsEnd; a++) {
             factorLump(skel, data, a);
         }
 
-        // TODO: parallel2
         std::vector<double> tempBuffer;           // ctx
         std::vector<uint64_t> spanToChainOffset;  // ctx
 

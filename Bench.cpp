@@ -68,10 +68,9 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-    {"02_flat_size=50000_fill=0.01_bsize=3",
+    {"02_flat_size=4000_fill=0.01_bsize=3",
      [](int64_t seed) -> SparseProblem {
-         SparseMatGenerator gen =
-             SparseMatGenerator::genFlat(50000, 0.01, seed);
+         SparseMatGenerator gen = SparseMatGenerator::genFlat(4000, 0.01, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
     {"03_flat_size=1000_fill=0.1_bsize=3_schursize=50000_schurfill=0.02",

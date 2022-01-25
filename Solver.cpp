@@ -221,19 +221,24 @@ void Solver::factor(double* data, bool verbose) const {
                           << "s, max=" << assembleMaxCallTime << "s";
 }
 
-uint64_t findLargestIndependentLumpSet(const BlockMatrixSkel& skel) {
+pair<uint64_t, bool> findLargestIndependentLumpSet(const BlockMatrixSkel& skel,
+                                                   uint64_t startLump,
+                                                   uint64_t maxSize = 8) {
     uint64_t limit = kInvalid;
-    for (uint64_t a = 0; a < skel.lumpToSpan.size() - 1; a++) {
+    for (uint64_t a = startLump; a < skel.lumpToSpan.size() - 1; a++) {
         if (a >= limit) {
             break;
+        }
+        if (skel.lumpStart[a + 1] - skel.lumpStart[a] > maxSize) {
+            return make_pair(a, true);
         }
         uint64_t aPtrStart = skel.boardColPtr[a];
         uint64_t aPtrEnd = skel.boardColPtr[a + 1];
         CHECK_EQ(skel.boardRowLump[aPtrStart], a);
         CHECK_LE(2, aPtrEnd - aPtrStart);
-        limit = std::min(skel.boardRowLump[aPtrStart + 1], limit);
+        limit = min(skel.boardRowLump[aPtrStart + 1], limit);
     }
-    return std::min(limit, skel.lumpToSpan.size());
+    return make_pair(min(limit, skel.lumpToSpan.size()), false);
 }
 
 SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
@@ -254,13 +259,32 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
 
     BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart, et.rowParam);
 
-    uint64_t largestIndep = findLargestIndependentLumpSet(skel);
+    // find progressive Schur elimination sets
+    std::vector<uint64_t> elimLumpRanges{0};
+    while (true) {
+        uint64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
+        auto [rangeEnd, hitSizeLimit] =
+            findLargestIndependentLumpSet(skel, rangeStart);
+        if (rangeEnd < rangeStart + 10) {
+            break;
+        }
+        LOG_IF(INFO, verbose)
+            << "Adding indep set: " << rangeStart << ".." << rangeEnd << endl;
+        elimLumpRanges.push_back(rangeEnd);
+        if (hitSizeLimit) {
+            break;
+        }
+    }
+    LOG_IF(INFO, verbose) << "Ranges: " << printVec(elimLumpRanges);
+    if (elimLumpRanges.size() == 1) {
+        elimLumpRanges.pop_back();
+    }
 
     // LOG_IF(INFO, verbose) << "Lumps:\n" << printVec(et.lumpToSpan) << endl;
-    LOG_IF(INFO, verbose) << "Largest indep set is 0.." << largestIndep << endl;
+    // LOG_IF(INFO, verbose) << "Largest indep set is 0.." << largestIndep <<
+    // endl;
 
-    return SolverPtr(new Solver(std::move(skel),
-                                std::vector<uint64_t>{0, largestIndep},
+    return SolverPtr(new Solver(move(skel), move(elimLumpRanges),
                                 blasOps()  // simpleOps()
                                 ));
 }

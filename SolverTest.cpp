@@ -106,7 +106,9 @@ TEST(Solver, SolverXt_Ref) {
     testSolverXt([] { return simpleOps(); });
 }
 
-uint64_t findLargestIndependentLumpSet(const BlockMatrixSkel& skel);
+pair<uint64_t, bool> findLargestIndependentLumpSet(const BlockMatrixSkel& skel,
+                                                   uint64_t startLump,
+                                                   uint64_t maxSize = 8);
 
 void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
@@ -142,7 +144,7 @@ void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
         // std::cout << "VERIF:\n" << verifyMat << std::endl;
 
-        uint64_t largestIndep = findLargestIndependentLumpSet(skel);
+        uint64_t largestIndep = findLargestIndependentLumpSet(skel, 0).first;
         cout << "Largest indep set is 0.." << largestIndep
              << " (nAggregs: " << et.lumpToSpan.size() - 1 << ")"
              << "\naggregs:" << printVec(et.lumpToSpan) << endl;
@@ -210,7 +212,7 @@ void testSolverXtElFact(const std::function<OpsPtr()>& genOps) {
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
         // std::cout << "VERIF:\n" << verifyMat << std::endl;
 
-        uint64_t largestIndep = findLargestIndependentLumpSet(skel);
+        uint64_t largestIndep = findLargestIndependentLumpSet(skel, 0).first;
         cout << "Largest indep set is 0.." << largestIndep
              << " (nAggregs: " << et.lumpToSpan.size() - 1 << ")"
              << "\naggregs:" << printVec(et.lumpToSpan) << endl;
