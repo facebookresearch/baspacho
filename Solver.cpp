@@ -308,15 +308,17 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
              fullLumpToSpan[fullLumpToSpan.size() - 1]);
 
     // colStart are aggregate lump columns
-    // ss last rows are to be permuted according to invPerm
+    // ss last rows are to be permuted according to etTotalPerm
     // TODO: optimize if slow
-    vector<uint64_t> fullInvPerm(elimEnd + invPerm.size());
+    vector<uint64_t> etTotalPerm = composePermutations(et.permInverse, invPerm);
+    vector<uint64_t> fullInvPerm(elimEnd + etTotalPerm.size());
     iota(fullInvPerm.begin(), fullInvPerm.begin() + elimEnd, 0);
-    for (size_t i = 0; i < invPerm.size(); i++) {
-        fullInvPerm[i + elimEnd] = elimEnd + invPerm[i];
+    for (size_t i = 0; i < etTotalPerm.size(); i++) {
+        fullInvPerm[i + elimEnd] = elimEnd + etTotalPerm[i];
     }
     SparseStructure sortedSsT =
         ss.symmetricPermutation(fullInvPerm, false).transpose(true);
+
     vector<uint64_t> fullColStart;
     fullColStart.reserve(elimEnd + et.colStart.size());
     fullColStart.insert(fullColStart.begin(), sortedSsT.ptrs.begin(),
@@ -339,7 +341,28 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
     BlockMatrixSkel skel(fullSpanStart, fullLumpToSpan, fullColStart,
                          fullRowParam);
 
-    return SolverPtr(new Solver(std::move(skel), vector<uint64_t>(elimLumps),
+    // find (additional) progressive Schur elimination sets
+    std::vector<uint64_t> elimLumpRanges = elimLumps;
+    while (true) {
+        uint64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
+        auto [rangeEnd, hitSizeLimit] =
+            findLargestIndependentLumpSet(skel, rangeStart);
+        if (rangeEnd < rangeStart + 10) {
+            break;
+        }
+        LOG_IF(INFO, verbose)
+            << "Adding indep set: " << rangeStart << ".." << rangeEnd << endl;
+        elimLumpRanges.push_back(rangeEnd);
+        if (hitSizeLimit) {
+            break;
+        }
+    }
+    LOG_IF(INFO, verbose) << "Ranges: " << printVec(elimLumpRanges);
+    if (elimLumpRanges.size() == 1) {
+        elimLumpRanges.pop_back();
+    }
+
+    return SolverPtr(new Solver(move(skel), move(elimLumpRanges),
                                 blasOps()  // simpleOps()
                                 ));
 }
