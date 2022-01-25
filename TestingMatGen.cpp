@@ -166,8 +166,9 @@ SparseMatGenerator SparseMatGenerator::genMeridians(
     return retv;
 }
 
-static SparseMatGenerator genGrid(int64_t width, int64_t height, double fill,
-                                  int64_t connMaxDist, int64_t seed = 37) {
+SparseMatGenerator SparseMatGenerator::genGrid(int64_t width, int64_t height,
+                                               double fill, int64_t connMaxDist,
+                                               int64_t seed) {
     int64_t sz = width * height;
     SparseMatGenerator retv(sz, seed);
 

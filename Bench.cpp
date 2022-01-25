@@ -6,6 +6,7 @@
 #include <iostream>
 #include <map>
 #include <random>
+#include <regex>
 
 #include "BenchCholmod.h"
 #include "Solver.h"
@@ -60,21 +61,59 @@ SparseProblem matGenToSparseProblem(SparseMatGenerator& gen, uint64_t pSizeMin,
 }
 
 map<string, function<SparseProblem(int64_t)>> problemGenerators = {
-#if 1
-    {"flat_size=1000_fill=0.1_bsize=3",
+
+    // random entries
+    {"01_flat_size=1000_fill=0.1_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-#endif
-#if 0
-    {"flat_size=1000_fill=0.1_bsize=3_schursize=50000_schurfill=0.02",
+    {"02_flat_size=50000_fill=0.01_bsize=3",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen =
+             SparseMatGenerator::genFlat(50000, 0.01, seed);
+         return matGenToSparseProblem(gen, 3, 3);
+     }},  //
+    {"03_flat_size=1000_fill=0.1_bsize=3_schursize=50000_schurfill=0.02",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
          gen.addSchurSet(50000, 0.02);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-#endif
+
+    // base is grid
+    {"04_grid_size=100x100_fill=1.0_conn=2_bsize=3",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen =
+             SparseMatGenerator::genGrid(100, 100, 1.0, 2, seed);
+         return matGenToSparseProblem(gen, 3, 3);
+     }},  //
+    {"05_grid_size=150x150_fill=1.0_conn=2_bsize=3",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen =
+             SparseMatGenerator::genGrid(150, 150, 1.0, 2, seed);
+         return matGenToSparseProblem(gen, 3, 3);
+     }},  //
+    {"06_grid_size=200x200_fill=0.25_conn=2_bsize=3",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen =
+             SparseMatGenerator::genGrid(200, 200, 0.25, 2, seed);
+         return matGenToSparseProblem(gen, 3, 3);
+     }},  //
+    {"07_grid_size=200x200_fill=0.05_conn=3_bsize=3",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen =
+             SparseMatGenerator::genGrid(150, 150, 0.05, 3, seed);
+         return matGenToSparseProblem(gen, 3, 3);
+     }},  //
+
+    // base is meridians
+    {"08_meri_size=1500_n=4_hairlen=600_hairs=2_band=120_fill=0.1_bsize=3",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen = SparseMatGenerator::genMeridians(
+             4, 1500, 0.5, 120, 600, 2, 2, seed);
+         return matGenToSparseProblem(gen, 3, 3);
+     }},  //
 };
 
 map<string, function<pair<double, double>(const SparseProblem&, bool)>>
@@ -87,45 +126,86 @@ map<string, function<pair<double, double>(const SparseProblem&, bool)>>
          }},  //
 };
 
-void runBenchmarks(int numIterations, bool verbose = true, int seed = 37) {
+struct BenchmarkSettings {
+    int numIterations = 5;
+    int verbose = true;
+    regex selectProblems = regex("");
+    regex excludeProblems;
+    string referenceSolver;
+};
+
+void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
+    if (!settings.referenceSolver.empty()) {
+        CHECK(solvers.find(settings.referenceSolver) != solvers.end())
+            << "Solver '" << settings.referenceSolver
+            << "' does not exist or not available at compile time";
+    }
     for (auto [probName, gen] : problemGenerators) {
+        if (!regex_search(probName, settings.selectProblems)) {
+            continue;
+        }
+        if (regex_search(probName, settings.excludeProblems)) {
+            continue;
+        }
+
+        cout << "prob: " << probName << endl;
+
         map<string, vector<double>> factorTimings;
         int prevLen = 0;
-        for (int it = 0; it < numIterations; it++) {
+        for (int it = 0; it < settings.numIterations; it++) {
             SparseProblem prob = gen(seed + it * 1000000);
             int solvIdx = 1;
             for (auto [solvName, solv] : solvers) {
-                if (verbose) {
+                if (settings.verbose) {
                     cout << endl;
                 }
 
                 stringstream ss;
                 ss << setfill('.') << setw(it + 1) << ""
-                   << "(" << it + 1 << "/" << numIterations << ", " << solvName
-                   << " " << solvIdx << "/" << solvers.size() << ")";
+                   << "(" << it + 1 << "/" << settings.numIterations << ", "
+                   << solvName << " " << solvIdx << "/" << solvers.size()
+                   << ")";
                 solvIdx++;
                 string str = ss.str();
                 int clearSize = max(0, prevLen - (int)str.size());
                 prevLen = str.size();
                 cout << "\r" << str << setfill(' ') << setw(clearSize) << ""
                      << flush;
-                if (verbose) {
+                if (settings.verbose) {
                     cout << endl;
                 }
 
-                auto [analysisT, factorT] = solv(prob, verbose);
+                auto [analysisT, factorT] = solv(prob, settings.verbose);
                 factorTimings[solvName].push_back(factorT);
             }
         }
         stringstream ss;
-        ss << setfill('.') << setw(numIterations) << ""
-           << "(" << numIterations << "/" << numIterations << ", done!)";
+        ss << setfill('.') << setw(settings.numIterations) << ""
+           << "(" << settings.numIterations << "/" << settings.numIterations
+           << ", done!)";
         string str = ss.str();
         int clearSize = max(0, prevLen - (int)str.size());
         cout << "\r" << str << setfill(' ') << setw(clearSize) << "" << endl;
 
-        for (auto [solvName, timings] : factorTimings) {
-            cout << solvName << ":\n  " << printVec(timings) << endl;
+        if (settings.referenceSolver.empty()) {
+            for (auto [solvName, timings] : factorTimings) {
+                cout << solvName << ":\n  " << printVec(timings) << endl;
+            }
+        } else {
+            auto it = factorTimings.find(settings.referenceSolver);
+            CHECK(it != factorTimings.end());
+            const vector<double>& refTimings = it->second;
+            for (auto [solvName, timings] : factorTimings) {
+                if (solvName == settings.referenceSolver) {
+                    continue;
+                }
+                vector<double> relTimings(timings.size());
+                for (size_t i = 0; i < timings.size(); i++) {
+                    relTimings[i] = timings[i] / refTimings[i];
+                }
+                cout << solvName << " VS " << settings.referenceSolver
+                     << ":\n  " << printVec(relTimings) << endl;
+            }
         }
     }
 }
@@ -187,8 +267,39 @@ void runBenchmark(int numRuns, uint64_t size, uint64_t paramSize, double fill,
 }
 #endif
 
+void list() {
+    cout << "Problem generators:" << endl;
+    for (auto [probName, gen] : problemGenerators) {
+        cout << "  " << probName << endl;
+    }
+    cout << "Solvers:" << endl;
+    for (auto [solvName, solv] : solvers) {
+        cout << "  " << solvName << endl;
+    }
+}
+
 int main(int argc, char* argv[]) {
-    runBenchmarks(3);
+    BenchmarkSettings settings;
+    settings.referenceSolver = "CHOLMOD";
+    settings.verbose = false;
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-l")) {
+            list();
+            return 0;
+        }
+        if (!strcmp(argv[i], "-v")) {
+            settings.verbose = true;
+        } else if (!strcmp(argv[i], "-n") && i < argc - 1) {
+            settings.numIterations = stoi(argv[++i]);
+        } else if (!strcmp(argv[i], "-R") && i < argc - 1) {
+            settings.selectProblems = regex(argv[++i]);
+        } else if (!strcmp(argv[i], "-X") && i < argc - 1) {
+            settings.excludeProblems = regex(argv[++i]);
+        }
+    }
+
+    runBenchmarks(settings);
     // runBenchmark(10, 1000, 3, 1);
     // runBenchmark(1, 10000, 2, 0.05, 7500);
     // runBenchmark(10, 2000, 3, 1);
