@@ -7,10 +7,10 @@
 #include <random>
 #include <sstream>
 
-#include "BlockMatrix.h"
-#include "EliminationTree.h"
-#include "TestingUtils.h"
-#include "Utils.h"
+#include "../../testing/TestingUtils.h"
+#include "../BlockMatrix.h"
+#include "../EliminationTree.h"
+#include "../Utils.h"
 
 using namespace std;
 using namespace testing;

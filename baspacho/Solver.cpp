@@ -6,9 +6,9 @@
 #include <Eigen/Eigenvalues>
 #include <chrono>
 #include <iostream>
+#include <numeric>
 
 #include "EliminationTree.h"
-#include "TestingUtils.h"
 #include "Utils.h"
 
 using namespace std;
@@ -233,7 +233,7 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
             break;
         }
     }
-    LOG_IF(INFO, verbose) << "Ranges: " << printVec(elimLumpRanges);
+    // LOG_IF(INFO, verbose) << "Ranges: " << printVec(elimLumpRanges);
     if (elimLumpRanges.size() == 1) {
         elimLumpRanges.pop_back();
     }
@@ -357,7 +357,7 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
             break;
         }
     }
-    LOG_IF(INFO, verbose) << "Ranges: " << printVec(elimLumpRanges);
+    // LOG_IF(INFO, verbose) << "Ranges: " << printVec(elimLumpRanges);
     if (elimLumpRanges.size() == 1) {
         elimLumpRanges.pop_back();
     }

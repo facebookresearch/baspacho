@@ -123,30 +123,35 @@ message("Sophus Library Dir = " ${sophus_BINARY_DIR})
 include_directories(${sophus_SOURCE_DIR})
 add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
-
 add_library(BaSpaCho
-            BenchCholmod.cpp
-            BlockMatrix.cpp
-            EliminationTree.cpp
-            Factor.cpp
-            MatOpsBlas.cpp
-            MatOpsRef.cpp
-            Solver.cpp
-            SparseStructure.cpp
-            TestingMatGen.cpp
-            TestingUtils.cpp
-            Utils.cpp)
-target_link_libraries (BaSpaCho glog::glog dispenso
- ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
+            baspacho/BlockMatrix.cpp
+            baspacho/EliminationTree.cpp
+            baspacho/MatOpsBlas.cpp
+            baspacho/MatOpsRef.cpp
+            baspacho/Solver.cpp
+            baspacho/SparseStructure.cpp
+            baspacho/Utils.cpp)
+target_link_libraries (BaSpaCho glog::glog dispenso ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
 
 # IF have blas
 target_link_libraries (BaSpaCho ${BLAS_LIBRARIES})
 
-add_executable(BAL_test BaAtLarge.cpp BaAtLargeTest.cpp)
-target_link_libraries (BAL_test BaSpaCho)
+add_library(testing
+            testing/TestingMatGen.cpp
+            testing/TestingUtils.cpp)
 
-add_executable(bench Bench.cpp)
-target_link_libraries (bench BaSpaCho)
+target_link_libraries (testing BaSpaCho)
+
+add_executable(BAL_test
+               benchmarking/BaAtLarge.cpp
+               benchmarking/BaAtLargeTest.cpp
+               benchmarking/BenchCholmod.cpp)
+target_link_libraries (BAL_test BaSpaCho testing)
+
+add_executable(bench
+               benchmarking/Bench.cpp 
+               benchmarking/BenchCholmod.cpp)
+target_link_libraries (bench BaSpaCho testing)
 
 
 # unit tests
@@ -154,51 +159,57 @@ enable_testing()
 
 add_executable(
   BlockMatrixTest
-  BlockMatrixTest.cpp
+  baspacho/tests/BlockMatrixTest.cpp
 	)
 add_executable(
   FactorTest
-  FactorTest.cpp
+  experiments/Factor.cpp
+  experiments/FactorTest.cpp
 	)
 add_executable(
   SparseStructureTest
-  SparseStructureTest.cpp
+  baspacho/tests/SparseStructureTest.cpp
   )
 add_executable(
   EliminationTreeTest
-  EliminationTreeTest.cpp
+  baspacho/tests/EliminationTreeTest.cpp
   )
 add_executable(
   SolverTest
-  SolverTest.cpp
+  baspacho/tests/SolverTest.cpp
   )
 target_link_libraries(
   BlockMatrixTest
 	BaSpaCho
+  testing
   gtest_main
 	gmock
 )
 target_link_libraries(
   FactorTest
 	BaSpaCho
+  testing
   gtest_main
 	gmock
 )
 target_link_libraries(
   SparseStructureTest
 	BaSpaCho
+  testing
   gtest_main
 	gmock
 )
 target_link_libraries(
   EliminationTreeTest
 	BaSpaCho
+  testing
   gtest_main
 	gmock
 )
 target_link_libraries(
   SolverTest
 	BaSpaCho
+  testing
   gtest_main
 	gmock
 )

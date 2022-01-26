@@ -3,14 +3,14 @@
 
 #include <chrono>
 
+#include "../baspacho/BlockMatrix.h"
+#include "../baspacho/EliminationTree.h"
+#include "../baspacho/Solver.h"
+#include "../baspacho/SparseStructure.h"
+#include "../baspacho/Utils.h"
+#include "../testing/TestingUtils.h"
 #include "BaAtLarge.h"
 #include "BenchCholmod.h"
-#include "BlockMatrix.h"
-#include "EliminationTree.h"
-#include "Solver.h"
-#include "SparseStructure.h"
-#include "TestingUtils.h"
-#include "Utils.h"
 
 using namespace ba_at_large;
 using namespace std;

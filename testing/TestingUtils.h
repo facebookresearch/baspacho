@@ -6,7 +6,7 @@
 #include <sstream>
 #include <string>
 
-#include "SparseStructure.h"
+#include "../baspacho/SparseStructure.h"
 
 std::vector<uint64_t> randomPermutation(size_t size, uint64_t seed);
 

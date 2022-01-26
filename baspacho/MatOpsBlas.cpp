@@ -6,7 +6,6 @@
 #include <chrono>
 
 #include "MatOps.h"
-#include "TestingUtils.h"
 #include "Utils.h"
 
 // BLAS/LAPACK famously go without headers.

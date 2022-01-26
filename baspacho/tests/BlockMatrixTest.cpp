@@ -6,9 +6,9 @@
 #include <numeric>
 #include <sstream>
 
-#include "BlockMatrix.h"
-#include "SparseStructure.h"
-#include "TestingUtils.h"
+#include "../../testing/TestingUtils.h"
+#include "../BlockMatrix.h"
+#include "../SparseStructure.h"
 
 #if 0
 //CHEAT SHEET:

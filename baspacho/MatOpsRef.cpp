@@ -4,7 +4,6 @@
 #include <chrono>
 
 #include "MatOps.h"
-#include "TestingUtils.h"
 #include "Utils.h"
 
 using namespace std;

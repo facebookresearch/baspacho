@@ -2,9 +2,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "SparseStructure.h"
-#include "TestingUtils.h"
-#include "Utils.h"
+#include "../../testing/TestingUtils.h"
+#include "../SparseStructure.h"
+#include "../Utils.h"
 
 using namespace std;
 using namespace testing;

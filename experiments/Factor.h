@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BlockMatrix.h"
+#include "../baspacho/BlockMatrix.h"
 
 void factor(const BlockMatrixSkel& skel, std::vector<double>& data);
 

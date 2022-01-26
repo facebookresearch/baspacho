@@ -8,10 +8,10 @@
 #include <random>
 #include <regex>
 
+#include "../baspacho/Solver.h"
+#include "../testing/TestingMatGen.h"
+#include "../testing/TestingUtils.h"
 #include "BenchCholmod.h"
-#include "Solver.h"
-#include "TestingMatGen.h"
-#include "TestingUtils.h"
 
 using namespace std;
 using hrc = chrono::high_resolution_clock;
