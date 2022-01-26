@@ -6,6 +6,7 @@
 #include <chrono>
 
 #include "MatOps.h"
+#include "TestingUtils.h"
 #include "Utils.h"
 
 // BLAS/LAPACK famously go without headers.
@@ -116,10 +117,36 @@ struct BlasOps : Ops {
         // * span-rows from lumpToSpan[lumpsEnd],
         // * board cols in interval lumpsBegin:lumpsEnd
         uint64_t spanRowBegin;
+        uint64_t maxBufferSize;
         vector<uint64_t> rowPtr;       // row data pointer
         vector<uint64_t> colLump;      // col-lump
         vector<uint64_t> chainColOrd;  // order in col chain elements
     };
+
+    static uint64_t computeMaxBufSize(const OpaqueDataElimData& elim,
+                                      const BlockMatrixSkel& skel,
+                                      uint64_t sRel) {
+        uint64_t maxBufferSize = 0;
+
+        // iterate over chains present in this row
+        for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
+             i < iEnd; i++) {
+            uint64_t lump = elim.colLump[i];
+            uint64_t chainColOrd = elim.chainColOrd[i];
+            CHECK_GE(chainColOrd, 1);  // there must be a diagonal block
+
+            uint64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
+            uint64_t ptrEnd = skel.chainColPtr[lump + 1];
+
+            uint64_t nRowsAbove = skel.chainRowsTillEnd[ptrStart - 1];
+            uint64_t nRowsChain = skel.chainRowsTillEnd[ptrStart] - nRowsAbove;
+            uint64_t nRowsOnward = skel.chainRowsTillEnd[ptrEnd - 1];
+
+            maxBufferSize = max(maxBufferSize, nRowsOnward * nRowsChain);
+        }
+
+        return maxBufferSize;
+    }
 
     virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
                                              uint64_t lumpsBegin,
@@ -166,13 +193,20 @@ struct BlasOps : Ops {
         }
         rewindVec(elim->rowPtr);
         elim->spanRowBegin = spanRowBegin;
+
+        elim->maxBufferSize = 0;
+        for (uint64_t r = 0; r < elim->rowPtr.size() - 1; r++) {
+            elim->maxBufferSize =
+                max(elim->maxBufferSize, computeMaxBufSize(*elim, skel, r));
+        }
         return OpaqueDataPtr(elim);
     }
 
     struct ElimContext {
         std::vector<double> tempBuffer;
         std::vector<uint64_t> spanToChainOffset;
-        ElimContext(uint64_t numSpans) : spanToChainOffset(numSpans) {}
+        ElimContext(uint64_t bufSize, uint64_t numSpans)
+            : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
     };
 
     static void prepareContextForTargetLump(
@@ -215,11 +249,6 @@ struct BlasOps : Ops {
             skel.spanStart[s] - skel.lumpStart[targetLump];
         prepareContextForTargetLump(skel, targetLump, ctx.spanToChainOffset);
 
-#if 0
-        uint64_t bisectStart = skel.chainColPtr[targetLump];
-        uint64_t bisectEnd = skel.chainColPtr[targetLump + 1];
-#endif
-
         // iterate over chains present in this row
         for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
              i < iEnd; i++) {
@@ -243,7 +272,7 @@ struct BlasOps : Ops {
             Eigen::Map<MatRMaj<double>> chainOnwardSubMat(
                 data + dataOffset, nRowsOnward, lumpSize);
 
-            ctx.tempBuffer.resize(nRowsOnward * nRowsChain);
+            CHECK_GE(ctx.tempBuffer.size(), nRowsOnward * nRowsChain);
             Eigen::Map<MatRMaj<double>> prod(ctx.tempBuffer.data(), nRowsOnward,
                                              nRowsChain);
             prod = chainOnwardSubMat * chainSubMat.transpose();
@@ -353,6 +382,8 @@ struct BlasOps : Ops {
             });
 
         // TODO: parallel2
+        LOG(INFO) << "Compare: " << elim.colLump.size() << " vs "
+                  << (elim.rowPtr.size() - 1);
         if (elim.colLump.size() > 3 * (elim.rowPtr.size() - 1)) {
             LOG(INFO) << "Ordinary sparse elimination";
             vector<ElimContext> contexts;
@@ -360,7 +391,9 @@ struct BlasOps : Ops {
             uint64_t numSpans = skel.spanStart.size() - 1;
             dispenso::parallel_for(
                 taskSet1, contexts,
-                [=]() -> ElimContext { return ElimContext(numSpans); },
+                [=]() -> ElimContext {
+                    return ElimContext(elim.maxBufferSize, numSpans);
+                },
                 dispenso::makeChunkedRange(0UL, elim.rowPtr.size() - 1, 5UL),
                 [&, this](ElimContext& ctx, size_t sBegin, size_t sEnd) {
                     for (uint64_t sRel = sBegin; sRel < sEnd; sRel++) {
