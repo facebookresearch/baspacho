@@ -380,11 +380,7 @@ struct BlasOps : Ops {
                 }
             });
 
-        // TODO: parallel2
-        LOG(INFO) << "Compare: " << elim.colLump.size() << " vs "
-                  << (elim.rowPtr.size() - 1);
         if (elim.colLump.size() > 3 * (elim.rowPtr.size() - 1)) {
-            LOG(INFO) << "Ordinary sparse elimination";
             vector<ElimContext> contexts;
             dispenso::TaskSet taskSet1(pSkel->threadPool);
             uint64_t numSpans = skel.spanStart.size() - 1;
@@ -400,7 +396,6 @@ struct BlasOps : Ops {
                     }
                 });
         } else {
-            LOG(INFO) << "Very sparse elimination";
             dispenso::TaskSet taskSet1(pSkel->threadPool);
             dispenso::parallel_for(
                 taskSet1,
