@@ -73,6 +73,11 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(4000, 0.01, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
+    {"02b_flat_size=2000_fill=0.03_bsize=2-5",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen = SparseMatGenerator::genFlat(2000, 0.03, seed);
+         return matGenToSparseProblem(gen, 2, 5);
+     }},  //
     {"03a_flat_size=1000_fill=0.1_bsize=3_schursize=50000_schurfill=0.02",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
@@ -117,6 +122,12 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genMeridians(
              4, 1500, 0.5, 120, 600, 2, 2, seed);
+         return matGenToSparseProblem(gen, 3, 3);
+     }},  //
+    {"09_meri_size=1500_n=7_hairlen=600_hairs=2_band=120_fill=0.1_bsize=3",
+     [](int64_t seed) -> SparseProblem {
+         SparseMatGenerator gen = SparseMatGenerator::genMeridians(
+             7, 1500, 0.5, 120, 600, 2, 2, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
 };

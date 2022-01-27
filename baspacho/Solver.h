@@ -17,10 +17,14 @@ struct Solver {
 
     void factorXp(double* data, bool verbose = false) const;
 
+    void factorXp2(double* data, bool verbose = false) const;
+
     void factorLump(double* data, uint64_t lump) const;
 
-    void eliminateBoard(double* data, uint64_t lump, uint64_t boardIndexInCol,
-                        OpaqueData& ax) const;
+    void eliminateBoard(double* data, uint64_t ptr, OpaqueData& ax) const;
+
+    void eliminateBoardBatch(double* data, uint64_t ptr, uint64_t batchSize,
+                             OpaqueData& ax) const;
 
     BlockMatrixSkel skel;
     std::vector<uint64_t> elimLumpRanges;

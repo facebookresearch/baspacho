@@ -38,7 +38,14 @@ struct Ops {
                             uint64_t k, const double* A, const double* B) = 0;
 
     virtual OpaqueDataPtr createAssembleContext(const OpaqueData& skel,
-                                                uint64_t tempBufSize) = 0;
+                                                uint64_t tempBufSize,
+                                                int maxBatchSize = 1) = 0;
+
+    // computes (A|B) * A', upper diag part doesn't matter
+    virtual void saveSyrkGemmBatched(OpaqueData& assCtx, uint64_t* ms,
+                                     uint64_t* ns, uint64_t* ks,
+                                     const double* data, uint64_t* offsets,
+                                     int batchSize) = 0;
 
     virtual void prepareAssembleContext(const OpaqueData& skel,
                                         OpaqueData& assCtx,
@@ -47,7 +54,8 @@ struct Ops {
     virtual void assemble(const OpaqueData& skel, const OpaqueData& assCtx,
                           double* data, uint64_t rectRowBegin,
                           uint64_t dstStride, uint64_t srcColDataOffset,
-                          uint64_t numBlockRows, uint64_t numBlockCols) = 0;
+                          uint64_t srcRectWidth, uint64_t numBlockRows,
+                          uint64_t numBlockCols, int numBatch = -1) = 0;
 };
 
 using OpsPtr = std::unique_ptr<Ops>;

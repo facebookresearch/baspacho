@@ -25,7 +25,7 @@ Configuring with system blas (eg OpenBLAS):
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release 
 Configuring with MKL:
   . /opt/intel/oneapi/setvars.sh
-  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBLA_VENDOR=Intel10_64ilp
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBLA_VENDOR=Intel10_64lp
 Compiling and testing:
   cmake --build build -v -- -j16 && ctest --test-dir build
 Show test:

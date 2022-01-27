@@ -504,6 +504,11 @@ struct BlasOps : Ops {
         std::vector<uint64_t> paramToChainOffset;
         uint64_t stride;
         std::vector<double> tempBuffer;
+#ifdef BASPACHO_USE_MKL
+        std::vector<double*> tempBufPtrs;
+        uint64_t tempCtxSize;
+        int maxBatchSize;
+#endif
     };
 
     virtual void gemmToTemp(OpaqueData& assCtx, uint64_t m, uint64_t n,
@@ -518,15 +523,96 @@ struct BlasOps : Ops {
         this->gemm(m, n, k, A, B, ax.tempBuffer.data());
     }
 
+    // computes (A|B) * A', upper diag part doesn't matter
+    virtual void saveSyrkGemmBatched(OpaqueData& assCtx, uint64_t* ms,
+                                     uint64_t* ns, uint64_t* ks,
+                                     const double* data, uint64_t* offsets,
+                                     int batchSize) {
+#ifndef BASPACHO_USE_MKL
+        LOG(FATAL) << "Batching not supported";
+#else
+        auto start = hrc::now();
+        AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
+        CHECK_NOTNULL(pAx);
+        AssembleContext& ax = *pAx;
+        CHECK_LE(batchSize, ax.maxBatchSize);
+
+        // for testing: serial execution of the batch
+        /*ax.tempBufPtrs.clear();
+        double* ptr = ax.tempBuffer.data();
+        for (int i = 0; i < batchSize; i++) {
+            CHECK_LE(ms[i] * ns[i], ax.tempCtxSize);
+            this->gemm(ms[i], ns[i], ks[i], data + offsets[i],
+                       data + offsets[i], ptr);
+            ax.tempBufPtrs.push_back(ptr);
+            ptr += ms[i] * ns[i];
+        }*/
+        CBLAS_TRANSPOSE* argTransAs =
+            (CBLAS_TRANSPOSE*)alloca(batchSize * sizeof(CBLAS_TRANSPOSE));
+        CBLAS_TRANSPOSE* argTransBs =
+            (CBLAS_TRANSPOSE*)alloca(batchSize * sizeof(CBLAS_TRANSPOSE));
+        BLAS_INT* argMs = (BLAS_INT*)alloca(batchSize * sizeof(BLAS_INT));
+        BLAS_INT* argNs = (BLAS_INT*)alloca(batchSize * sizeof(BLAS_INT));
+        BLAS_INT* argKs = (BLAS_INT*)alloca(batchSize * sizeof(BLAS_INT));
+        double* argAlphas = (double*)alloca(batchSize * sizeof(double));
+        double* argBetas = (double*)alloca(batchSize * sizeof(double));
+        const double** argAs =
+            (const double**)alloca(batchSize * sizeof(const double*));
+        double** argCs = (double**)alloca(batchSize * sizeof(double*));
+        BLAS_INT* argGroupSize =
+            (BLAS_INT*)alloca(batchSize * sizeof(BLAS_INT));
+
+        ax.tempBufPtrs.clear();
+        double* ptr = ax.tempBuffer.data();
+        for (int i = 0; i < batchSize; i++) {
+            argTransAs[i] = CblasConjTrans;
+            argTransBs[i] = CblasNoTrans;
+            argMs[i] = ms[i];
+            argNs[i] = ns[i];
+            argKs[i] = ks[i];
+            argAlphas[i] = 1.0;
+            argBetas[i] = 0.0;
+            argAs[i] = data + offsets[i];
+            argCs[i] = ptr;
+            argGroupSize[i] = 1;
+
+            CHECK_LE(ms[i] * ns[i], ax.tempCtxSize);
+            ax.tempBufPtrs.push_back(ptr);
+            ptr += ms[i] * ns[i];
+        }
+        const double** argBs = argAs;
+        BLAS_INT* argLdAs = argKs;
+        BLAS_INT* argLdBs = argKs;
+        BLAS_INT* argLdCs = argMs;
+        BLAS_INT argNumGroups = batchSize;
+        cblas_dgemm_batch(CblasColMajor, argTransAs, argTransBs, argMs, argNs,
+                          argKs, argAlphas, argAs, argLdAs, argAs, argLdBs,
+                          argBetas, argCs, argLdCs, argNumGroups, argGroupSize);
+
+        gemmLastCallTime = tdelta(hrc::now() - start).count();
+        gemmCalls++;
+        gemmTotTime += gemmLastCallTime;
+        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
+#endif
+    }
+
     virtual OpaqueDataPtr createAssembleContext(const OpaqueData& ref,
-                                                uint64_t tempBufSize) override {
+                                                uint64_t tempBufSize,
+                                                int maxBatchSize = 1) override {
+#ifndef BASPACHO_USE_MKL
+        CHECK_EQ(maxBatchSize, 1) << "Batching not supported";
+#endif
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         CHECK_NOTNULL(pSkel);
         const BlockMatrixSkel& skel = pSkel->skel;
         AssembleContext* ax = new AssembleContext;
         ax->paramToChainOffset.resize(skel.spanStart.size() - 1);
-        ax->tempBuffer.resize(tempBufSize);
+        ax->tempBuffer.resize(tempBufSize * maxBatchSize);
+#ifdef BASPACHO_USE_MKL
+        ax->tempCtxSize = tempBufSize;
+        ax->maxBatchSize = maxBatchSize;
+#endif
         return OpaqueDataPtr(ax);
     }
 
@@ -551,8 +637,9 @@ struct BlasOps : Ops {
     virtual void assemble(const OpaqueData& ref, const OpaqueData& assCtx,
                           double* data, uint64_t rectRowBegin,
                           uint64_t dstStride,  //
-                          uint64_t srcColDataOffset, uint64_t numBlockRows,
-                          uint64_t numBlockCols) override {
+                          uint64_t srcColDataOffset, uint64_t srcRectWidth,
+                          uint64_t numBlockRows, uint64_t numBlockCols,
+                          int numBatch = -1) override {
         auto start = hrc::now();
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
@@ -568,10 +655,16 @@ struct BlasOps : Ops {
         const uint64_t* paramToChainOffset = ax.paramToChainOffset.data();
         const uint64_t* spanOffsetInLump = skel.spanOffsetInLump.data();
 
-        uint64_t rectStride = ax.stride;
+        // uint64_t rectStride = ax.stride;
+#ifdef BASPACHO_USE_MKL
+        const double* matRectPtr =
+            numBatch == -1 ? ax.tempBuffer.data() : ax.tempBufPtrs[numBatch];
+#else
+        CHECK_EQ(numBatch, -1) << "Batching not supported";
         const double* matRectPtr = ax.tempBuffer.data();
+#endif
 
-#if 0
+#if 1
         dispenso::TaskSet taskSet(pSkel->threadPool);
         dispenso::parallel_for(
             taskSet, dispenso::makeChunkedRange(0, numBlockRows, 3UL),
@@ -583,7 +676,8 @@ struct BlasOps : Ops {
                         chainRowsTillEnd[r] - rBegin - rectRowBegin;
                     uint64_t rParam = toSpan[r];
                     uint64_t rOffset = paramToChainOffset[rParam];
-                    const double* matRowPtr = matRectPtr + rBegin * rectStride;
+                    const double* matRowPtr =
+                        matRectPtr + rBegin * srcRectWidth;
 
                     uint64_t cEnd = std::min(numBlockCols, r + 1);
                     uint64_t nextCStart = chainRowsTillEnd[-1] - rectRowBegin;
@@ -595,7 +689,7 @@ struct BlasOps : Ops {
 
                         double* dst = data + offset;
                         const double* src = matRowPtr + cStart;
-                        stridedMatSub(dst, dstStride, src, rectStride, rSize,
+                        stridedMatSub(dst, dstStride, src, srcRectWidth, rSize,
                                       cSize);
                     }
                 }
@@ -606,7 +700,7 @@ struct BlasOps : Ops {
             uint64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
             uint64_t rParam = toSpan[r];
             uint64_t rOffset = paramToChainOffset[rParam];
-            const double* matRowPtr = matRectPtr + rBegin * rectStride;
+            const double* matRowPtr = matRectPtr + rBegin * srcRectWidth;
 
             uint64_t cEnd = std::min(numBlockCols, r + 1);
             for (uint64_t c = 0; c < cEnd; c++) {
@@ -616,7 +710,7 @@ struct BlasOps : Ops {
 
                 double* dst = data + offset;
                 const double* src = matRowPtr + cStart;
-                stridedMatSub(dst, dstStride, src, rectStride, rSize, cSize);
+                stridedMatSub(dst, dstStride, src, srcRectWidth, rSize, cSize);
             }
         }
 #endif

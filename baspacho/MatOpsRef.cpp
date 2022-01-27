@@ -292,8 +292,16 @@ struct SimpleOps : Ops {
         this->gemm(m, n, k, A, B, ax.tempBuffer.data());
     }
 
+    virtual void saveSyrkGemmBatched(OpaqueData& assCtx, uint64_t* ms,
+                                     uint64_t* ns, uint64_t* ks,
+                                     const double* data, uint64_t* offsets,
+                                     int batchSize) {
+        LOG(FATAL) << "Batching not supported";
+    }
+
     virtual OpaqueDataPtr createAssembleContext(const OpaqueData& ref,
-                                                uint64_t tempBufSize) override {
+                                                uint64_t tempBufSize,
+                                                int maxBatchSize = 1) override {
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         CHECK_NOTNULL(pSkel);
@@ -325,8 +333,10 @@ struct SimpleOps : Ops {
     virtual void assemble(const OpaqueData& ref, const OpaqueData& assCtx,
                           double* data, uint64_t rectRowBegin,
                           uint64_t dstStride,  //
-                          uint64_t srcColDataOffset, uint64_t numBlockRows,
-                          uint64_t numBlockCols) override {
+                          uint64_t srcColDataOffset, uint64_t srcRectWidth,
+                          uint64_t numBlockRows, uint64_t numBlockCols,
+                          int numBatch = -1) override {
+        CHECK_EQ(numBatch, -1) << "Batching not supported";
         auto start = hrc::now();
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
@@ -342,7 +352,6 @@ struct SimpleOps : Ops {
         const uint64_t* paramToChainOffset = ax.paramToChainOffset.data();
         const uint64_t* spanOffsetInLump = skel.spanOffsetInLump.data();
 
-        uint64_t rectStride = ax.stride;
         const double* matRectPtr = ax.tempBuffer.data();
 
         for (uint64_t r = 0; r < numBlockRows; r++) {
@@ -350,7 +359,7 @@ struct SimpleOps : Ops {
             uint64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
             uint64_t rParam = toSpan[r];
             uint64_t rOffset = paramToChainOffset[rParam];
-            const double* matRowPtr = matRectPtr + rBegin * rectStride;
+            const double* matRowPtr = matRectPtr + rBegin * srcRectWidth;
 
             uint64_t cEnd = std::min(numBlockCols, r + 1);
             for (uint64_t c = 0; c < cEnd; c++) {
@@ -360,7 +369,7 @@ struct SimpleOps : Ops {
 
                 double* dst = data + offset;
                 const double* src = matRowPtr + cStart;
-                stridedMatSub(dst, dstStride, src, rectStride, rSize, cSize);
+                stridedMatSub(dst, dstStride, src, srcRectWidth, rSize, cSize);
             }
         }
 
