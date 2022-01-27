@@ -41,6 +41,10 @@ struct Ops {
                                                 uint64_t tempBufSize,
                                                 int maxBatchSize = 1) = 0;
 
+    virtual void saveSyrkGemm(OpaqueData& assCtx, uint64_t m, uint64_t n,
+                              uint64_t k, const double* data,
+                              uint64_t offset) = 0;
+
     // computes (A|B) * A', upper diag part doesn't matter
     virtual void saveSyrkGemmBatched(OpaqueData& assCtx, uint64_t* ms,
                                      uint64_t* ns, uint64_t* ks,

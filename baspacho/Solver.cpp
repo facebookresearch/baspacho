@@ -81,8 +81,8 @@ void Solver::eliminateBoard(double* data, uint64_t ptr, OpaqueData& ax) const {
     uint64_t numRowsFull =
         skel.chainRowsTillEnd[chainColBegin + rowDataEnd1 - 1] - rectRowBegin;
 
-    ops->gemmToTemp(ax, numRowsSub, numRowsFull, origLumpSize,
-                    data + belowDiagStart, data + belowDiagStart);
+    ops->saveSyrkGemm(ax, numRowsSub, numRowsFull, origLumpSize, data,
+                      belowDiagStart);
 
     uint64_t targetLump = skel.boardRowLump[boardColBegin + boardIndexInCol];
     uint64_t targetLumpSize =

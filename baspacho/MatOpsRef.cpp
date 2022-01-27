@@ -292,6 +292,30 @@ struct SimpleOps : Ops {
         this->gemm(m, n, k, A, B, ax.tempBuffer.data());
     }
 
+    virtual void saveSyrkGemm(OpaqueData& assCtx, uint64_t m, uint64_t n,
+                              uint64_t k, const double* data,
+                              uint64_t offset) override {
+        AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
+        CHECK_NOTNULL(pAx);
+        AssembleContext& ax = *pAx;
+
+        CHECK_LE(m * n, ax.tempBuffer.size());
+
+        auto start = hrc::now();
+
+        const double* AB = data + offset;
+        double* C = ax.tempBuffer.data();
+        Eigen::Map<const MatRMaj<double>> matA(AB, m, k);
+        Eigen::Map<const MatRMaj<double>> matB(AB, n, k);
+        Eigen::Map<MatRMaj<double>> matC(C, n, m);
+        matC = matB * matA.transpose();
+
+        gemmLastCallTime = tdelta(hrc::now() - start).count();
+        gemmCalls++;
+        gemmTotTime += gemmLastCallTime;
+        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
+    }
+
     virtual void saveSyrkGemmBatched(OpaqueData& assCtx, uint64_t* ms,
                                      uint64_t* ns, uint64_t* ks,
                                      const double* data, uint64_t* offsets,

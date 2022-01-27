@@ -518,9 +518,47 @@ struct BlasOps : Ops {
         CHECK_NOTNULL(pAx);
         AssembleContext& ax = *pAx;
 
-        ax.stride = m;
         CHECK_LE(m * n, ax.tempBuffer.size());
         this->gemm(m, n, k, A, B, ax.tempBuffer.data());
+    }
+
+    virtual void saveSyrkGemm(OpaqueData& assCtx, uint64_t m, uint64_t n,
+                              uint64_t k, const double* data,
+                              uint64_t offset) override {
+        AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
+        CHECK_NOTNULL(pAx);
+        AssembleContext& ax = *pAx;
+
+        CHECK_LE(m * n, ax.tempBuffer.size());
+
+        auto start = hrc::now();
+
+        BLAS_INT argM = m;
+        BLAS_INT argN = n;
+        BLAS_INT argK = k;
+        double argAlpha = 1.0;
+        double* argA = (double*)data + offset;
+        BLAS_INT argLdA = k;
+        double* argB = (double*)data + offset;
+        BLAS_INT argLdB = k;
+        double argBeta = 0.0;
+        double* argC = ax.tempBuffer.data();
+        BLAS_INT argLdC = m;
+#ifdef BASPACHO_USE_MKL
+        cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, argM, argN,
+                    argK, argAlpha, argA, argLdA, argB, argLdB, argBeta, argC,
+                    argLdC);
+#else
+        char argTransA = 'C';
+        char argTransB = 'N';
+        dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha, argA,
+               &argLdA, argB, &argLdB, &argBeta, argC, &argLdC);
+#endif
+
+        gemmLastCallTime = tdelta(hrc::now() - start).count();
+        gemmCalls++;
+        gemmTotTime += gemmLastCallTime;
+        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
     }
 
     // computes (A|B) * A', upper diag part doesn't matter
