@@ -4,7 +4,6 @@
 #include <glog/logging.h>
 
 #include <Eigen/Eigenvalues>
-#include <chrono>
 #include <iostream>
 #include <numeric>
 
@@ -12,18 +11,16 @@
 #include "Utils.h"
 
 using namespace std;
-using hrc = chrono::high_resolution_clock;
-using tdelta = chrono::duration<double>;
 
-Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimLumps_,
+Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimLumpRanges_,
                OpsPtr&& ops_)
     : skel(std::move(skel_)),
-      elimLumps(std::move(elimLumps_)),
+      elimLumpRanges(std::move(elimLumpRanges_)),
       ops(std::move(ops_)) {
     opMatrixSkel = ops->prepareMatrixSkel(skel);
-    for (uint64_t l = 0; l + 1 < elimLumps.size(); l++) {
-        opElimination.push_back(
-            ops->prepareElimination(skel, elimLumps[l], elimLumps[l + 1]));
+    for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+        opElimination.push_back(ops->prepareElimination(skel, elimLumpRanges[l],
+                                                        elimLumpRanges[l + 1]));
     }
 }
 
@@ -53,50 +50,6 @@ void Solver::factorLump(double* data, uint64_t lump) const {
               data + belowDiagOffset);
 }
 
-using OuterStride = Eigen::OuterStride<>;
-using OuterStridedMatM = Eigen::Map<MatRMaj<double>, 0, OuterStride>;
-using OuterStridedMatK = Eigen::Map<const MatRMaj<double>, 0, OuterStride>;
-
-void Solver::assemble(double* data, uint64_t lump, uint64_t boardIndexInSN,
-                      OpaqueData& ax) const {
-    auto start = hrc::now();
-
-    uint64_t chainColBegin = skel.chainColPtr[lump];
-
-    uint64_t boardColBegin = skel.boardColPtr[lump];
-    uint64_t boardColEnd = skel.boardColPtr[lump + 1];
-
-    uint64_t targetLump = skel.boardRowLump[boardColBegin + boardIndexInSN];
-    uint64_t belowDiagChainColOrd =
-        skel.boardChainColOrd[boardColBegin + boardIndexInSN];
-    uint64_t rowDataEnd0 =
-        skel.boardChainColOrd[boardColBegin + boardIndexInSN + 1];
-    uint64_t rowDataEnd1 = skel.boardChainColOrd[boardColEnd - 1];
-
-    uint64_t belowDiagStart =
-        skel.chainData[chainColBegin + belowDiagChainColOrd];
-    uint64_t startRowInSuperNode =
-        skel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
-
-    uint64_t targetLumpSize =
-        skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
-
-    uint64_t rectRowBegin = startRowInSuperNode;
-    uint64_t dstStride = targetLumpSize;
-    uint64_t srcColDataOffset = chainColBegin + belowDiagChainColOrd;
-    uint64_t numBlockRows = rowDataEnd1 - belowDiagChainColOrd;
-    uint64_t numBlockCols = rowDataEnd0 - belowDiagChainColOrd;
-    ops->assemble(*opMatrixSkel, ax, data, rectRowBegin,
-                  dstStride,         //
-                  srcColDataOffset,  //
-                  numBlockRows, numBlockCols);
-
-    assembleLastCallTime = tdelta(hrc::now() - start).count();
-    assembleCalls++;
-    assembleTotTime += assembleLastCallTime;
-    assembleMaxCallTime = std::max(assembleMaxCallTime, assembleLastCallTime);
-}
-
 void Solver::eliminateBoard(double* data, uint64_t lump,
                             uint64_t boardIndexInSN, OpaqueData& ax) const {
     uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
@@ -113,43 +66,44 @@ void Solver::eliminateBoard(double* data, uint64_t lump,
 
     uint64_t belowDiagStart =
         skel.chainData[chainColBegin + belowDiagChainColOrd];
-    uint64_t rowStart =
+    uint64_t rectRowBegin =
         skel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
     uint64_t numRowsSub =
-        skel.chainRowsTillEnd[chainColBegin + rowDataEnd0 - 1] - rowStart;
+        skel.chainRowsTillEnd[chainColBegin + rowDataEnd0 - 1] - rectRowBegin;
     uint64_t numRowsFull =
-        skel.chainRowsTillEnd[chainColBegin + rowDataEnd1 - 1] - rowStart;
-
-    /*ctx.stride = numRowsSub;
-    ctx.tempBuffer.resize(numRowsSub * numRowsFull);
-    ops->gemm(numRowsSub, numRowsFull, lumpSize, data + belowDiagStart,
-              data + belowDiagStart, ctx.tempBuffer.data());
-
-    assemble(data, lump, boardIndexInSN, ctx);*/
+        skel.chainRowsTillEnd[chainColBegin + rowDataEnd1 - 1] - rectRowBegin;
 
     ops->gemmToTemp(ax, numRowsSub, numRowsFull, lumpSize,
                     data + belowDiagStart, data + belowDiagStart);
-    assemble(data, lump, boardIndexInSN, ax);
+
+    uint64_t targetLump = skel.boardRowLump[boardColBegin + boardIndexInSN];
+    uint64_t targetLumpSize =
+        skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
+    uint64_t srcColDataOffset = chainColBegin + belowDiagChainColOrd;
+    uint64_t numBlockRows = rowDataEnd1 - belowDiagChainColOrd;
+    uint64_t numBlockCols = rowDataEnd0 - belowDiagChainColOrd;
+
+    ops->assemble(*opMatrixSkel, ax, data, rectRowBegin,
+                  targetLumpSize,    //
+                  srcColDataOffset,  //
+                  numBlockRows, numBlockCols);
 }
 
 void Solver::factor(double* data, bool verbose) const {
-    for (uint64_t l = 0; l + 1 < elimLumps.size(); l++) {
-        LOG_IF(INFO, verbose) << "Elim set: " << l << " (" << elimLumps[l]
-                              << ".." << elimLumps[l + 1] << ")";
-        ops->doElimination(*opMatrixSkel, data, elimLumps[l], elimLumps[l + 1],
-                           *opElimination[l]);
+    for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+        LOG_IF(INFO, verbose) << "Elim set: " << l << " (" << elimLumpRanges[l]
+                              << ".." << elimLumpRanges[l + 1] << ")";
+        ops->doElimination(*opMatrixSkel, data, elimLumpRanges[l],
+                           elimLumpRanges[l + 1], *opElimination[l]);
     }
 
     uint64_t denseOpsFromLump =
-        elimLumps.size() ? elimLumps[elimLumps.size() - 1] : 0;
+        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
     LOG_IF(INFO, verbose) << "Block-Fact from: " << denseOpsFromLump;
 
-    double totPrepares = 0.0;
     OpaqueDataPtr ax = ops->createAssembleContext(*opMatrixSkel);
     for (uint64_t l = denseOpsFromLump; l < skel.chainColPtr.size() - 1; l++) {
-        auto start = hrc::now();
         ops->prepareAssembleContext(*opMatrixSkel, *ax, l);
-        totPrepares += tdelta(hrc::now() - start).count();
 
         //  iterate over columns having a non-trivial a-block
         for (uint64_t rPtr = skel.boardRowPtr[l],
@@ -165,18 +119,11 @@ void Solver::factor(double* data, bool verbose) const {
             uint64_t boardSNDataEnd = skel.boardColPtr[origAggreg + 1];
             CHECK_LT(boardIndexInSN, boardSNDataEnd - boardSNDataStart);
             CHECK_EQ(l, skel.boardRowLump[boardSNDataStart + boardIndexInSN]);
-            eliminateBoard(data, origAggreg, boardIndexInSN, *ax);  // ctx);
+            eliminateBoard(data, origAggreg, boardIndexInSN, *ax);
         }
 
         factorLump(data, l);
     }
-
-    LOG_IF(INFO, verbose) << "solver stats:"
-                          << "\nprepares: " << totPrepares
-                          << "\nassemble: #=" << assembleCalls
-                          << ", time=" << assembleTotTime
-                          << "s, last=" << assembleLastCallTime
-                          << "s, max=" << assembleMaxCallTime << "s";
 }
 
 pair<uint64_t, bool> findLargestIndependentLumpSet(const BlockMatrixSkel& skel,
@@ -233,14 +180,9 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
             break;
         }
     }
-    // LOG_IF(INFO, verbose) << "Ranges: " << printVec(elimLumpRanges);
     if (elimLumpRanges.size() == 1) {
         elimLumpRanges.pop_back();
     }
-
-    // LOG_IF(INFO, verbose) << "Lumps:\n" << printVec(et.lumpToSpan) <<
-    // endl; LOG_IF(INFO, verbose) << "Largest indep set is 0.." <<
-    // largestIndep << endl;
 
     return SolverPtr(new Solver(move(skel), move(elimLumpRanges),
                                 blasOps()  // simpleOps()
@@ -249,16 +191,17 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
 
 SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
                             const SparseStructure& ss_,
-                            const std::vector<uint64_t>& elimLumps,
+                            const std::vector<uint64_t>& elimLumpRanges,
                             bool verbose) {
-    CHECK_GE(elimLumps.size(), 2);
+    CHECK_GE(elimLumpRanges.size(), 2);
     SparseStructure ss =
-        ss_.addIndependentEliminationFill(elimLumps[0], elimLumps[1]);
-    for (uint64_t e = 1; e < elimLumps.size() - 1; e++) {
-        ss = ss.addIndependentEliminationFill(elimLumps[e], elimLumps[e + 1]);
+        ss_.addIndependentEliminationFill(elimLumpRanges[0], elimLumpRanges[1]);
+    for (uint64_t e = 1; e < elimLumpRanges.size() - 1; e++) {
+        ss = ss.addIndependentEliminationFill(elimLumpRanges[e],
+                                              elimLumpRanges[e + 1]);
     }
 
-    uint64_t elimEnd = elimLumps[elimLumps.size() - 1];
+    uint64_t elimEnd = elimLumpRanges[elimLumpRanges.size() - 1];
     SparseStructure ssBottom = ss.extractRightBottom(elimEnd);
 
     // find best permutation for right-bottom corner that is left
@@ -309,7 +252,6 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
 
     // colStart are aggregate lump columns
     // ss last rows are to be permuted according to etTotalPerm
-    // TODO: optimize if slow
     vector<uint64_t> etTotalPerm = composePermutations(et.permInverse, invPerm);
     vector<uint64_t> fullInvPerm(elimEnd + etTotalPerm.size());
     iota(fullInvPerm.begin(), fullInvPerm.begin() + elimEnd, 0);
@@ -317,8 +259,9 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
         fullInvPerm[i + elimEnd] = elimEnd + etTotalPerm[i];
     }
     SparseStructure sortedSsT =
-        ss.symmetricPermutation(fullInvPerm, false).transpose(true);
+        ss.symmetricPermutation(fullInvPerm, false).transpose(false);
 
+    // fullColStart joining sortedSsT.ptrs + elimEndDataPtr (shifted)
     vector<uint64_t> fullColStart;
     fullColStart.reserve(elimEnd + et.colStart.size());
     fullColStart.insert(fullColStart.begin(), sortedSsT.ptrs.begin(),
@@ -329,6 +272,7 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
     }
     CHECK_EQ(fullColStart.size(), fullLumpToSpan.size());
 
+    // fullRowParam joining sortedSsT.inds and et.rowParam (moved)
     vector<uint64_t> fullRowParam;
     fullRowParam.reserve(elimEndDataPtr + et.rowParam.size());
     fullRowParam.insert(fullRowParam.begin(), sortedSsT.inds.begin(),
@@ -342,7 +286,7 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
                          fullRowParam);
 
     // find (additional) progressive Schur elimination sets
-    std::vector<uint64_t> elimLumpRanges = elimLumps;
+    std::vector<uint64_t> elimLumpRangesArg = elimLumpRanges;
     while (true) {
         uint64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
         auto [rangeEnd, hitSizeLimit] =
@@ -352,17 +296,16 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
         }
         LOG_IF(INFO, verbose)
             << "Adding indep set: " << rangeStart << ".." << rangeEnd << endl;
-        elimLumpRanges.push_back(rangeEnd);
+        elimLumpRangesArg.push_back(rangeEnd);
         if (hitSizeLimit) {
             break;
         }
     }
-    // LOG_IF(INFO, verbose) << "Ranges: " << printVec(elimLumpRanges);
-    if (elimLumpRanges.size() == 1) {
-        elimLumpRanges.pop_back();
+    if (elimLumpRangesArg.size() == 1) {
+        elimLumpRangesArg.pop_back();
     }
 
-    return SolverPtr(new Solver(move(skel), move(elimLumpRanges),
+    return SolverPtr(new Solver(move(skel), move(elimLumpRangesArg),
                                 blasOps()  // simpleOps()
                                 ));
 }
