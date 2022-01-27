@@ -288,18 +288,19 @@ struct SimpleOps : Ops {
         AssembleContext& ax = *pAx;
 
         ax.stride = m;
-        ax.tempBuffer.resize(m * n);
+        CHECK_LE(m * n, ax.tempBuffer.size());
         this->gemm(m, n, k, A, B, ax.tempBuffer.data());
     }
 
-    virtual OpaqueDataPtr createAssembleContext(
-        const OpaqueData& ref) override {
+    virtual OpaqueDataPtr createAssembleContext(const OpaqueData& ref,
+                                                uint64_t tempBufSize) override {
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         CHECK_NOTNULL(pSkel);
         const BlockMatrixSkel& skel = pSkel->skel;
         AssembleContext* ax = new AssembleContext;
         ax->paramToChainOffset.resize(skel.spanStart.size() - 1);
+        ax->tempBuffer.resize(tempBufSize);
         return OpaqueDataPtr(ax);
     }
 

@@ -9,7 +9,13 @@ struct Solver {
     Solver(BlockMatrixSkel&& skel, std::vector<uint64_t>&& elimLumpRanges,
            OpsPtr&& ops);
 
+    void initElimination();
+
+    uint64_t boardElimTempSize(uint64_t lump, uint64_t boardIndexInSN) const;
+
     void factor(double* data, bool verbose = false) const;
+
+    void factorXp(double* data, bool verbose = false) const;
 
     void factorLump(double* data, uint64_t lump) const;
 
@@ -22,6 +28,9 @@ struct Solver {
 
     OpaqueDataPtr opMatrixSkel;
     std::vector<OpaqueDataPtr> opElimination;
+
+    std::vector<uint64_t> startRowElimPtr;
+    uint64_t maxElimTempSize;
 };
 
 using SolverPtr = std::unique_ptr<Solver>;

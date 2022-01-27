@@ -37,7 +37,8 @@ struct Ops {
     virtual void gemmToTemp(OpaqueData& assCtx, uint64_t m, uint64_t n,
                             uint64_t k, const double* A, const double* B) = 0;
 
-    virtual OpaqueDataPtr createAssembleContext(const OpaqueData& skel) = 0;
+    virtual OpaqueDataPtr createAssembleContext(const OpaqueData& skel,
+                                                uint64_t tempBufSize) = 0;
 
     virtual void prepareAssembleContext(const OpaqueData& skel,
                                         OpaqueData& assCtx,

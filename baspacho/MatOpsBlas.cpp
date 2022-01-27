@@ -492,18 +492,19 @@ struct BlasOps : Ops {
         AssembleContext& ax = *pAx;
 
         ax.stride = m;
-        ax.tempBuffer.resize(m * n);
+        CHECK_LE(m * n, ax.tempBuffer.size());
         this->gemm(m, n, k, A, B, ax.tempBuffer.data());
     }
 
-    virtual OpaqueDataPtr createAssembleContext(
-        const OpaqueData& ref) override {
+    virtual OpaqueDataPtr createAssembleContext(const OpaqueData& ref,
+                                                uint64_t tempBufSize) override {
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         CHECK_NOTNULL(pSkel);
         const BlockMatrixSkel& skel = pSkel->skel;
         AssembleContext* ax = new AssembleContext;
         ax->paramToChainOffset.resize(skel.spanStart.size() - 1);
+        ax->tempBuffer.resize(tempBufSize);
         return OpaqueDataPtr(ax);
     }
 
@@ -548,6 +549,7 @@ struct BlasOps : Ops {
         uint64_t rectStride = ax.stride;
         const double* matRectPtr = ax.tempBuffer.data();
 
+#if 0
         dispenso::TaskSet taskSet(pSkel->threadPool);
         dispenso::parallel_for(
             taskSet, dispenso::makeChunkedRange(0, numBlockRows, 3UL),
@@ -576,6 +578,26 @@ struct BlasOps : Ops {
                     }
                 }
             });
+#else
+        for (uint64_t r = 0; r < numBlockRows; r++) {
+            uint64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
+            uint64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
+            uint64_t rParam = toSpan[r];
+            uint64_t rOffset = paramToChainOffset[rParam];
+            const double* matRowPtr = matRectPtr + rBegin * rectStride;
+
+            uint64_t cEnd = std::min(numBlockCols, r + 1);
+            for (uint64_t c = 0; c < cEnd; c++) {
+                uint64_t cStart = chainRowsTillEnd[c - 1] - rectRowBegin;
+                uint64_t cSize = chainRowsTillEnd[c] - cStart - rectRowBegin;
+                uint64_t offset = rOffset + spanOffsetInLump[toSpan[c]];
+
+                double* dst = data + offset;
+                const double* src = matRowPtr + cStart;
+                stridedMatSub(dst, dstStride, src, rectStride, rSize, cSize);
+            }
+        }
+#endif
 
         asmblLastCallTime = tdelta(hrc::now() - start).count();
         asmblCalls++;

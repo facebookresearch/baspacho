@@ -23,9 +23,8 @@ https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release 
 # -DBLA_VENDOR=Intel10_64ilp
-cmake --build build -v -- -j16
+cmake --build build -v -- -j16 && ctest --test-dir build
 ctest --test-dir build --show-only
-ctest --test-dir build
 
 cmake --build build -v -- -j16 SparseStructureTest && ctest --test-dir build -R SparseStructure
 cmake --build build -v -- -j16 BlockMatrixTest     && ctest --test-dir build -R BlockMatrix

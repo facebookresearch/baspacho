@@ -1,6 +1,7 @@
 
 #include "Solver.h"
 
+#include <dispenso/parallel_for.h>
 #include <glog/logging.h>
 
 #include <Eigen/Eigenvalues>
@@ -11,6 +12,8 @@
 #include "Utils.h"
 
 using namespace std;
+using hrc = chrono::high_resolution_clock;
+using tdelta = chrono::duration<double>;
 
 Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimLumpRanges_,
                OpsPtr&& ops_)
@@ -22,6 +25,8 @@ Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimLumpRanges_,
         opElimination.push_back(ops->prepareElimination(skel, elimLumpRanges[l],
                                                         elimLumpRanges[l + 1]));
     }
+
+    initElimination();
 }
 
 void Solver::factorLump(double* data, uint64_t lump) const {
@@ -50,6 +55,8 @@ void Solver::factorLump(double* data, uint64_t lump) const {
               data + belowDiagOffset);
 }
 
+bool printGemms = false;
+
 void Solver::eliminateBoard(double* data, uint64_t lump,
                             uint64_t boardIndexInSN, OpaqueData& ax) const {
     uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
@@ -73,6 +80,10 @@ void Solver::eliminateBoard(double* data, uint64_t lump,
     uint64_t numRowsFull =
         skel.chainRowsTillEnd[chainColBegin + rowDataEnd1 - 1] - rectRowBegin;
 
+    if (printGemms)
+        LOG(INFO) << "(" << numRowsSub << " x " << lumpSize << ") * ("
+                  << lumpSize << " x " << numRowsFull << ")";
+
     ops->gemmToTemp(ax, numRowsSub, numRowsFull, lumpSize,
                     data + belowDiagStart, data + belowDiagStart);
 
@@ -89,6 +100,141 @@ void Solver::eliminateBoard(double* data, uint64_t lump,
                   numBlockRows, numBlockCols);
 }
 
+uint64_t Solver::boardElimTempSize(uint64_t lump,
+                                   uint64_t boardIndexInSN) const {
+    uint64_t chainColBegin = skel.chainColPtr[lump];
+
+    uint64_t boardColBegin = skel.boardColPtr[lump];
+    uint64_t boardColEnd = skel.boardColPtr[lump + 1];
+
+    uint64_t belowDiagChainColOrd =
+        skel.boardChainColOrd[boardColBegin + boardIndexInSN];
+    uint64_t rowDataEnd0 =
+        skel.boardChainColOrd[boardColBegin + boardIndexInSN + 1];
+    uint64_t rowDataEnd1 = skel.boardChainColOrd[boardColEnd - 1];
+
+    uint64_t rectRowBegin =
+        skel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
+    uint64_t numRowsSub =
+        skel.chainRowsTillEnd[chainColBegin + rowDataEnd0 - 1] - rectRowBegin;
+    uint64_t numRowsFull =
+        skel.chainRowsTillEnd[chainColBegin + rowDataEnd1 - 1] - rectRowBegin;
+
+    return numRowsSub * numRowsFull;
+}
+
+void Solver::initElimination() {
+    uint64_t denseOpsFromLump =
+        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
+
+    startRowElimPtr.resize(skel.chainColPtr.size() - 1 - denseOpsFromLump);
+    maxElimTempSize = 0;
+    for (uint64_t l = denseOpsFromLump; l < skel.chainColPtr.size() - 1; l++) {
+        //  iterate over columns having a non-trivial a-block
+        uint64_t rPtr = skel.boardRowPtr[l];
+        uint64_t rEnd = skel.boardRowPtr[l + 1];
+        CHECK_EQ(skel.boardColLump[rEnd - 1], l);
+        while (skel.boardColLump[rPtr] < denseOpsFromLump) rPtr++;
+        CHECK_LT(rPtr, rEnd);  // will stop before end as l > denseOpsFromLump
+        startRowElimPtr[l - denseOpsFromLump] = rPtr;
+
+        for (uint64_t rPtr = startRowElimPtr[l - denseOpsFromLump],
+                      rEnd = skel.boardRowPtr[l + 1];     //
+             rPtr < rEnd && skel.boardColLump[rPtr] < l;  //
+             rPtr++) {
+            uint64_t origAggreg = skel.boardColLump[rPtr];
+            uint64_t boardIndexInSN = skel.boardColOrd[rPtr];
+            uint64_t boardSNDataStart = skel.boardColPtr[origAggreg];
+            uint64_t boardSNDataEnd = skel.boardColPtr[origAggreg + 1];
+            CHECK_LT(boardIndexInSN, boardSNDataEnd - boardSNDataStart);
+            CHECK_EQ(l, skel.boardRowLump[boardSNDataStart + boardIndexInSN]);
+            maxElimTempSize = max(
+                maxElimTempSize, boardElimTempSize(origAggreg, boardIndexInSN));
+        }
+    }
+}
+
+void Solver::factorXp(double* data, bool verbose) const {
+    for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+        LOG_IF(INFO, verbose) << "Elim set: " << l << " (" << elimLumpRanges[l]
+                              << ".." << elimLumpRanges[l + 1] << ")";
+        ops->doElimination(*opMatrixSkel, data, elimLumpRanges[l],
+                           elimLumpRanges[l + 1], *opElimination[l]);
+    }
+
+    uint64_t denseOpsFromLump =
+        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
+    LOG_IF(INFO, verbose) << "Block-Fact from: " << denseOpsFromLump;
+
+    OpaqueDataPtr ax =
+        ops->createAssembleContext(*opMatrixSkel, maxElimTempSize);
+    for (uint64_t l = denseOpsFromLump; l < skel.chainColPtr.size() - 1; l++) {
+        //  iterate over columns having a non-trivial a-block
+        uint64_t rPtr = startRowElimPtr[l - denseOpsFromLump],
+                 rEnd = skel.boardRowPtr[l + 1] - 1;  // skip last (diag block)
+        auto start = hrc::now();
+        double thTimes = 0, thInits = 0;
+        if (0 || rEnd - rPtr < 10) {
+            ops->prepareAssembleContext(*opMatrixSkel, *ax, l);
+            for (uint64_t ptr = rPtr; ptr < rEnd; ptr++) {
+                uint64_t origAggreg = skel.boardColLump[ptr];
+                uint64_t boardIndexInSN = skel.boardColOrd[ptr];
+                uint64_t boardSNDataStart = skel.boardColPtr[origAggreg];
+                uint64_t boardSNDataEnd = skel.boardColPtr[origAggreg + 1];
+                CHECK_LT(boardIndexInSN, boardSNDataEnd - boardSNDataStart);
+                CHECK_EQ(l,
+                         skel.boardRowLump[boardSNDataStart + boardIndexInSN]);
+                eliminateBoard(data, origAggreg, boardIndexInSN, *ax);
+            }
+        } else {
+            // LOG(INFO) << "start pool...";
+            vector<OpaqueDataPtr> contexts;
+            dispenso::TaskSet taskSet1(dispenso::globalThreadPool());
+            printGemms = true;
+            dispenso::parallel_for(
+                taskSet1, contexts,
+                [&]() -> OpaqueDataPtr {
+                    auto thStart = hrc::now();
+                    OpaqueDataPtr thAx = ops->createAssembleContext(
+                        *opMatrixSkel, maxElimTempSize);
+                    ops->prepareAssembleContext(*opMatrixSkel, *thAx, l);
+                    thInits += tdelta(hrc::now() - start).count();
+                    return thAx;
+                },
+                dispenso::makeChunkedRange(rPtr, rEnd, 1UL),
+                [&, this](OpaqueDataPtr& thAx, size_t rFrom, size_t rTo) {
+                    auto thStart = hrc::now();
+                    for (uint64_t ptr = rFrom; ptr < rTo; ptr++) {
+                        uint64_t origAggreg = skel.boardColLump[ptr];
+                        uint64_t boardIndexInSN = skel.boardColOrd[ptr];
+                        uint64_t boardSNDataStart =
+                            skel.boardColPtr[origAggreg];
+                        uint64_t boardSNDataEnd =
+                            skel.boardColPtr[origAggreg + 1];
+                        CHECK_LT(boardIndexInSN,
+                                 boardSNDataEnd - boardSNDataStart);
+                        CHECK_EQ(l, skel.boardRowLump[boardSNDataStart +
+                                                      boardIndexInSN]);
+                        eliminateBoard(data, origAggreg, boardIndexInSN, *thAx);
+                    }
+                    double delta = tdelta(hrc::now() - start).count();
+                    thTimes += delta;
+                    LOG(INFO) << "th." << rFrom << ".." << rTo << ": " << delta;
+                });
+            printGemms = false;
+            // LOG(INFO) << "pool worked!";
+        }
+        if (rEnd - rPtr >= 10) {
+            LOG(INFO) << "op (" << rEnd - rPtr
+                      << ") in: " << tdelta(hrc::now() - start).count() << "s"
+                      << " (thTimes: " << thTimes << ", thInits: " << thInits
+                      << ")";
+        }
+
+        factorLump(data, l);
+    }
+}
+
 void Solver::factor(double* data, bool verbose) const {
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
         LOG_IF(INFO, verbose) << "Elim set: " << l << " (" << elimLumpRanges[l]
@@ -101,19 +247,17 @@ void Solver::factor(double* data, bool verbose) const {
         elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
     LOG_IF(INFO, verbose) << "Block-Fact from: " << denseOpsFromLump;
 
-    OpaqueDataPtr ax = ops->createAssembleContext(*opMatrixSkel);
+    OpaqueDataPtr ax =
+        ops->createAssembleContext(*opMatrixSkel, maxElimTempSize);
     for (uint64_t l = denseOpsFromLump; l < skel.chainColPtr.size() - 1; l++) {
         ops->prepareAssembleContext(*opMatrixSkel, *ax, l);
 
         //  iterate over columns having a non-trivial a-block
-        for (uint64_t rPtr = skel.boardRowPtr[l],
-                      rEnd = skel.boardRowPtr[l + 1];     //
-             rPtr < rEnd && skel.boardColLump[rPtr] < l;  //
-             rPtr++) {
+        for (uint64_t
+                 rPtr = startRowElimPtr[l - denseOpsFromLump],
+                 rEnd = skel.boardRowPtr[l + 1] - 1;  // skip last (diag block)
+             rPtr < rEnd; rPtr++) {
             uint64_t origAggreg = skel.boardColLump[rPtr];
-            if (origAggreg < denseOpsFromLump) {
-                continue;
-            }
             uint64_t boardIndexInSN = skel.boardColOrd[rPtr];
             uint64_t boardSNDataStart = skel.boardColPtr[origAggreg];
             uint64_t boardSNDataEnd = skel.boardColPtr[origAggreg + 1];
