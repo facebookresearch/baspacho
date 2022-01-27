@@ -21,10 +21,15 @@ a few possibilities are:
 For the full list check CMake docs at:
 https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors
 
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release 
-# -DBLA_VENDOR=Intel10_64ilp
-cmake --build build -v -- -j16 && ctest --test-dir build
-ctest --test-dir build --show-only
+Configuring with system blas (eg OpenBLAS):
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release 
+Configuring with MKL:
+  . /opt/intel/oneapi/setvars.sh
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBLA_VENDOR=Intel10_64ilp
+Compiling and testing:
+  cmake --build build -v -- -j16 && ctest --test-dir build
+Show test:
+  ctest --test-dir build --show-only
 
 cmake --build build -v -- -j16 SparseStructureTest && ctest --test-dir build -R SparseStructure
 cmake --build build -v -- -j16 BlockMatrixTest     && ctest --test-dir build -R BlockMatrix

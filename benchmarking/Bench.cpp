@@ -136,6 +136,8 @@ struct BenchmarkSettings {
     int verbose = true;
     regex selectProblems = regex("");
     regex excludeProblems;
+    regex selectSolvers = regex("");
+    regex excludeSolvers;
     string referenceSolver;
 };
 
@@ -145,11 +147,19 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
             << "Solver '" << settings.referenceSolver
             << "' does not exist or not available at compile time";
     }
-    for (auto [probName, gen] : problemGenerators) {
-        if (!regex_search(probName, settings.selectProblems)) {
+    int numSolversToTest = 0;
+    for (auto [solvName, solv] : solvers) {
+        if (solvName != settings.referenceSolver &&
+            (!regex_search(solvName, settings.selectSolvers) ||
+             regex_search(solvName, settings.excludeSolvers))) {
             continue;
         }
-        if (regex_search(probName, settings.excludeProblems)) {
+        numSolversToTest++;
+    }
+
+    for (auto [probName, gen] : problemGenerators) {
+        if (!regex_search(probName, settings.selectProblems) ||
+            regex_search(probName, settings.excludeProblems)) {
             continue;
         }
 
@@ -161,6 +171,12 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
             SparseProblem prob = gen(seed + it * 1000000);
             int solvIdx = 1;
             for (auto [solvName, solv] : solvers) {
+                if (solvName != settings.referenceSolver &&
+                    (!regex_search(solvName, settings.selectSolvers) ||
+                     regex_search(solvName, settings.excludeSolvers))) {
+                    continue;
+                }
+
                 if (settings.verbose) {
                     cout << endl;
                 }
@@ -168,7 +184,7 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
                 stringstream ss;
                 ss << setfill('.') << setw(it + 1) << ""
                    << "(" << it + 1 << "/" << settings.numIterations << ", "
-                   << solvName << " " << solvIdx << "/" << solvers.size()
+                   << solvName << " " << solvIdx << "/" << numSolversToTest
                    << ")";
                 solvIdx++;
                 string str = ss.str();
@@ -285,7 +301,7 @@ void list() {
 
 int main(int argc, char* argv[]) {
     BenchmarkSettings settings;
-    settings.referenceSolver = "CHOLMOD";
+    // settings.referenceSolver = "CHOLMOD";
     settings.verbose = false;
 
     for (int i = 1; i < argc; i++) {
@@ -301,6 +317,10 @@ int main(int argc, char* argv[]) {
             settings.selectProblems = regex(argv[++i]);
         } else if (!strcmp(argv[i], "-X") && i < argc - 1) {
             settings.excludeProblems = regex(argv[++i]);
+        } else if (!strcmp(argv[i], "-S") && i < argc - 1) {
+            settings.selectSolvers = regex(argv[++i]);
+        } else if (!strcmp(argv[i], "-E") && i < argc - 1) {
+            settings.excludeSolvers = regex(argv[++i]);
         }
     }
 

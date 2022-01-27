@@ -8,6 +8,13 @@
 #include "MatOps.h"
 #include "Utils.h"
 
+#ifdef BASPACHO_USE_MKL
+
+#include "mkl.h"
+#define BLAS_INT MKL_INT
+
+#else
+
 // BLAS/LAPACK famously go without headers.
 extern "C" {
 
@@ -28,6 +35,8 @@ void dgemm_(char* transa, char* transb, BLAS_INT* m, BLAS_INT* n, BLAS_INT* k,
             double* alpha, double* A, BLAS_INT* lda, double* B, BLAS_INT* ldb,
             double* beta, double* C, BLAS_INT* ldc);
 }
+
+#endif
 
 using namespace std;
 using hrc = chrono::high_resolution_clock;
@@ -419,9 +428,12 @@ struct BlasOps : Ops {
         char argUpLo = 'U';
         BLAS_INT argN = n;
         BLAS_INT argLdA = n;
+#ifdef BASPACHO_USE_MKL
+        LAPACKE_dpotrf(LAPACK_COL_MAJOR, argUpLo, argN, A, argLdA);
+#else
         BLAS_INT info;
-
         dpotrf_(&argUpLo, &argN, A, &argLdA, &info);
+#endif
 
         potrfLastCallTime = tdelta(hrc::now() - start).count();
         potrfCalls++;
@@ -434,18 +446,23 @@ struct BlasOps : Ops {
                       double* B) override {
         auto start = hrc::now();
 
-        char argSide = 'L';
-        char argUpLo = 'U';
-        char argTransA = 'C';
-        char argDiag = 'N';
         BLAS_INT argM = n;
         BLAS_INT argN = k;
         double argAlpha = 1.0;
         BLAS_INT argLdA = n;
         BLAS_INT argLdB = n;
-
+#ifdef BASPACHO_USE_MKL
+        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
+                    CblasNonUnit, argM, argN, argAlpha, (double*)A, argLdA, B,
+                    argLdB);
+#else
+        char argSide = 'L';
+        char argUpLo = 'U';
+        char argTransA = 'C';
+        char argDiag = 'N';
         dtrsm_(&argSide, &argUpLo, &argTransA, &argDiag, &argM, &argN,
                &argAlpha, (double*)A, &argLdA, B, &argLdB);
+#endif
 
         trsmLastCallTime = tdelta(hrc::now() - start).count();
         trsmCalls++;
@@ -458,8 +475,6 @@ struct BlasOps : Ops {
                       const double* B, double* C) override {
         auto start = hrc::now();
 
-        char argTransA = 'C';
-        char argTransB = 'N';
         BLAS_INT argM = m;
         BLAS_INT argN = n;
         BLAS_INT argK = k;
@@ -468,9 +483,16 @@ struct BlasOps : Ops {
         BLAS_INT argLdB = k;
         double argBeta = 0.0;
         BLAS_INT argLdC = m;
-
+#ifdef BASPACHO_USE_MKL
+        cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, argM, argN,
+                    argK, argAlpha, (double*)A, argLdA, (double*)B, argLdB,
+                    argBeta, C, argLdC);
+#else
+        char argTransA = 'C';
+        char argTransB = 'N';
         dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha,
                (double*)A, &argLdA, (double*)B, &argLdB, &argBeta, C, &argLdC);
+#endif
 
         gemmLastCallTime = tdelta(hrc::now() - start).count();
         gemmCalls++;

@@ -15,6 +15,12 @@ message("BLA_VENDOR = " ${BLA_VENDOR})
 find_package(BLAS REQUIRED)
 message("BLAS linkerFlags = " ${BLAS_LINKER_FLAGS})
 message("BLAS Libraries = " ${BLAS_LIBRARIES})
+if(BLA_VENDOR MATCHES "Intel10_*")
+  message("BLAS appears to be MKL, MKL_ROOT should be set")
+  message("Adding includes:" $ENV{MKLROOT}/include)
+  include_directories($ENV{MKLROOT}/include) # if MKL
+  add_compile_definitions(BASPACHO_USE_MKL)
+endif()
 
 
 # cholmod (for benchmarking comparison)
