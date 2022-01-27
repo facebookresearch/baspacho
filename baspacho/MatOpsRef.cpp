@@ -10,57 +10,10 @@ using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
-static void factorLump(const BlockMatrixSkel& skel, double* data,
-                       uint64_t lump) {
-    uint64_t lumpStart = skel.lumpStart[lump];
-    uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
-    uint64_t colStart = skel.chainColPtr[lump];
-    uint64_t dataPtr = skel.chainData[colStart];
-
-    // compute lower diag cholesky dec on diagonal block
-    Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, lumpSize, lumpSize);
-    { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
-    uint64_t gatheredStart = skel.boardColPtr[lump];
-    uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
-    uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + 1];
-    uint64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
-    uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
-    uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
-                       skel.chainRowsTillEnd[colStart + rowDataStart - 1];
-
-    Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart, numRows,
-                                               lumpSize);
-    diagBlock.triangularView<Eigen::Lower>()
-        .transpose()
-        .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
-}
-
-static void prepareContextForTargetLump(const BlockMatrixSkel& skel,
-                                        uint64_t targetLump,
-                                        vector<uint64_t>& spanToChainOffset) {
-    spanToChainOffset.assign(skel.spanStart.size() - 1, kInvalid);
-    for (uint64_t i = skel.chainColPtr[targetLump],
-                  iEnd = skel.chainColPtr[targetLump + 1];
-         i < iEnd; i++) {
-        spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
-    }
-}
-
 using OuterStride = Eigen::OuterStride<>;
 using OuterStridedMatM = Eigen::Map<
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
     OuterStride>;
-
-inline void stridedMatSub(double* dst, uint64_t dstStride, const double* src,
-                          uint64_t srcStride, uint64_t rSize, uint64_t cSize) {
-    for (uint j = 0; j < rSize; j++) {
-        for (uint i = 0; i < cSize; i++) {
-            dst[i] -= src[i];
-        }
-        dst += dstStride;
-        src += srcStride;
-    }
-}
 
 // simple ops implemented using Eigen (therefore single thread)
 struct SimpleOps : Ops {
@@ -71,23 +24,68 @@ struct SimpleOps : Ops {
         const BlockMatrixSkel& skel;
     };
 
-    virtual void printStats() const override {
-        LOG(INFO) << "matOp stats:"
-                  << "\nBiggest dense block: " << potrfBiggestN
-                  << "\npotrf: #=" << potrfCalls << ", time=" << potrfTotTime
-                  << "s, last=" << potrfLastCallTime
-                  << "s, max=" << potrfMaxCallTime << "s"
-                  << "\ntrsm: #=" << trsmCalls << ", time=" << trsmTotTime
-                  << "s, last=" << trsmLastCallTime
-                  << "s, max=" << trsmMaxCallTime << "s"
-                  << "\ngemm: #=" << gemmCalls << ", time=" << gemmTotTime
-                  << "s, last=" << gemmLastCallTime
-                  << "s, max=" << gemmMaxCallTime << "s";
-    }
-
     virtual OpaqueDataPtr prepareMatrixSkel(
         const BlockMatrixSkel& skel) override {
         return OpaqueDataPtr(new OpaqueDataMatrixSkel(skel));
+    }
+
+    virtual void printStats() const override {
+        LOG(INFO) << "matOp stats:"
+                  << "\nelim: " << elimStat.toString()
+                  << "\nBiggest dense block: " << potrfBiggestN
+                  << "\npotrf: " << potrfStat.toString()
+                  << "\ntrsm: " << trsmStat.toString()  //
+                  << "\nsyrk/gemm: " << sygeStat.toString()
+                  << "\nasmbl: " << asmblStat.toString();
+    }
+
+    static void factorLump(const BlockMatrixSkel& skel, double* data,
+                           uint64_t lump) {
+        uint64_t lumpStart = skel.lumpStart[lump];
+        uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+        uint64_t colStart = skel.chainColPtr[lump];
+        uint64_t dataPtr = skel.chainData[colStart];
+
+        // compute lower diag cholesky dec on diagonal block
+        Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, lumpSize,
+                                              lumpSize);
+        { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
+        uint64_t gatheredStart = skel.boardColPtr[lump];
+        uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
+        uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + 1];
+        uint64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
+        uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
+        uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
+                           skel.chainRowsTillEnd[colStart + rowDataStart - 1];
+
+        Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart,
+                                                   numRows, lumpSize);
+        diagBlock.triangularView<Eigen::Lower>()
+            .transpose()
+            .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
+    }
+
+    static void prepareContextForTargetLump(
+        const BlockMatrixSkel& skel, uint64_t targetLump,
+        vector<uint64_t>& spanToChainOffset) {
+        spanToChainOffset.assign(skel.spanStart.size() - 1, kInvalid);
+        for (uint64_t i = skel.chainColPtr[targetLump],
+                      iEnd = skel.chainColPtr[targetLump + 1];
+             i < iEnd; i++) {
+            spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
+        }
+    }
+
+    static inline void stridedMatSub(double* dst, uint64_t dstStride,
+                                     const double* src, uint64_t srcStride,
+                                     uint64_t rSize, uint64_t cSize) {
+        for (uint j = 0; j < rSize; j++) {
+            for (uint i = 0; i < cSize; i++) {
+                dst[i] -= src[i];
+            }
+            dst += dstStride;
+            src += srcStride;
+        }
     }
 
     struct OpaqueDataElimData : OpaqueData {
@@ -147,6 +145,7 @@ struct SimpleOps : Ops {
     virtual void doElimination(const OpaqueData& ref, double* data,
                                uint64_t lumpsBegin, uint64_t lumpsEnd,
                                const OpaqueData& elimData) override {
+        OpInstance timer(elimStat);
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         const OpaqueDataElimData* pElim =
@@ -227,21 +226,17 @@ struct SimpleOps : Ops {
     }
 
     virtual void potrf(uint64_t n, double* A) override {
-        auto start = hrc::now();
+        OpInstance timer(potrfStat);
 
         Eigen::Map<MatRMaj<double>> matA(A, n, n);
         Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(matA);
 
-        potrfLastCallTime = tdelta(hrc::now() - start).count();
-        potrfCalls++;
-        potrfTotTime += potrfLastCallTime;
-        potrfMaxCallTime = std::max(potrfMaxCallTime, potrfLastCallTime);
         potrfBiggestN = std::max(potrfBiggestN, n);
     }
 
     virtual void trsm(uint64_t n, uint64_t k, const double* A,
                       double* B) override {
-        auto start = hrc::now();
+        OpInstance timer(trsmStat);
 
         using MatCMajD = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
                                        Eigen::ColMajor>;
@@ -251,27 +246,6 @@ struct SimpleOps : Ops {
         Eigen::Map<MatRMaj<double>> matB(B, k, n);
         matA.triangularView<Eigen::Upper>().solveInPlace<Eigen::OnTheRight>(
             matB);
-
-        trsmLastCallTime = tdelta(hrc::now() - start).count();
-        trsmCalls++;
-        trsmTotTime += trsmLastCallTime;
-        trsmMaxCallTime = std::max(trsmMaxCallTime, trsmLastCallTime);
-    }
-
-    // C = A * B'
-    virtual void gemm(uint64_t m, uint64_t n, uint64_t k, const double* A,
-                      const double* B, double* C) override {
-        auto start = hrc::now();
-
-        Eigen::Map<const MatRMaj<double>> matA(A, m, k);
-        Eigen::Map<const MatRMaj<double>> matB(B, n, k);
-        Eigen::Map<MatRMaj<double>> matC(C, n, m);
-        matC = matB * matA.transpose();
-
-        gemmLastCallTime = tdelta(hrc::now() - start).count();
-        gemmCalls++;
-        gemmTotTime += gemmLastCallTime;
-        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
     }
 
     struct AssembleContext : OpaqueData {
@@ -280,40 +254,21 @@ struct SimpleOps : Ops {
         std::vector<double> tempBuffer;
     };
 
-    virtual void gemmToTemp(OpaqueData& assCtx, uint64_t m, uint64_t n,
-                            uint64_t k, const double* A,
-                            const double* B) override {
-        AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pAx);
-        AssembleContext& ax = *pAx;
-
-        ax.stride = m;
-        CHECK_LE(m * n, ax.tempBuffer.size());
-        this->gemm(m, n, k, A, B, ax.tempBuffer.data());
-    }
-
     virtual void saveSyrkGemm(OpaqueData& assCtx, uint64_t m, uint64_t n,
                               uint64_t k, const double* data,
                               uint64_t offset) override {
+        OpInstance timer(sygeStat);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
         CHECK_NOTNULL(pAx);
         AssembleContext& ax = *pAx;
-
         CHECK_LE(m * n, ax.tempBuffer.size());
-
-        auto start = hrc::now();
 
         const double* AB = data + offset;
         double* C = ax.tempBuffer.data();
         Eigen::Map<const MatRMaj<double>> matA(AB, m, k);
         Eigen::Map<const MatRMaj<double>> matB(AB, n, k);
         Eigen::Map<MatRMaj<double>> matC(C, n, m);
-        matC = matB * matA.transpose();
-
-        gemmLastCallTime = tdelta(hrc::now() - start).count();
-        gemmCalls++;
-        gemmTotTime += gemmLastCallTime;
-        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
+        matC.noalias() = matB * matA.transpose();
     }
 
     virtual void saveSyrkGemmBatched(OpaqueData& assCtx, uint64_t* ms,
@@ -361,7 +316,7 @@ struct SimpleOps : Ops {
                           uint64_t numBlockRows, uint64_t numBlockCols,
                           int numBatch = -1) override {
         CHECK_EQ(numBatch, -1) << "Batching not supported";
-        auto start = hrc::now();
+        OpInstance timer(asmblStat);
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         const AssembleContext* pAx =
@@ -396,30 +351,14 @@ struct SimpleOps : Ops {
                 stridedMatSub(dst, dstStride, src, srcRectWidth, rSize, cSize);
             }
         }
-
-        asmblLastCallTime = tdelta(hrc::now() - start).count();
-        asmblCalls++;
-        asmblTotTime += asmblLastCallTime;
-        asmblMaxCallTime = std::max(asmblMaxCallTime, asmblLastCallTime);
     }
 
+    OpStat elimStat;
+    OpStat potrfStat;
     uint64_t potrfBiggestN = 0;
-    uint64_t potrfCalls = 0;
-    double potrfTotTime = 0.0;
-    double potrfLastCallTime;
-    double potrfMaxCallTime = 0.0;
-    uint64_t trsmCalls = 0;
-    double trsmTotTime = 0.0;
-    double trsmLastCallTime;
-    double trsmMaxCallTime = 0.0;
-    uint64_t gemmCalls = 0;
-    double gemmTotTime = 0.0;
-    double gemmLastCallTime;
-    double gemmMaxCallTime = 0.0;
-    uint64_t asmblCalls = 0;
-    double asmblTotTime = 0.0;
-    double asmblLastCallTime;
-    double asmblMaxCallTime = 0.0;
+    OpStat trsmStat;
+    OpStat sygeStat;
+    OpStat asmblStat;
 };
 
 OpsPtr simpleOps() { return OpsPtr(new SimpleOps); }

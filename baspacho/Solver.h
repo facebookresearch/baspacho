@@ -5,6 +5,10 @@
 #include "MatOps.h"
 #include "SparseStructure.h"
 
+struct Settings {
+    bool findSparseEliminationRanges = true;
+};
+
 struct Solver {
     Solver(BlockMatrixSkel&& skel, std::vector<uint64_t>&& elimLumpRanges,
            OpsPtr&& ops);
@@ -39,10 +43,12 @@ struct Solver {
 
 using SolverPtr = std::unique_ptr<Solver>;
 
-SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
+SolverPtr createSolver(const Settings& settings,
+                       const std::vector<uint64_t>& paramSize,
                        const SparseStructure& ss, bool verbose = false);
 
-SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
+SolverPtr createSolverSchur(const Settings& settings,
+                            const std::vector<uint64_t>& paramSize,
                             const SparseStructure& ss,
                             const std::vector<uint64_t>& elimLumpRanges,
                             bool verbose = false);

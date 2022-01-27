@@ -25,15 +25,22 @@ extern "C" {
 #define BLAS_INT int
 #endif
 
-void dpotrf_(char* uplo, BLAS_INT* n, double* A, BLAS_INT* lda, BLAS_INT* info);
+void dpotrf_(const char* uplo, BLAS_INT* n, double* A, BLAS_INT* lda,
+             BLAS_INT* info);
 
-void dtrsm_(char* side, char* uplo, char* transa, char* diag, BLAS_INT* m,
-            BLAS_INT* n, double* alpha, double* A, BLAS_INT* lda, double* B,
-            BLAS_INT* ldb);
+void dtrsm_(const char* side, const char* uplo, const char* transa, char* diag,
+            BLAS_INT* m, BLAS_INT* n, const double* alpha, const double* A,
+            BLAS_INT* lda, double* B, BLAS_INT* ldb);
 
-void dgemm_(char* transa, char* transb, BLAS_INT* m, BLAS_INT* n, BLAS_INT* k,
-            double* alpha, double* A, BLAS_INT* lda, double* B, BLAS_INT* ldb,
-            double* beta, double* C, BLAS_INT* ldc);
+void dgemm_(const char* transa, const char* transb, BLAS_INT* m, BLAS_INT* n,
+            BLAS_INT* k, const double* alpha, const double* A, BLAS_INT* lda,
+            const double* B, BLAS_INT* ldb, const double* beta, double* C,
+            BLAS_INT* ldc);
+
+void dsyrk_(const char* uplo, const char* transa, const BLAS_INT* n,
+            const BLAS_INT* k, const double* alpha, const double* A,
+            const BLAS_INT* lda, const double* beta, double* C,
+            const BLAS_INT* ldc);
 }
 
 #endif
@@ -41,44 +48,6 @@ void dgemm_(char* transa, char* transb, BLAS_INT* m, BLAS_INT* n, BLAS_INT* k,
 using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
-
-// helper for elimination
-static void factorLump(const BlockMatrixSkel& skel, double* data,
-                       uint64_t lump) {
-    uint64_t lumpStart = skel.lumpStart[lump];
-    uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
-    uint64_t colStart = skel.chainColPtr[lump];
-    uint64_t dataPtr = skel.chainData[colStart];
-
-    // compute lower diag cholesky dec on diagonal block
-    Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, lumpSize, lumpSize);
-    { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
-
-    uint64_t gatheredStart = skel.boardColPtr[lump];
-    uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
-    uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + 1];
-    uint64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
-    uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
-    uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
-                       skel.chainRowsTillEnd[colStart + rowDataStart - 1];
-
-    Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart, numRows,
-                                               lumpSize);
-    diagBlock.triangularView<Eigen::Lower>()
-        .transpose()
-        .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
-}
-
-inline void stridedMatSub(double* dst, uint64_t dstStride, const double* src,
-                          uint64_t srcStride, uint64_t rSize, uint64_t cSize) {
-    for (uint j = 0; j < rSize; j++) {
-        for (uint i = 0; i < cSize; i++) {
-            dst[i] -= src[i];
-        }
-        dst += dstStride;
-        src += srcStride;
-    }
-}
 
 struct BlasOps : Ops {
     // will just contain a reference to the skel
@@ -94,22 +63,13 @@ struct BlasOps : Ops {
 
     virtual void printStats() const override {
         LOG(INFO) << "matOp stats:"
-                  << "\nelim: #=" << elimCalls << ", time=" << elimTotTime
-                  << "s, last=" << elimLastCallTime
-                  << "s, max=" << elimMaxCallTime << "s"
+                  << "\nelim: " << elimStat.toString()
                   << "\nBiggest dense block: " << potrfBiggestN
-                  << "\npotrf: #=" << potrfCalls << ", time=" << potrfTotTime
-                  << "s, last=" << potrfLastCallTime
-                  << "s, max=" << potrfMaxCallTime << "s"
-                  << "\ntrsm: #=" << trsmCalls << ", time=" << trsmTotTime
-                  << "s, last=" << trsmLastCallTime
-                  << "s, max=" << trsmMaxCallTime << "s"
-                  << "\ngemm: #=" << gemmCalls << ", time=" << gemmTotTime
-                  << "s, last=" << gemmLastCallTime
-                  << "s, max=" << gemmMaxCallTime << "s"
-                  << "\nasmbl: #=" << asmblCalls << ", time=" << asmblTotTime
-                  << "s, last=" << asmblLastCallTime
-                  << "s, max=" << asmblMaxCallTime << "s";
+                  << "\npotrf: " << potrfStat.toString()
+                  << "\ntrsm: " << trsmStat.toString()  //
+                  << "\nsyrk/gemm(" << syrkCalls << "+" << gemmCalls
+                  << "): " << sygeStat.toString()
+                  << "\nasmbl: " << asmblStat.toString();
     }
 
     virtual OpaqueDataPtr prepareMatrixSkel(
@@ -176,13 +136,7 @@ struct BlasOps : Ops {
                 elim->rowPtr[sRel]++;
             }
         }
-        /*size_t empty = 0;
-        for (int64_t q = 0; q < numSpanRows; q++) {
-            empty += !elim->rowPtr[q];
-        }*/
         uint64_t totNumChains = cumSumVec(elim->rowPtr);
-        // LOG(INFO) << "Empty rows: " << empty << " / " << numSpanRows
-        //          << ", to elim " << totNumChains << " blocks";
         elim->colLump.resize(totNumChains);
         elim->chainColOrd.resize(totNumChains);
         for (uint64_t l = lumpsBegin; l < lumpsEnd; l++) {
@@ -217,11 +171,49 @@ struct BlasOps : Ops {
             : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
     };
 
+    // helper for elimination
+    static void factorLump(const BlockMatrixSkel& skel, double* data,
+                           uint64_t lump) {
+        uint64_t lumpStart = skel.lumpStart[lump];
+        uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+        uint64_t colStart = skel.chainColPtr[lump];
+        uint64_t dataPtr = skel.chainData[colStart];
+
+        // compute lower diag cholesky dec on diagonal block
+        Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, lumpSize,
+                                              lumpSize);
+        { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
+
+        uint64_t gatheredStart = skel.boardColPtr[lump];
+        uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
+        uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + 1];
+        uint64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
+        uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
+        uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
+                           skel.chainRowsTillEnd[colStart + rowDataStart - 1];
+
+        Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart,
+                                                   numRows, lumpSize);
+        diagBlock.triangularView<Eigen::Lower>()
+            .transpose()
+            .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
+    }
+
+    static inline void stridedMatSub(double* dst, uint64_t dstStride,
+                                     const double* src, uint64_t srcStride,
+                                     uint64_t rSize, uint64_t cSize) {
+        for (uint j = 0; j < rSize; j++) {
+            for (uint i = 0; i < cSize; i++) {
+                dst[i] -= src[i];
+            }
+            dst += dstStride;
+            src += srcStride;
+        }
+    }
+
     static void prepareContextForTargetLump(
         const BlockMatrixSkel& skel, uint64_t targetLump,
         vector<uint64_t>& spanToChainOffset) {
-        // incomment below if check is needed
-        // spanToChainOffset.assign(skel.spanStart.size() - 1, kInvalid);
         for (uint64_t i = skel.chainColPtr[targetLump],
                       iEnd = skel.chainColPtr[targetLump + 1];
              i < iEnd; i++) {
@@ -370,7 +362,7 @@ struct BlasOps : Ops {
     virtual void doElimination(const OpaqueData& ref, double* data,
                                uint64_t lumpsBegin, uint64_t lumpsEnd,
                                const OpaqueData& elimData) override {
-        auto start = hrc::now();
+        OpInstance timer(elimStat);
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         const OpaqueDataElimData* pElim =
@@ -415,16 +407,10 @@ struct BlasOps : Ops {
                     }
                 });
         }
-
-        elimLastCallTime = tdelta(hrc::now() - start).count();
-        elimCalls++;
-        elimTotTime += elimLastCallTime;
-        elimMaxCallTime = std::max(elimMaxCallTime, elimLastCallTime);
     }
 
     virtual void potrf(uint64_t n, double* A) override {
-        auto start = hrc::now();
-
+        OpInstance timer(potrfStat);
         char argUpLo = 'U';
         BLAS_INT argN = n;
         BLAS_INT argLdA = n;
@@ -434,17 +420,31 @@ struct BlasOps : Ops {
         BLAS_INT info;
         dpotrf_(&argUpLo, &argN, A, &argLdA, &info);
 #endif
-
-        potrfLastCallTime = tdelta(hrc::now() - start).count();
-        potrfCalls++;
-        potrfTotTime += potrfLastCallTime;
-        potrfMaxCallTime = std::max(potrfMaxCallTime, potrfLastCallTime);
-        potrfBiggestN = std::max(potrfBiggestN, n);
     }
 
     virtual void trsm(uint64_t n, uint64_t k, const double* A,
                       double* B) override {
-        auto start = hrc::now();
+        OpInstance timer(trsmStat);
+
+        // TSRM should be fast but appears very slow in OpenBLAS
+        static constexpr bool slowTrsmWorkaround = true;
+        if (slowTrsmWorkaround) {
+            using MatCMajD = Eigen::Matrix<double, Eigen::Dynamic,
+                                           Eigen::Dynamic, Eigen::ColMajor>;
+
+            // col-major's upper = (row-major's lower).transpose()
+            Eigen::Map<const MatCMajD> matA(A, n, n);
+            dispenso::TaskSet taskSet(dispenso::globalThreadPool());
+            dispenso::parallel_for(
+                taskSet,                                 //
+                dispenso::makeChunkedRange(0, k, 16UL),  //
+                [&](int64_t k1, int64_t k2) {
+                    Eigen::Map<MatRMaj<double>> matB(B + n * k1, k2 - k1, n);
+                    matA.triangularView<Eigen::Upper>()
+                        .solveInPlace<Eigen::OnTheRight>(matB);
+                });
+            return;
+        }
 
         BLAS_INT argM = n;
         BLAS_INT argN = k;
@@ -463,18 +463,11 @@ struct BlasOps : Ops {
         dtrsm_(&argSide, &argUpLo, &argTransA, &argDiag, &argM, &argN,
                &argAlpha, (double*)A, &argLdA, B, &argLdB);
 #endif
-
-        trsmLastCallTime = tdelta(hrc::now() - start).count();
-        trsmCalls++;
-        trsmTotTime += trsmLastCallTime;
-        trsmMaxCallTime = std::max(trsmMaxCallTime, trsmLastCallTime);
     }
 
     // C = A * B'
-    virtual void gemm(uint64_t m, uint64_t n, uint64_t k, const double* A,
-                      const double* B, double* C) override {
-        auto start = hrc::now();
-
+    /*static void gemm(uint64_t m, uint64_t n, uint64_t k, const double* A,
+                     const double* B, double* C) {
         BLAS_INT argM = m;
         BLAS_INT argN = n;
         BLAS_INT argK = k;
@@ -493,12 +486,7 @@ struct BlasOps : Ops {
         dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha,
                (double*)A, &argLdA, (double*)B, &argLdB, &argBeta, C, &argLdC);
 #endif
-
-        gemmLastCallTime = tdelta(hrc::now() - start).count();
-        gemmCalls++;
-        gemmTotTime += gemmLastCallTime;
-        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
-    }
+    }*/
 
     struct AssembleContext : OpaqueData {
         std::vector<uint64_t> paramToChainOffset;
@@ -511,54 +499,69 @@ struct BlasOps : Ops {
 #endif
     };
 
-    virtual void gemmToTemp(OpaqueData& assCtx, uint64_t m, uint64_t n,
-                            uint64_t k, const double* A,
-                            const double* B) override {
-        AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pAx);
-        AssembleContext& ax = *pAx;
-
-        CHECK_LE(m * n, ax.tempBuffer.size());
-        this->gemm(m, n, k, A, B, ax.tempBuffer.data());
-    }
-
     virtual void saveSyrkGemm(OpaqueData& assCtx, uint64_t m, uint64_t n,
                               uint64_t k, const double* data,
                               uint64_t offset) override {
+        OpInstance timer(sygeStat);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
         CHECK_NOTNULL(pAx);
         AssembleContext& ax = *pAx;
-
         CHECK_LE(m * n, ax.tempBuffer.size());
 
-        auto start = hrc::now();
+        // in some cases it could be faster with syrk+gemm
+        // as it saves some computation, not the case in practice
+        bool doSyrk = (m == n) || (m + n + k > 150);
+        bool doGemm = !(doSyrk && m == n);
 
-        BLAS_INT argM = m;
-        BLAS_INT argN = n;
-        BLAS_INT argK = k;
-        double argAlpha = 1.0;
-        double* argA = (double*)data + offset;
-        BLAS_INT argLdA = k;
-        double* argB = (double*)data + offset;
-        BLAS_INT argLdB = k;
-        double argBeta = 0.0;
-        double* argC = ax.tempBuffer.data();
-        BLAS_INT argLdC = m;
+        if (doSyrk) {
+            BLAS_INT argN = m;
+            BLAS_INT argK = k;
+            double argAlpha = 1.0;
+            double* argA = (double*)data + offset;
+            BLAS_INT argLdA = k;
+            double argBeta = 0.0;
+            double* argC = ax.tempBuffer.data();
+            BLAS_INT argLdC = m;
 #ifdef BASPACHO_USE_MKL
-        cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, argM, argN,
-                    argK, argAlpha, argA, argLdA, argB, argLdB, argBeta, argC,
-                    argLdC);
+            cblas_dsyrk(CblasColMajor, CblasUpper, CblasTrans, argN, argK,
+                        argAlpha, argA, argLdA, argBeta, argC, argLdC);
 #else
-        char argTransA = 'C';
-        char argTransB = 'N';
-        dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha, argA,
-               &argLdA, argB, &argLdB, &argBeta, argC, &argLdC);
+            char argUpLo = 'U';
+            char argTransA = 'C';
+            // LOG(INFO) << argLdA << ", " << argBeta << ", " << argLdC;
+            dsyrk_(&argUpLo, &argTransA, &argN, &argK, &argAlpha, argA, &argLdA,
+                   &argBeta, argC, &argLdC);
 #endif
+            syrkCalls++;
+        }
 
-        gemmLastCallTime = tdelta(hrc::now() - start).count();
-        gemmCalls++;
-        gemmTotTime += gemmLastCallTime;
-        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
+        if (doGemm) {
+            uint64_t gemmStart = doSyrk ? m : 0;
+            uint64_t gemmInOffset = doSyrk ? m * k : 0;
+            uint64_t gemmOutOffset = doSyrk ? m * m : 0;
+            BLAS_INT argM = m;
+            BLAS_INT argN = n - gemmStart;
+            BLAS_INT argK = k;
+            double argAlpha = 1.0;
+            double* argA = (double*)data + offset;
+            BLAS_INT argLdA = k;
+            double* argB = (double*)data + offset + gemmInOffset;
+            BLAS_INT argLdB = k;
+            double argBeta = 0.0;
+            double* argC = ax.tempBuffer.data() + gemmOutOffset;
+            BLAS_INT argLdC = m;
+#ifdef BASPACHO_USE_MKL
+            cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, argM, argN,
+                        argK, argAlpha, argA, argLdA, argB, argLdB, argBeta,
+                        argC, argLdC);
+#else
+            char argTransA = 'C';
+            char argTransB = 'N';
+            dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha, argA,
+                   &argLdA, argB, &argLdB, &argBeta, argC, &argLdC);
+#endif
+            gemmCalls++;
+        }
     }
 
     // computes (A|B) * A', upper diag part doesn't matter
@@ -569,7 +572,7 @@ struct BlasOps : Ops {
 #ifndef BASPACHO_USE_MKL
         LOG(FATAL) << "Batching not supported";
 #else
-        auto start = hrc::now();
+        OpInstance timer(sygeStat);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
         CHECK_NOTNULL(pAx);
         AssembleContext& ax = *pAx;
@@ -626,11 +629,7 @@ struct BlasOps : Ops {
         cblas_dgemm_batch(CblasColMajor, argTransAs, argTransBs, argMs, argNs,
                           argKs, argAlphas, argAs, argLdAs, argAs, argLdBs,
                           argBetas, argCs, argLdCs, argNumGroups, argGroupSize);
-
-        gemmLastCallTime = tdelta(hrc::now() - start).count();
         gemmCalls++;
-        gemmTotTime += gemmLastCallTime;
-        gemmMaxCallTime = std::max(gemmMaxCallTime, gemmLastCallTime);
 #endif
     }
 
@@ -678,7 +677,7 @@ struct BlasOps : Ops {
                           uint64_t srcColDataOffset, uint64_t srcRectWidth,
                           uint64_t numBlockRows, uint64_t numBlockCols,
                           int numBatch = -1) override {
-        auto start = hrc::now();
+        OpInstance timer(asmblStat);
         const OpaqueDataMatrixSkel* pSkel =
             dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
         const AssembleContext* pAx =
@@ -702,13 +701,31 @@ struct BlasOps : Ops {
         const double* matRectPtr = ax.tempBuffer.data();
 #endif
 
-#if 1
+        // non-threaded reference implementation:
+        /* for (uint64_t r = 0; r < numBlockRows; r++) {
+            uint64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
+            uint64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
+            uint64_t rParam = toSpan[r];
+            uint64_t rOffset = paramToChainOffset[rParam];
+            const double* matRowPtr = matRectPtr + rBegin * srcRectWidth;
+
+            uint64_t cEnd = std::min(numBlockCols, r + 1);
+            for (uint64_t c = 0; c < cEnd; c++) {
+                uint64_t cStart = chainRowsTillEnd[c - 1] - rectRowBegin;
+                uint64_t cSize = chainRowsTillEnd[c] - cStart - rectRowBegin;
+                uint64_t offset = rOffset + spanOffsetInLump[toSpan[c]];
+
+                double* dst = data + offset;
+                const double* src = matRowPtr + cStart;
+                stridedMatSub(dst, dstStride, src, srcRectWidth, rSize, cSize);
+            }
+        }*/
+
         dispenso::TaskSet taskSet(pSkel->threadPool);
         dispenso::parallel_for(
             taskSet, dispenso::makeChunkedRange(0, numBlockRows, 3UL),
             [&](int64_t rFrom, int64_t rTo) {
                 for (uint64_t r = rFrom; r < rTo; r++) {
-                    // for (uint64_t r = 0; r < numBlockRows; r++) {
                     uint64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
                     uint64_t rSize =
                         chainRowsTillEnd[r] - rBegin - rectRowBegin;
@@ -732,54 +749,16 @@ struct BlasOps : Ops {
                     }
                 }
             });
-#else
-        for (uint64_t r = 0; r < numBlockRows; r++) {
-            uint64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
-            uint64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
-            uint64_t rParam = toSpan[r];
-            uint64_t rOffset = paramToChainOffset[rParam];
-            const double* matRowPtr = matRectPtr + rBegin * srcRectWidth;
-
-            uint64_t cEnd = std::min(numBlockCols, r + 1);
-            for (uint64_t c = 0; c < cEnd; c++) {
-                uint64_t cStart = chainRowsTillEnd[c - 1] - rectRowBegin;
-                uint64_t cSize = chainRowsTillEnd[c] - cStart - rectRowBegin;
-                uint64_t offset = rOffset + spanOffsetInLump[toSpan[c]];
-
-                double* dst = data + offset;
-                const double* src = matRowPtr + cStart;
-                stridedMatSub(dst, dstStride, src, srcRectWidth, rSize, cSize);
-            }
-        }
-#endif
-
-        asmblLastCallTime = tdelta(hrc::now() - start).count();
-        asmblCalls++;
-        asmblTotTime += asmblLastCallTime;
-        asmblMaxCallTime = std::max(asmblMaxCallTime, asmblLastCallTime);
     }
 
-    uint64_t elimCalls = 0;
-    double elimTotTime = 0.0;
-    double elimLastCallTime;
-    double elimMaxCallTime = 0.0;
+    OpStat elimStat;
+    OpStat potrfStat;
     uint64_t potrfBiggestN = 0;
-    uint64_t potrfCalls = 0;
-    double potrfTotTime = 0.0;
-    double potrfLastCallTime;
-    double potrfMaxCallTime = 0.0;
-    uint64_t trsmCalls = 0;
-    double trsmTotTime = 0.0;
-    double trsmLastCallTime;
-    double trsmMaxCallTime = 0.0;
+    OpStat trsmStat;
+    OpStat sygeStat;
     uint64_t gemmCalls = 0;
-    double gemmTotTime = 0.0;
-    double gemmLastCallTime;
-    double gemmMaxCallTime = 0.0;
-    uint64_t asmblCalls = 0;
-    double asmblTotTime = 0.0;
-    double asmblLastCallTime;
-    double asmblMaxCallTime = 0.0;
+    uint64_t syrkCalls = 0;
+    OpStat asmblStat;
 };
 
 OpsPtr blasOps() { return OpsPtr(new BlasOps); }

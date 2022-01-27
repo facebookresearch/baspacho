@@ -28,6 +28,8 @@ Configuring with MKL:
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBLA_VENDOR=Intel10_64lp
 Compiling and testing:
   cmake --build build -v -- -j16 && ctest --test-dir build
+Compiling and benchmarking:
+  cmake --build build -v -- -j16 && build/bench
 Show test:
   ctest --test-dir build --show-only
 

@@ -30,13 +30,6 @@ struct Ops {
     // solve: X * A.lowerHalf().transpose() = B (in place, B becomes X)
     virtual void trsm(uint64_t n, uint64_t k, const double* A, double* B) = 0;
 
-    // C = B * A'
-    virtual void gemm(uint64_t m, uint64_t n, uint64_t k, const double* A,
-                      const double* B, double* C) = 0;
-
-    virtual void gemmToTemp(OpaqueData& assCtx, uint64_t m, uint64_t n,
-                            uint64_t k, const double* A, const double* B) = 0;
-
     virtual OpaqueDataPtr createAssembleContext(const OpaqueData& skel,
                                                 uint64_t tempBufSize,
                                                 int maxBatchSize = 1) = 0;

@@ -24,7 +24,8 @@ struct SparseProblem {
 
 pair<double, double> benchmarkSolver(const SparseProblem& prob, bool verbose) {
     auto startAnalysis = hrc::now();
-    SolverPtr solver = createSolver(prob.paramSize, prob.sparseStruct, verbose);
+    SolverPtr solver =
+        createSolver({}, prob.paramSize, prob.sparseStruct, verbose);
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     // generate mock data

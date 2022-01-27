@@ -243,10 +243,10 @@ void Solver::initElimination() {
 
 void Solver::factor(double* data, bool verbose) const {
     if (getenv("BATCHED")) {
-        LOG(INFO) << "BATCHED";
+        // LOG(INFO) << "BATCHED";
         factorXp2(data, verbose);
     } else {
-        LOG(INFO) << "SIMPLE";
+        // LOG(INFO) << "SIMPLE";
         factorXp(data, verbose);
     }
 }
@@ -330,7 +330,8 @@ pair<uint64_t, bool> findLargestIndependentLumpSet(const BlockMatrixSkel& skel,
     return make_pair(min(limit, skel.lumpToSpan.size()), false);
 }
 
-SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
+SolverPtr createSolver(const Settings& settings,
+                       const std::vector<uint64_t>& paramSize,
                        const SparseStructure& ss, bool verbose) {
     vector<uint64_t> permutation = ss.fillReducingPermutation();
     vector<uint64_t> invPerm = inversePermutation(permutation);
@@ -350,18 +351,20 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
 
     // find progressive Schur elimination sets
     std::vector<uint64_t> elimLumpRanges{0};
-    while (true) {
-        uint64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
-        auto [rangeEnd, hitSizeLimit] =
-            findLargestIndependentLumpSet(skel, rangeStart);
-        if (rangeEnd < rangeStart + 10) {
-            break;
-        }
-        LOG_IF(INFO, verbose)
-            << "Adding indep set: " << rangeStart << ".." << rangeEnd << endl;
-        elimLumpRanges.push_back(rangeEnd);
-        if (hitSizeLimit) {
-            break;
+    if (settings.findSparseEliminationRanges) {
+        while (true) {
+            uint64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
+            auto [rangeEnd, hitSizeLimit] =
+                findLargestIndependentLumpSet(skel, rangeStart);
+            if (rangeEnd < rangeStart + 10) {
+                break;
+            }
+            LOG_IF(INFO, verbose) << "Adding indep set: " << rangeStart << ".."
+                                  << rangeEnd << endl;
+            elimLumpRanges.push_back(rangeEnd);
+            if (hitSizeLimit) {
+                break;
+            }
         }
     }
     if (elimLumpRanges.size() == 1) {
@@ -373,7 +376,8 @@ SolverPtr createSolver(const std::vector<uint64_t>& paramSize,
                                 ));
 }
 
-SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
+SolverPtr createSolverSchur(const Settings& settings,
+                            const std::vector<uint64_t>& paramSize,
                             const SparseStructure& ss_,
                             const std::vector<uint64_t>& elimLumpRanges,
                             bool verbose) {
@@ -471,18 +475,20 @@ SolverPtr createSolverSchur(const std::vector<uint64_t>& paramSize,
 
     // find (additional) progressive Schur elimination sets
     std::vector<uint64_t> elimLumpRangesArg = elimLumpRanges;
-    while (true) {
-        uint64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
-        auto [rangeEnd, hitSizeLimit] =
-            findLargestIndependentLumpSet(skel, rangeStart);
-        if (rangeEnd < rangeStart + 10) {
-            break;
-        }
-        LOG_IF(INFO, verbose)
-            << "Adding indep set: " << rangeStart << ".." << rangeEnd << endl;
-        elimLumpRangesArg.push_back(rangeEnd);
-        if (hitSizeLimit) {
-            break;
+    if (settings.findSparseEliminationRanges) {
+        while (true) {
+            uint64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
+            auto [rangeEnd, hitSizeLimit] =
+                findLargestIndependentLumpSet(skel, rangeStart);
+            if (rangeEnd < rangeStart + 10) {
+                break;
+            }
+            LOG_IF(INFO, verbose) << "Adding indep set: " << rangeStart << ".."
+                                  << rangeEnd << endl;
+            elimLumpRangesArg.push_back(rangeEnd);
+            if (hitSizeLimit) {
+                break;
+            }
         }
     }
     if (elimLumpRangesArg.size() == 1) {

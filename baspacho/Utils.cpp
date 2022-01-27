@@ -3,7 +3,28 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 using namespace std;
+
+using hrc = chrono::high_resolution_clock;
+using tdelta = chrono::duration<double>;
+
+string OpStat::toString() const {
+    stringstream ss;
+    ss << "#=" << numRuns << ", time=" << totTime << "s, last=" << lastTime
+       << "s, max=" << maxTime << "s";
+    return ss.str();
+}
+
+OpInstance::OpInstance(OpStat& stat) : stat(stat), start(hrc::now()) {}
+
+OpInstance::~OpInstance() {
+    stat.numRuns++;
+    stat.lastTime = tdelta(hrc::now() - start).count();
+    stat.maxTime = max(stat.maxTime, stat.lastTime);
+    stat.totTime += stat.lastTime;
+}
 
 std::vector<uint64_t> composePermutations(const std::vector<uint64_t>& v,
                                           const std::vector<uint64_t>& w) {

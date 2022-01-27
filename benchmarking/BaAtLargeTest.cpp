@@ -53,7 +53,7 @@ void experiment2(Data& data) {
     SparseStructure origSs = columnsToCscStruct(colBlocks).transpose();
 
     bool verbose = 1;
-    auto solver = createSolverSchur(paramSize, origSs,
+    auto solver = createSolverSchur({}, paramSize, origSs,
                                     vector<uint64_t>{0, numPts}, verbose);
 
     // generate mock data

@@ -1,7 +1,26 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
+#include <string>
 #include <vector>
+
+using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+
+struct OpStat {
+    uint64_t numRuns = 0;
+    double totTime = 0;
+    double maxTime = 0;
+    double lastTime = 0;
+    std::string toString() const;
+};
+
+struct OpInstance {
+    OpInstance(OpStat& stat);
+    ~OpInstance();
+    OpStat& stat;
+    TimePoint start;
+};
 
 template <typename T>
 bool isStrictlyIncreasing(const std::vector<T>& v, std::size_t begin,
