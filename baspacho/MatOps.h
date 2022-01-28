@@ -53,6 +53,30 @@ struct Ops {
                           uint64_t dstStride, uint64_t srcColDataOffset,
                           uint64_t srcRectWidth, uint64_t numBlockRows,
                           uint64_t numBlockCols, int numBatch = -1) = 0;
+
+    virtual void solveL(const double* data, uint64_t offset, uint64_t n,
+                        double* C, uint64_t offC, uint64_t ldc,
+                        uint64_t nRHS) = 0;
+
+    virtual void gemv(const double* data, uint64_t offset, uint64_t nRows,
+                      uint64_t nCols, const double* A, uint64_t offA,
+                      uint64_t lda, double* C, uint64_t nRHS) = 0;
+
+    virtual void assembleVec(const OpaqueData& skel, const double* A,
+                             uint64_t chainColPtr, uint64_t numColItems,
+                             double* C, uint64_t ldc, uint64_t nRHS) = 0;
+
+    virtual void solveLt(const double* data, uint64_t offset, uint64_t n,
+                         double* C, uint64_t offC, uint64_t ldc,
+                         uint64_t nRHS) = 0;
+
+    virtual void gemvT(const double* data, uint64_t offset, uint64_t nRows,
+                       uint64_t nCols, const double* C, uint64_t nRHS,
+                       double* A, uint64_t offA, uint64_t lda) = 0;
+
+    virtual void assembleVecT(const OpaqueData& skel, const double* C,
+                              uint64_t ldc, uint64_t nRHS, double* A,
+                              uint64_t chainColPtr, uint64_t numColItems) = 0;
 };
 
 using OpsPtr = std::unique_ptr<Ops>;

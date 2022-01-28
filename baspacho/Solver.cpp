@@ -310,6 +310,81 @@ void Solver::factorXp(double* data, bool verbose) const {
     }
 }
 
+void Solver::solveL(const double* matData, double* vecData, int stride,
+                    int nRHS) const {
+    int order = skel.spanStart[skel.spanStart.size() - 1];
+    vector<double> tmpData(order * nRHS);
+
+    for (uint64_t l = 0; l < skel.chainColPtr.size() - 1; l++) {
+        uint64_t lumpStart = skel.lumpStart[l];
+        uint64_t lumpSize = skel.lumpStart[l + 1] - lumpStart;
+        uint64_t chainColBegin = skel.chainColPtr[l];
+        uint64_t diagBlockOffset = skel.chainData[chainColBegin];
+
+        ops->solveL(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
+                    stride, nRHS);
+
+        uint64_t boardColBegin = skel.boardColPtr[l];
+        uint64_t boardColEnd = skel.boardColPtr[l + 1];
+        uint64_t belowDiagChainColOrd =
+            skel.boardChainColOrd[boardColBegin + 1];
+        uint64_t numColChains = skel.boardChainColOrd[boardColEnd - 1];
+        uint64_t belowDiagOffset =
+            skel.chainData[chainColBegin + belowDiagChainColOrd];
+        uint64_t numRowsBelowDiag =
+            skel.chainRowsTillEnd[chainColBegin + numColChains - 1] -
+            skel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
+        if (numRowsBelowDiag == 0) {
+            continue;
+        }
+
+        ops->gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize, vecData,
+                  lumpStart, stride, tmpData.data(), nRHS);
+
+        uint64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
+        ops->assembleVec(*opMatrixSkel, tmpData.data(), chainColPtr,
+                         numColChains - belowDiagChainColOrd, vecData, stride,
+                         nRHS);
+    }
+}
+
+void Solver::solveLt(const double* matData, double* vecData, int stride,
+                     int nRHS) const {
+    int order = skel.spanStart[skel.spanStart.size() - 1];
+    vector<double> tmpData(order * nRHS);
+
+    for (uint64_t l = skel.chainColPtr.size() - 2; (int64_t)l >= 0; l--) {
+        uint64_t lumpStart = skel.lumpStart[l];
+        uint64_t lumpSize = skel.lumpStart[l + 1] - lumpStart;
+        uint64_t chainColBegin = skel.chainColPtr[l];
+
+        uint64_t boardColBegin = skel.boardColPtr[l];
+        uint64_t boardColEnd = skel.boardColPtr[l + 1];
+        uint64_t belowDiagChainColOrd =
+            skel.boardChainColOrd[boardColBegin + 1];
+        uint64_t numColChains = skel.boardChainColOrd[boardColEnd - 1];
+        uint64_t belowDiagOffset =
+            skel.chainData[chainColBegin + belowDiagChainColOrd];
+        uint64_t numRowsBelowDiag =
+            skel.chainRowsTillEnd[chainColBegin + numColChains - 1] -
+            skel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
+
+        if (numRowsBelowDiag > 0) {
+            uint64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
+            ops->assembleVecT(*opMatrixSkel, vecData, stride, nRHS,
+                              tmpData.data(), chainColPtr,
+                              numColChains - belowDiagChainColOrd);
+
+            ops->gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
+                       tmpData.data(), nRHS, vecData, lumpStart, stride);
+        }
+
+        uint64_t diagBlockOffset = skel.chainData[chainColBegin];
+        ops->solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
+                     stride, nRHS);
+    }
+}
+
 pair<uint64_t, bool> findLargestIndependentLumpSet(const BlockMatrixSkel& skel,
                                                    uint64_t startLump,
                                                    uint64_t maxSize = 8) {

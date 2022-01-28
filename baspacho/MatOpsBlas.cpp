@@ -751,6 +751,31 @@ struct BlasOps : Ops {
             });
     }
 
+    virtual void solveL(const double* data, uint64_t offM, uint64_t n,
+                        double* C, uint64_t offC, uint64_t ldc,
+                        uint64_t nRHS) override {}
+
+    virtual void gemv(const double* data, uint64_t offM, uint64_t nRows,
+                      uint64_t nCols, const double* A, uint64_t offA,
+                      uint64_t lda, double* C, uint64_t nRHS) override {}
+
+    virtual void assembleVec(const OpaqueData& skel, const double* A,
+                             uint64_t chainColPtr, uint64_t numColItems,
+                             double* C, uint64_t ldc, uint64_t nRHS) override {}
+
+    virtual void solveLt(const double* data, uint64_t offset, uint64_t n,
+                         double* C, uint64_t offC, uint64_t ldc,
+                         uint64_t nRHS) override {}
+
+    virtual void gemvT(const double* data, uint64_t offset, uint64_t nRows,
+                       uint64_t nCols, const double* C, uint64_t nRHS,
+                       double* A, uint64_t offA, uint64_t lda) override {}
+
+    virtual void assembleVecT(const OpaqueData& skel, const double* C,
+                              uint64_t ldc, uint64_t nRHS, double* A,
+                              uint64_t chainColPtr,
+                              uint64_t numColItems) override {}
+
     OpStat elimStat;
     OpStat potrfStat;
     uint64_t potrfBiggestN = 0;

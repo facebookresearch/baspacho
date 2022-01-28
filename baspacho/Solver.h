@@ -17,6 +17,12 @@ struct Solver {
 
     uint64_t boardElimTempSize(uint64_t lump, uint64_t boardIndexInSN) const;
 
+    void solveL(const double* matData, double* vecData, int stride,
+                int nRHS) const;
+
+    void solveLt(const double* matData, double* vecData, int stride,
+                 int nRHS) const;
+
     void factor(double* data, bool verbose = false) const;
 
     void factorXp(double* data, bool verbose = false) const;

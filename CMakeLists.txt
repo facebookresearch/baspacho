@@ -184,6 +184,10 @@ add_executable(
   SolverTest
   baspacho/tests/SolverTest.cpp
   )
+add_executable(
+  SolverSolveTest
+  baspacho/tests/SolverSolveTest.cpp
+  )
 target_link_libraries(
   BlockMatrixTest
 	BaSpaCho
@@ -219,8 +223,16 @@ target_link_libraries(
   gtest_main
 	gmock
 )
+target_link_libraries(
+  SolverSolveTest
+	BaSpaCho
+  testing
+  gtest_main
+	gmock
+)
 gtest_discover_tests(BlockMatrixTest)
 gtest_discover_tests(FactorTest)
 gtest_discover_tests(SparseStructureTest)
 gtest_discover_tests(EliminationTreeTest)
 gtest_discover_tests(SolverTest)
+gtest_discover_tests(SolverSolveTest)

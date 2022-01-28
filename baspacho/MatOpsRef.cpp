@@ -2,6 +2,7 @@
 #include <glog/logging.h>
 
 #include <chrono>
+#include <iostream>
 
 #include "MatOps.h"
 #include "Utils.h"
@@ -350,6 +351,115 @@ struct SimpleOps : Ops {
                 const double* src = matRowPtr + cStart;
                 stridedMatSub(dst, dstStride, src, srcRectWidth, rSize, cSize);
             }
+        }
+    }
+
+    virtual void solveL(const double* data, uint64_t offM, uint64_t n,
+                        double* C, uint64_t offC, uint64_t ldc,
+                        uint64_t nRHS) override {
+        using OuterStridedCMajMatM =
+            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                                     Eigen::ColMajor>,
+                       0, OuterStride>;
+        Eigen::Map<const MatRMaj<double>> matA(data + offM, n, n);
+        OuterStridedCMajMatM matC(C + offC, n, nRHS, OuterStride(ldc));
+        matA.triangularView<Eigen::Lower>().solveInPlace(matC);
+    }
+
+    virtual void gemv(const double* data, uint64_t offM, uint64_t nRows,
+                      uint64_t nCols, const double* A, uint64_t offA,
+                      uint64_t lda, double* C, uint64_t nRHS) override {
+        using OuterStridedCMajMatK =
+            Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic,
+                                           Eigen::Dynamic, Eigen::ColMajor>,
+                       0, OuterStride>;
+        Eigen::Map<const MatRMaj<double>> matM(data + offM, nRows, nCols);
+        OuterStridedCMajMatK matA(A + offA, nCols, nRHS, OuterStride(lda));
+        Eigen::Map<MatRMaj<double>> matC(C, nRows, nRHS);
+        matC.noalias() = matM * matA;
+    }
+
+    virtual void assembleVec(const OpaqueData& ref, const double* A,
+                             uint64_t chainColPtr, uint64_t numColItems,
+                             double* C, uint64_t ldc, uint64_t nRHS) override {
+        using OuterStridedCMajMatM =
+            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                                     Eigen::ColMajor>,
+                       0, OuterStride>;
+        const OpaqueDataMatrixSkel* pSkel =
+            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
+        CHECK_NOTNULL(pSkel);
+        const BlockMatrixSkel& skel = pSkel->skel;
+        const uint64_t* chainRowsTillEnd =
+            skel.chainRowsTillEnd.data() + chainColPtr;
+        const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
+        uint64_t startRow = chainRowsTillEnd[-1];
+        for (uint64_t i = 0; i < numColItems; i++) {
+            uint64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
+            uint64_t span = toSpan[i];
+            uint64_t spanStart = skel.spanStart[span];
+            uint64_t spanSize = skel.spanStart[span + 1] - spanStart;
+
+            Eigen::Map<const MatRMaj<double>> matA(A + rowOffset * nRHS,
+                                                   spanSize, nRHS);
+            OuterStridedCMajMatM matC(C + spanStart, spanSize, nRHS,
+                                      OuterStride(ldc));
+            matC -= matA;
+        }
+    }
+
+    virtual void solveLt(const double* data, uint64_t offM, uint64_t n,
+                         double* C, uint64_t offC, uint64_t ldc,
+                         uint64_t nRHS) override {
+        using OuterStridedCMajMatM =
+            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                                     Eigen::ColMajor>,
+                       0, OuterStride>;
+        Eigen::Map<const MatRMaj<double>> matA(data + offM, n, n);
+        OuterStridedCMajMatM matC(C + offC, n, nRHS, OuterStride(ldc));
+        matA.triangularView<Eigen::Lower>().adjoint().solveInPlace(matC);
+    }
+
+    virtual void gemvT(const double* data, uint64_t offM, uint64_t nRows,
+                       uint64_t nCols, const double* C, uint64_t nRHS,
+                       double* A, uint64_t offA, uint64_t lda) override {
+        using OuterStridedCMajMatM =
+            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                                     Eigen::ColMajor>,
+                       0, OuterStride>;
+        Eigen::Map<const MatRMaj<double>> matM(data + offM, nRows, nCols);
+        OuterStridedCMajMatM matA(A + offA, nCols, nRHS, OuterStride(lda));
+        Eigen::Map<const MatRMaj<double>> matC(C, nRows, nRHS);
+        matA.noalias() -= matM.transpose() * matC;
+    }
+
+    virtual void assembleVecT(const OpaqueData& ref, const double* C,
+                              uint64_t ldc, uint64_t nRHS, double* A,
+                              uint64_t chainColPtr,
+                              uint64_t numColItems) override {
+        using OuterStridedCMajMatK =
+            Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic,
+                                           Eigen::Dynamic, Eigen::ColMajor>,
+                       0, OuterStride>;
+        const OpaqueDataMatrixSkel* pSkel =
+            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
+        CHECK_NOTNULL(pSkel);
+        const BlockMatrixSkel& skel = pSkel->skel;
+        const uint64_t* chainRowsTillEnd =
+            skel.chainRowsTillEnd.data() + chainColPtr;
+        const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
+        uint64_t startRow = chainRowsTillEnd[-1];
+        for (uint64_t i = 0; i < numColItems; i++) {
+            uint64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
+            uint64_t span = toSpan[i];
+            uint64_t spanStart = skel.spanStart[span];
+            uint64_t spanSize = skel.spanStart[span + 1] - spanStart;
+
+            Eigen::Map<MatRMaj<double>> matA(A + rowOffset * nRHS, spanSize,
+                                             nRHS);
+            OuterStridedCMajMatK matC(C + spanStart, spanSize, nRHS,
+                                      OuterStride(ldc));
+            matA = matC;
         }
     }
 
