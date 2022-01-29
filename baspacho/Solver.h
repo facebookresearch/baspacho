@@ -7,6 +7,7 @@
 
 struct Settings {
     bool findSparseEliminationRanges = true;
+    int numThreads = 16;
 };
 
 struct Solver {

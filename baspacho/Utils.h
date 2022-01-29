@@ -42,6 +42,19 @@ bool isWeaklyIncreasing(const std::vector<T>& v, std::size_t begin,
     return i == e;
 }
 
+inline uint64_t bisect(const uint64_t* array, uint64_t size, uint64_t needle) {
+    uint64_t a = 0, b = size;
+    while (b - a > 1) {
+        uint64_t m = (a + b) / 2;
+        if (needle >= array[m]) {
+            a = m;
+        } else {
+            b = m;
+        }
+    }
+    return a;
+}
+
 std::vector<uint64_t> composePermutations(const std::vector<uint64_t>& v,
                                           const std::vector<uint64_t>& w);
 

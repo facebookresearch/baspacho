@@ -4,7 +4,7 @@
 #include <chrono>
 #include <iostream>
 
-#include "MatOps.h"
+#include "MatOpsCpuBase.h"
 #include "Utils.h"
 
 using namespace std;
@@ -17,143 +17,57 @@ using OuterStridedMatM = Eigen::Map<
     OuterStride>;
 
 // simple ops implemented using Eigen (therefore single thread)
-struct SimpleOps : Ops {
+struct SimpleOps : CpuBaseOps {
     // will just contain a reference to the skel
-    struct OpaqueDataMatrixSkel : OpaqueData {
-        OpaqueDataMatrixSkel(const BlockMatrixSkel& skel) : skel(skel) {}
-        virtual ~OpaqueDataMatrixSkel() {}
+    struct SimpleSymbolicInfo : OpaqueData {
+        SimpleSymbolicInfo(const BlockMatrixSkel& skel) : skel(skel) {}
+        virtual ~SimpleSymbolicInfo() {}
         const BlockMatrixSkel& skel;
     };
 
-    virtual OpaqueDataPtr prepareMatrixSkel(
+    virtual OpaqueDataPtr initSymbolicInfo(
         const BlockMatrixSkel& skel) override {
-        return OpaqueDataPtr(new OpaqueDataMatrixSkel(skel));
+        return OpaqueDataPtr(new SimpleSymbolicInfo(skel));
     }
 
-    virtual void printStats() const override {
-        LOG(INFO) << "matOp stats:"
-                  << "\nelim: " << elimStat.toString()
-                  << "\nBiggest dense block: " << potrfBiggestN
-                  << "\npotrf: " << potrfStat.toString()
-                  << "\ntrsm: " << trsmStat.toString()  //
-                  << "\nsyrk/gemm: " << sygeStat.toString()
-                  << "\nasmbl: " << asmblStat.toString();
-    }
-
-    static void factorLump(const BlockMatrixSkel& skel, double* data,
-                           uint64_t lump) {
-        uint64_t lumpStart = skel.lumpStart[lump];
-        uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
-        uint64_t colStart = skel.chainColPtr[lump];
-        uint64_t dataPtr = skel.chainData[colStart];
-
-        // compute lower diag cholesky dec on diagonal block
-        Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, lumpSize,
-                                              lumpSize);
-        { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
-        uint64_t gatheredStart = skel.boardColPtr[lump];
-        uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
-        uint64_t rowDataStart = skel.boardChainColOrd[gatheredStart + 1];
-        uint64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
-        uint64_t belowDiagStart = skel.chainData[colStart + rowDataStart];
-        uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
-                           skel.chainRowsTillEnd[colStart + rowDataStart - 1];
-
-        Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart,
-                                                   numRows, lumpSize);
-        diagBlock.triangularView<Eigen::Lower>()
-            .transpose()
-            .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
-    }
-
-    static void prepareContextForTargetLump(
-        const BlockMatrixSkel& skel, uint64_t targetLump,
-        vector<uint64_t>& spanToChainOffset) {
-        spanToChainOffset.assign(skel.spanStart.size() - 1, kInvalid);
-        for (uint64_t i = skel.chainColPtr[targetLump],
-                      iEnd = skel.chainColPtr[targetLump + 1];
-             i < iEnd; i++) {
-            spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
-        }
-    }
-
-    static inline void stridedMatSub(double* dst, uint64_t dstStride,
-                                     const double* src, uint64_t srcStride,
-                                     uint64_t rSize, uint64_t cSize) {
-        for (uint j = 0; j < rSize; j++) {
-            for (uint i = 0; i < cSize; i++) {
-                dst[i] -= src[i];
-            }
-            dst += dstStride;
-            src += srcStride;
-        }
-    }
-
-    struct OpaqueDataElimData : OpaqueData {
-        OpaqueDataElimData() {}
-        virtual ~OpaqueDataElimData() {}
-
-        // per-row pointers to chains in a rectagle:
-        // * span-rows from lumpToSpan[lumpsEnd],
-        // * board cols in interval lumpsBegin:lumpsEnd
-        vector<uint64_t> rowPtr;       // row data pointer
-        vector<uint64_t> colLump;      // col-lump
-        vector<uint64_t> chainColOrd;  // order in col chain elements
-    };
-
-    // TODO: unit test
-    virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
-                                             uint64_t lumpsBegin,
-                                             uint64_t lumpsEnd) override {
-        OpaqueDataElimData* elim = new OpaqueDataElimData;
-
-        uint64_t spanRowBegin = skel.lumpToSpan[lumpsEnd];
-        uint64_t numSpanRows = skel.spanStart.size() - 1 - spanRowBegin;
-        elim->rowPtr.assign(numSpanRows + 1, 0);
-        for (uint64_t l = lumpsBegin; l < lumpsEnd; l++) {
-            for (uint64_t i = skel.chainColPtr[l],
-                          iEnd = skel.chainColPtr[l + 1];
-                 i < iEnd; i++) {
-                uint64_t s = skel.chainRowSpan[i];
-                if (s < spanRowBegin) {
-                    continue;
-                }
-                uint64_t sRel = s - spanRowBegin;
-                elim->rowPtr[sRel]++;
-            }
-        }
-        uint64_t totNumChains = cumSumVec(elim->rowPtr);
-        elim->colLump.resize(totNumChains);
-        elim->chainColOrd.resize(totNumChains);
-        for (uint64_t l = lumpsBegin; l < lumpsEnd; l++) {
-            for (uint64_t iBegin = skel.chainColPtr[l],
-                          iEnd = skel.chainColPtr[l + 1], i = iBegin;
-                 i < iEnd; i++) {
-                uint64_t s = skel.chainRowSpan[i];
-                if (s < spanRowBegin) {
-                    continue;
-                }
-                uint64_t sRel = s - spanRowBegin;
-                elim->colLump[elim->rowPtr[sRel]] = l;
-                elim->chainColOrd[elim->rowPtr[sRel]] = i - iBegin;
-                elim->rowPtr[sRel]++;
-            }
-        }
-        rewindVec(elim->rowPtr);
-        return OpaqueDataPtr(elim);
-    }
-
-    virtual void doElimination(const OpaqueData& ref, double* data,
+    virtual void doElimination(const OpaqueData& info, double* data,
                                uint64_t lumpsBegin, uint64_t lumpsEnd,
                                const OpaqueData& elimData) override {
         OpInstance timer(elimStat);
-        const OpaqueDataMatrixSkel* pSkel =
-            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
+        const SimpleSymbolicInfo* pInfo =
+            dynamic_cast<const SimpleSymbolicInfo*>(&info);
         const OpaqueDataElimData* pElim =
             dynamic_cast<const OpaqueDataElimData*>(&elimData);
-        CHECK_NOTNULL(pSkel);
+        CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pElim);
-        const BlockMatrixSkel& skel = pSkel->skel;
+        const BlockMatrixSkel& skel = pInfo->skel;
+        const OpaqueDataElimData& elim = *pElim;
+
+        for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
+            factorLump(skel, data, l);
+        }
+
+        uint64_t numElimRows = elim.rowPtr.size() - 1;
+        uint64_t numSpans = skel.spanStart.size() - 1;
+        std::vector<double> tempBuffer(elim.maxBufferSize);
+        std::vector<uint64_t> spanToChainOffset(numSpans);
+        for (uint64_t sRel = 0UL; sRel < numElimRows; sRel++) {
+            eliminateRowChain(elim, skel, data, sRel, spanToChainOffset,
+                              tempBuffer);
+        }
+    }
+
+    virtual void doEliminationQ(const OpaqueData& info, double* data,
+                                uint64_t lumpsBegin, uint64_t lumpsEnd,
+                                const OpaqueData& elimData) {
+        OpInstance timer(elimStat);
+        const SimpleSymbolicInfo* pInfo =
+            dynamic_cast<const SimpleSymbolicInfo*>(&info);
+        const OpaqueDataElimData* pElim =
+            dynamic_cast<const OpaqueDataElimData*>(&elimData);
+        CHECK_NOTNULL(pInfo);
+        CHECK_NOTNULL(pElim);
+        const BlockMatrixSkel& skel = pInfo->skel;
         const OpaqueDataElimData& elim = *pElim;
 
         for (uint64_t a = lumpsBegin; a < lumpsEnd; a++) {
@@ -250,8 +164,7 @@ struct SimpleOps : Ops {
     }
 
     struct AssembleContext : OpaqueData {
-        std::vector<uint64_t> paramToChainOffset;
-        uint64_t stride;
+        std::vector<uint64_t> spanToChainOffset;
         std::vector<double> tempBuffer;
     };
 
@@ -279,38 +192,38 @@ struct SimpleOps : Ops {
         LOG(FATAL) << "Batching not supported";
     }
 
-    virtual OpaqueDataPtr createAssembleContext(const OpaqueData& ref,
+    virtual OpaqueDataPtr createAssembleContext(const OpaqueData& info,
                                                 uint64_t tempBufSize,
                                                 int maxBatchSize = 1) override {
-        const OpaqueDataMatrixSkel* pSkel =
-            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
-        CHECK_NOTNULL(pSkel);
-        const BlockMatrixSkel& skel = pSkel->skel;
+        const SimpleSymbolicInfo* pInfo =
+            dynamic_cast<const SimpleSymbolicInfo*>(&info);
+        CHECK_NOTNULL(pInfo);
+        const BlockMatrixSkel& skel = pInfo->skel;
         AssembleContext* ax = new AssembleContext;
-        ax->paramToChainOffset.resize(skel.spanStart.size() - 1);
+        ax->spanToChainOffset.resize(skel.spanStart.size() - 1);
         ax->tempBuffer.resize(tempBufSize);
         return OpaqueDataPtr(ax);
     }
 
-    virtual void prepareAssembleContext(const OpaqueData& ref,
+    virtual void prepareAssembleContext(const OpaqueData& info,
                                         OpaqueData& assCtx,
                                         uint64_t targetLump) override {
-        const OpaqueDataMatrixSkel* pSkel =
-            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
+        const SimpleSymbolicInfo* pInfo =
+            dynamic_cast<const SimpleSymbolicInfo*>(&info);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pSkel);
+        CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pAx);
-        const BlockMatrixSkel& skel = pSkel->skel;
+        const BlockMatrixSkel& skel = pInfo->skel;
         AssembleContext& ax = *pAx;
 
         for (uint64_t i = skel.chainColPtr[targetLump],
                       iEnd = skel.chainColPtr[targetLump + 1];
              i < iEnd; i++) {
-            ax.paramToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
+            ax.spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
         }
     }
 
-    virtual void assemble(const OpaqueData& ref, const OpaqueData& assCtx,
+    virtual void assemble(const OpaqueData& info, const OpaqueData& assCtx,
                           double* data, uint64_t rectRowBegin,
                           uint64_t dstStride,  //
                           uint64_t srcColDataOffset, uint64_t srcRectWidth,
@@ -318,18 +231,18 @@ struct SimpleOps : Ops {
                           int numBatch = -1) override {
         CHECK_EQ(numBatch, -1) << "Batching not supported";
         OpInstance timer(asmblStat);
-        const OpaqueDataMatrixSkel* pSkel =
-            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
+        const SimpleSymbolicInfo* pInfo =
+            dynamic_cast<const SimpleSymbolicInfo*>(&info);
         const AssembleContext* pAx =
             dynamic_cast<const AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pSkel);
+        CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pAx);
-        const BlockMatrixSkel& skel = pSkel->skel;
+        const BlockMatrixSkel& skel = pInfo->skel;
         const AssembleContext& ax = *pAx;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + srcColDataOffset;
         const uint64_t* toSpan = skel.chainRowSpan.data() + srcColDataOffset;
-        const uint64_t* paramToChainOffset = ax.paramToChainOffset.data();
+        const uint64_t* spanToChainOffset = ax.spanToChainOffset.data();
         const uint64_t* spanOffsetInLump = skel.spanOffsetInLump.data();
 
         const double* matRectPtr = ax.tempBuffer.data();
@@ -338,7 +251,7 @@ struct SimpleOps : Ops {
             uint64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
             uint64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
             uint64_t rParam = toSpan[r];
-            uint64_t rOffset = paramToChainOffset[rParam];
+            uint64_t rOffset = spanToChainOffset[rParam];
             const double* matRowPtr = matRectPtr + rBegin * srcRectWidth;
 
             uint64_t cEnd = std::min(numBlockCols, r + 1);
@@ -379,17 +292,17 @@ struct SimpleOps : Ops {
         matC.noalias() = matM * matA;
     }
 
-    virtual void assembleVec(const OpaqueData& ref, const double* A,
+    virtual void assembleVec(const OpaqueData& info, const double* A,
                              uint64_t chainColPtr, uint64_t numColItems,
                              double* C, uint64_t ldc, uint64_t nRHS) override {
         using OuterStridedCMajMatM =
             Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
                                      Eigen::ColMajor>,
                        0, OuterStride>;
-        const OpaqueDataMatrixSkel* pSkel =
-            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
-        CHECK_NOTNULL(pSkel);
-        const BlockMatrixSkel& skel = pSkel->skel;
+        const SimpleSymbolicInfo* pInfo =
+            dynamic_cast<const SimpleSymbolicInfo*>(&info);
+        CHECK_NOTNULL(pInfo);
+        const BlockMatrixSkel& skel = pInfo->skel;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
         const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
@@ -433,7 +346,7 @@ struct SimpleOps : Ops {
         matA.noalias() -= matM.transpose() * matC;
     }
 
-    virtual void assembleVecT(const OpaqueData& ref, const double* C,
+    virtual void assembleVecT(const OpaqueData& info, const double* C,
                               uint64_t ldc, uint64_t nRHS, double* A,
                               uint64_t chainColPtr,
                               uint64_t numColItems) override {
@@ -441,10 +354,10 @@ struct SimpleOps : Ops {
             Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic,
                                            Eigen::Dynamic, Eigen::ColMajor>,
                        0, OuterStride>;
-        const OpaqueDataMatrixSkel* pSkel =
-            dynamic_cast<const OpaqueDataMatrixSkel*>(&ref);
-        CHECK_NOTNULL(pSkel);
-        const BlockMatrixSkel& skel = pSkel->skel;
+        const SimpleSymbolicInfo* pInfo =
+            dynamic_cast<const SimpleSymbolicInfo*>(&info);
+        CHECK_NOTNULL(pInfo);
+        const BlockMatrixSkel& skel = pInfo->skel;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
         const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
@@ -462,13 +375,6 @@ struct SimpleOps : Ops {
             matA = matC;
         }
     }
-
-    OpStat elimStat;
-    OpStat potrfStat;
-    uint64_t potrfBiggestN = 0;
-    OpStat trsmStat;
-    OpStat sygeStat;
-    OpStat asmblStat;
 };
 
 OpsPtr simpleOps() { return OpsPtr(new SimpleOps); }

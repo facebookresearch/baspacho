@@ -20,7 +20,7 @@ Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimLumpRanges_,
     : skel(std::move(skel_)),
       elimLumpRanges(std::move(elimLumpRanges_)),
       ops(std::move(ops_)) {
-    opMatrixSkel = ops->prepareMatrixSkel(skel);
+    opMatrixSkel = ops->initSymbolicInfo(skel);
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
         opElimination.push_back(ops->prepareElimination(skel, elimLumpRanges[l],
                                                         elimLumpRanges[l + 1]));

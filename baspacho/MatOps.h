@@ -12,7 +12,7 @@ struct Ops {
     virtual void printStats() const = 0;
 
     // (optionally) allows creation of op-specific global data (eg GPU copies)
-    virtual OpaqueDataPtr prepareMatrixSkel(const BlockMatrixSkel& skel) = 0;
+    virtual OpaqueDataPtr initSymbolicInfo(const BlockMatrixSkel& skel) = 0;
 
     // prepares data for a parallel elimination op
     virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
