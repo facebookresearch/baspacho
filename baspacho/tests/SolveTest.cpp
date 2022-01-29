@@ -39,7 +39,7 @@ void testSolveL(OpsPtr&& ops, int nRHS = 1) {
         verifyMat.triangularView<Eigen::Lower>().solve(
             Eigen::Map<Eigen::MatrixXd>(rhsData.data(), 15, nRHS));
 
-    Solver solver(std::move(skel), std::vector<uint64_t>{}, std::move(ops));
+    Solver solver(std::move(skel), {}, {}, std::move(ops));
     solver.solveL(data.data(), rhsData.data(), 15, nRHS);
 
     ASSERT_NEAR((Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), 15, nRHS) -
@@ -73,7 +73,7 @@ void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
         verifyMat.triangularView<Eigen::Lower>().adjoint().solve(
             Eigen::Map<Eigen::MatrixXd>(rhsData.data(), 15, nRHS));
 
-    Solver solver(std::move(skel), std::vector<uint64_t>{}, std::move(ops));
+    Solver solver(std::move(skel), {}, {}, std::move(ops));
     solver.solveLt(data.data(), rhsData.data(), 15, nRHS);
 
     ASSERT_NEAR((Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), 15, nRHS) -

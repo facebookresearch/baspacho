@@ -36,6 +36,14 @@ struct CoalescedBlockMatrixSkel {
 
     void damp(std::vector<double>& data, double alpha, double beta);
 
+    uint64_t numSpans() { return spanStart.size() - 1; }
+
+    uint64_t numLumps() { return spanStart.size() - 1; }
+
+    uint64_t order() { return spanStart[spanStart.size() - 1]; }
+
+    uint64_t dataSize() { return chainData[chainData.size() - 1]; }
+
     std::vector<uint64_t> spanStart;  // (with final el)
     std::vector<uint64_t> spanToLump;
     std::vector<uint64_t> lumpStart;   // (with final el)

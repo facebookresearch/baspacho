@@ -16,9 +16,11 @@ using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
 Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_,
-               std::vector<uint64_t>&& elimLumpRanges_, OpsPtr&& ops_)
+               std::vector<uint64_t>&& elimLumpRanges_,
+               std::vector<uint64_t>&& permutation_, OpsPtr&& ops_)
     : factorSkel(std::move(factorSkel_)),
       elimLumpRanges(std::move(elimLumpRanges_)),
+      permutation(std::move(permutation_)),
       ops(std::move(ops_)) {
     opMatrixSkel = ops->initSymbolicInfo(factorSkel);
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
@@ -463,7 +465,10 @@ SolverPtr createSolver(const Settings& settings,
         elimLumpRanges.pop_back();
     }
 
+    vector<uint64_t> etTotalInvPerm =
+        composePermutations(et.permInverse, invPerm);
     return SolverPtr(new Solver(move(factorSkel), move(elimLumpRanges),
+                                move(etTotalInvPerm),
                                 blasOps()  // simpleOps()
                                 ));
 }
@@ -531,12 +536,13 @@ SolverPtr createSolverSchur(const Settings& settings,
              fullLumpToSpan[fullLumpToSpan.size() - 1]);
 
     // colStart are aggregate lump columns
-    // ss last rows are to be permuted according to etTotalPerm
-    vector<uint64_t> etTotalPerm = composePermutations(et.permInverse, invPerm);
-    vector<uint64_t> fullInvPerm(elimEnd + etTotalPerm.size());
+    // ss last rows are to be permuted according to etTotalInvPerm
+    vector<uint64_t> etTotalInvPerm =
+        composePermutations(et.permInverse, invPerm);
+    vector<uint64_t> fullInvPerm(elimEnd + etTotalInvPerm.size());
     iota(fullInvPerm.begin(), fullInvPerm.begin() + elimEnd, 0);
-    for (size_t i = 0; i < etTotalPerm.size(); i++) {
-        fullInvPerm[i + elimEnd] = elimEnd + etTotalPerm[i];
+    for (size_t i = 0; i < etTotalInvPerm.size(); i++) {
+        fullInvPerm[i + elimEnd] = elimEnd + etTotalInvPerm[i];
     }
     SparseStructure sortedSsT =
         ss.symmetricPermutation(fullInvPerm, false).transpose(false);
@@ -588,6 +594,7 @@ SolverPtr createSolverSchur(const Settings& settings,
     }
 
     return SolverPtr(new Solver(move(factorSkel), move(elimLumpRangesArg),
+                                move(fullInvPerm),
                                 blasOps()  // simpleOps()
                                 ));
 }

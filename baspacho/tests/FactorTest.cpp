@@ -27,17 +27,14 @@ void testCoalescedFactor(OpsPtr&& ops) {
     CoalescedBlockMatrixSkel factorSkel(spanStart, lumpToSpan, groupedSs.ptrs,
                                         groupedSs.inds);
 
-    uint64_t totData = factorSkel.chainData[factorSkel.chainData.size() - 1];
-    vector<double> data(totData);
+    vector<double> data(factorSkel.dataSize());
     iota(data.begin(), data.end(), 13);
-
     factorSkel.damp(data, 5, 50);
 
     Eigen::MatrixXd verifyMat = factorSkel.densify(data);
     Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-    Solver solver(std::move(factorSkel), std::vector<uint64_t>{},
-                  std::move(ops));
+    Solver solver(std::move(factorSkel), {}, {}, std::move(ops));
     solver.factor(data.data());
     Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
@@ -70,21 +67,14 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
         CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
                                             et.colStart, et.rowParam);
 
-        uint64_t totData =
-            factorSkel.chainData[factorSkel.chainData.size() - 1];
-        vector<double> data(totData);
-
-        mt19937 gen(39 + i);
-        uniform_real_distribution<> dis(-1.0, 1.0);
-        for (size_t i = 0; i < data.size(); i++) {
-            data[i] = dis(gen);
-        }
+        vector<double> data =
+            randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
         factorSkel.damp(data, 0, sortedSs.ptrs.size() * 2);
 
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-        Solver solver(std::move(factorSkel), std::vector<uint64_t>{}, genOps());
+        Solver solver(std::move(factorSkel), {}, {}, genOps());
         solver.factor(data.data());
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
@@ -128,15 +118,8 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
                                             et.colStart, et.rowParam);
 
-        uint64_t totData =
-            factorSkel.chainData[factorSkel.chainData.size() - 1];
-        vector<double> data(totData);
-
-        mt19937 gen(39 + i);
-        uniform_real_distribution<> dis(-1.0, 1.0);
-        for (size_t i = 0; i < data.size(); i++) {
-            data[i] = dis(gen);
-        }
+        vector<double> data =
+            randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
         factorSkel.damp(data, 0, sortedSs.ptrs.size() * 2);
 
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
@@ -144,9 +127,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
 
         uint64_t largestIndep =
             findLargestIndependentLumpSet(factorSkel, 0).first;
-        Solver solver(std::move(factorSkel),
-                      std::vector<uint64_t>{0, largestIndep},  //
-                      genOps());
+        Solver solver(std::move(factorSkel), {0, largestIndep}, {}, genOps());
         solver.ops->doElimination(*solver.opMatrixSkel, data.data(), 0,
                                   largestIndep, *solver.opElimination[0]);
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
@@ -188,15 +169,8 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
         CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
                                             et.colStart, et.rowParam);
 
-        uint64_t totData =
-            factorSkel.chainData[factorSkel.chainData.size() - 1];
-        vector<double> data(totData);
-
-        mt19937 gen(39 + i);
-        uniform_real_distribution<> dis(-1.0, 1.0);
-        for (size_t i = 0; i < data.size(); i++) {
-            data[i] = dis(gen);
-        }
+        vector<double> data =
+            randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
         factorSkel.damp(data, 0, sortedSs.ptrs.size() * 2);
 
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
@@ -204,9 +178,7 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
 
         uint64_t largestIndep =
             findLargestIndependentLumpSet(factorSkel, 0).first;
-        Solver solver(std::move(factorSkel),
-                      std::vector<uint64_t>{0, largestIndep},  //
-                      genOps());
+        Solver solver(std::move(factorSkel), {0, largestIndep}, {}, genOps());
         solver.factor(data.data());
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 

@@ -56,13 +56,10 @@ void experiment2(Data& data) {
     auto solver = createSolverSchur({}, paramSize, origSs,
                                     vector<uint64_t>{0, numPts}, verbose);
 
-    // generate mock data
-    uint64_t totData =
-        solver->factorSkel.chainData[solver->factorSkel.chainData.size() - 1];
-    vector<double> matData = randomData(totData, -1.0, 1.0, 37);
-    uint64_t order =
-        solver->factorSkel.spanStart[solver->factorSkel.spanStart.size() - 1];
-    solver->factorSkel.damp(matData, 0, order * 1.2);  // make positive def
+    // generate mock data, make positive def
+    vector<double> matData =
+        randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
+    solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
 
     auto startFactor = hrc::now();
     solver->factor(matData.data(), verbose);
@@ -146,7 +143,7 @@ void experiment(Data& data) {
     LOG(INFO) << "Block mat";
     CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
                                         et.colStart, et.rowParam);
-    uint64_t totData = factorSkel.chainData[factorSkel.chainData.size() - 1];
+    uint64_t totData = factorSkel.dataSize();
     LOG(INFO) << "cam-cam blocky (with fill): " << totData << " ("
               << (100.0 * totData / (numCams * numCams)) << "%)";
 

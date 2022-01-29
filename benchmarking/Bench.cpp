@@ -28,13 +28,10 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob, bool verbose) {
         createSolver({}, prob.paramSize, prob.sparseStruct, verbose);
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
-    // generate mock data
-    uint64_t totData =
-        solver->factorSkel.chainData[solver->factorSkel.chainData.size() - 1];
-    vector<double> data = randomData(totData, -1.0, 1.0, 37);
-    uint64_t order =
-        solver->factorSkel.spanStart[solver->factorSkel.spanStart.size() - 1];
-    solver->factorSkel.damp(data, 0, order * 1.2);  // make positive def
+    // generate mock data, make positive def
+    vector<double> data =
+        randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
+    solver->factorSkel.damp(data, 0, solver->factorSkel.order() * 1.2);
 
     auto startFactor = hrc::now();
     solver->factor(data.data(), verbose);

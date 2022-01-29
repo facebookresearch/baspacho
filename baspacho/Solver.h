@@ -7,7 +7,8 @@
 
 struct Solver {
     Solver(CoalescedBlockMatrixSkel&& factorSkel,
-           std::vector<uint64_t>&& elimLumpRanges, OpsPtr&& ops);
+           std::vector<uint64_t>&& elimLumpRanges,
+           std::vector<uint64_t>&& permutation, OpsPtr&& ops);
 
     void solveL(const double* matData, double* vecData, int stride,
                 int nRHS) const;
@@ -34,6 +35,7 @@ struct Solver {
 
     CoalescedBlockMatrixSkel factorSkel;
     std::vector<uint64_t> elimLumpRanges;
+    std::vector<uint64_t> permutation;  // *on indices*: v'[p[i]] = v[i];
 
     OpsPtr ops;
     OpaqueDataPtr opMatrixSkel;
