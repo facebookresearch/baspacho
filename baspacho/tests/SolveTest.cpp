@@ -25,7 +25,6 @@ void testSolveL(OpsPtr&& ops, int nRHS = 1) {
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
-    cout << "lumpStart:" << printVec(skel.lumpStart) << endl;
 
     uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
@@ -41,9 +40,6 @@ void testSolveL(OpsPtr&& ops, int nRHS = 1) {
 
     Solver solver(std::move(skel), std::vector<uint64_t>{}, std::move(ops));
     solver.solveL(data.data(), rhsData.data(), 15, nRHS);
-
-    cout << "GOLD: " << printVec(rhsVerif) << endl;
-    cout << "SLVL: " << printVec(rhsData) << endl;
 
     ASSERT_NEAR((Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), 15, nRHS) -
                  Eigen::Map<Eigen::MatrixXd>(rhsData.data(), 15, nRHS))
@@ -77,9 +73,6 @@ void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
 
     Solver solver(std::move(skel), std::vector<uint64_t>{}, std::move(ops));
     solver.solveLt(data.data(), rhsData.data(), 15, nRHS);
-
-    cout << "GOLD: " << printVec(rhsVerif) << endl;
-    cout << "SLVL: " << printVec(rhsData) << endl;
 
     ASSERT_NEAR((Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), 15, nRHS) -
                  Eigen::Map<Eigen::MatrixXd>(rhsData.data(), 15, nRHS))

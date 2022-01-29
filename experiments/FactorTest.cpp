@@ -13,7 +13,7 @@
 
 using namespace std;
 
-TEST(Factor, FactorAggreg) {
+TEST(XperFactor, FactorAggreg) {
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
@@ -36,7 +36,7 @@ TEST(Factor, FactorAggreg) {
     ASSERT_NEAR((verifyMat - computedMat).leftCols(5).norm(), 0, 1e-5);
 }
 
-TEST(Factor, Factor) {
+TEST(XperFactor, Factor) {
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();

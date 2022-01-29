@@ -37,4 +37,5 @@ cmake --build build -v -- -j16 SparseStructureTest && ctest --test-dir build -R 
 cmake --build build -v -- -j16 BlockMatrixTest     && ctest --test-dir build -R BlockMatrix
 cmake --build build -v -- -j16 FactorTest          && ctest --test-dir build -R Factor
 cmake --build build -v -- -j16 EliminationTreeTest && ctest --test-dir build -R EliminationTree
+cmake --build build -v -- -j16 SolveTest && ctest --test-dir build -R SolveTree
 cmake --build build -v -- -j16 BAL_test && build/BAL_test ~/BAL/problem-13682-4456117-pre.txt

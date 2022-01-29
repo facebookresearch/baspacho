@@ -16,7 +16,7 @@
 
 using namespace std;
 
-void testSolver(OpsPtr&& ops) {
+void testCoalescedFactor(OpsPtr&& ops) {
     vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
@@ -37,9 +37,7 @@ void testSolver(OpsPtr&& ops) {
 
     Solver solver(std::move(skel), std::vector<uint64_t>{}, std::move(ops));
     solver.factor(data.data());
-
     Eigen::MatrixXd computedMat = solver.skel.densify(data);
-    std::cout << "COMPUT:\n" << computedMat << std::endl;
 
     ASSERT_NEAR(Eigen::MatrixXd(
                     (verifyMat - computedMat).triangularView<Eigen::Lower>())
@@ -47,11 +45,11 @@ void testSolver(OpsPtr&& ops) {
                 0, 1e-5);
 }
 
-TEST(Solver, Solver_Blas) { testSolver(blasOps()); }
+TEST(Factor, CoalescedFactor_Blas) { testCoalescedFactor(blasOps()); }
 
-TEST(Solver, Solver_Ref) { testSolver(simpleOps()); }
+TEST(Factor, CoalescedFactor_Ref) { testCoalescedFactor(simpleOps()); }
 
-void testSolverXt(const std::function<OpsPtr()>& genOps) {
+void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.037, 57 + i);
         SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
@@ -82,13 +80,10 @@ void testSolverXt(const std::function<OpsPtr()>& genOps) {
 
         Eigen::MatrixXd verifyMat = skel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
-        // std::cout << "VERIF:\n" << verifyMat << std::endl;
 
         Solver solver(std::move(skel), std::vector<uint64_t>{}, genOps());
         solver.factor(data.data());
-
         Eigen::MatrixXd computedMat = solver.skel.densify(data);
-        // std::cout << "COMPUT:\n" << computedMat << std::endl;
 
         ASSERT_NEAR(
             Eigen::MatrixXd(
@@ -98,19 +93,19 @@ void testSolverXt(const std::function<OpsPtr()>& genOps) {
     }
 }
 
-TEST(Solver, SolverXt_Blas) {
-    testSolverXt([] { return blasOps(); });
+TEST(Factor, DenseFactor_Many_Blas) {
+    testCoalescedFactor_Many([] { return blasOps(); });
 }
 
-TEST(Solver, SolverXt_Ref) {
-    testSolverXt([] { return simpleOps(); });
+TEST(Factor, DenseFactor_Many_Ref) {
+    testCoalescedFactor_Many([] { return simpleOps(); });
 }
 
 pair<uint64_t, bool> findLargestIndependentLumpSet(const BlockMatrixSkel& skel,
                                                    uint64_t startLump,
                                                    uint64_t maxSize = 8);
 
-void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
+void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.03, 57 + i);
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
@@ -118,7 +113,7 @@ void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
 
         vector<uint64_t> permutation = ss.fillReducingPermutation();
         vector<uint64_t> invPerm = inversePermutation(permutation);
-        SparseStructure sortedSs = ss;  //.symmetricPermutation(invPerm, false);
+        SparseStructure sortedSs = ss;
 
         vector<uint64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
@@ -142,24 +137,14 @@ void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
 
         Eigen::MatrixXd verifyMat = skel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
-        // std::cout << "VERIF:\n" << verifyMat << std::endl;
 
         uint64_t largestIndep = findLargestIndependentLumpSet(skel, 0).first;
-        cout << "Largest indep set is 0.." << largestIndep
-             << " (nAggregs: " << et.lumpToSpan.size() - 1 << ")"
-             << "\naggregs:" << printVec(et.lumpToSpan) << endl;
-
         Solver solver(std::move(skel),
                       std::vector<uint64_t>{0, largestIndep},  //
                       genOps());
         solver.ops->doElimination(*solver.opMatrixSkel, data.data(), 0,
                                   largestIndep, *solver.opElimination[0]);
-        // solver.factor(data.data());
-
         Eigen::MatrixXd computedMat = solver.skel.densify(data);
-        // std::cout << "COMPUT:\n" << computedMat << std::endl;
-
-        int endDenseSize = solver.skel.spanStart[largestIndep];
 
         ASSERT_NEAR(
             Eigen::MatrixXd(
@@ -170,15 +155,15 @@ void testSolverXtElim(const std::function<OpsPtr()>& genOps) {
     }
 }
 
-TEST(Solver, SolverXtElim_Blas) {
-    testSolverXtElim([] { return blasOps(); });
+TEST(Factor, SparseElim_Many_Blas) {
+    testSparseElim_Many([] { return blasOps(); });
 }
 
-TEST(Solver, SolverXtElim_Ref) {
-    testSolverXtElim([] { return simpleOps(); });
+TEST(Factor, SparseElim_Many_Ref) {
+    testSparseElim_Many([] { return simpleOps(); });
 }
 
-void testSolverXtElFact(const std::function<OpsPtr()>& genOps) {
+void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.03, 57 + i);
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
@@ -186,7 +171,7 @@ void testSolverXtElFact(const std::function<OpsPtr()>& genOps) {
 
         vector<uint64_t> permutation = ss.fillReducingPermutation();
         vector<uint64_t> invPerm = inversePermutation(permutation);
-        SparseStructure sortedSs = ss;  //.symmetricPermutation(invPerm, false);
+        SparseStructure sortedSs = ss;
 
         vector<uint64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
@@ -210,22 +195,13 @@ void testSolverXtElFact(const std::function<OpsPtr()>& genOps) {
 
         Eigen::MatrixXd verifyMat = skel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
-        // std::cout << "VERIF:\n" << verifyMat << std::endl;
 
         uint64_t largestIndep = findLargestIndependentLumpSet(skel, 0).first;
-        cout << "Largest indep set is 0.." << largestIndep
-             << " (nAggregs: " << et.lumpToSpan.size() - 1 << ")"
-             << "\naggregs:" << printVec(et.lumpToSpan) << endl;
-
         Solver solver(std::move(skel),
                       std::vector<uint64_t>{0, largestIndep},  //
                       genOps());
         solver.factor(data.data());
-
         Eigen::MatrixXd computedMat = solver.skel.densify(data);
-        // std::cout << "COMPUT:\n" << computedMat << std::endl;
-
-        int endDenseSize = solver.skel.spanStart[largestIndep];
 
         ASSERT_NEAR(
             Eigen::MatrixXd(
@@ -235,10 +211,10 @@ void testSolverXtElFact(const std::function<OpsPtr()>& genOps) {
     }
 }
 
-TEST(Solver, SolverXtElFact_Blas) {
-    testSolverXtElFact([] { return blasOps(); });
+TEST(Factor, SparseElimAndFactor_Many_Blas) {
+    testSparseElimAndFactor_Many([] { return blasOps(); });
 }
 
-TEST(Solver, SolverXtElFact_Ref) {
-    testSolverXtElFact([] { return simpleOps(); });
+TEST(Factor, SparseElimAndFactor_Many_Ref) {
+    testSparseElimAndFactor_Many([] { return simpleOps(); });
 }

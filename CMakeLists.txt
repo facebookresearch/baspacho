@@ -163,76 +163,39 @@ target_link_libraries (bench BaSpaCho testing)
 # unit tests
 enable_testing()
 
-add_executable(
+function(add_baspacho_test TARGET)
+  add_executable(
+    "${TARGET}"
+    "${ARGN}"
+  )
+  target_link_libraries(
+    "${TARGET}" BaSpaCho testing gtest_main gmock
+  )
+  gtest_discover_tests("${TARGET}")
+endfunction()
+
+add_baspacho_test(
   BlockMatrixTest
   baspacho/tests/BlockMatrixTest.cpp
-	)
-add_executable(
-  FactorTest
+)
+add_baspacho_test(
+  ExperimentalFactorTest
   experiments/Factor.cpp
   experiments/FactorTest.cpp
-	)
-add_executable(
+)
+add_baspacho_test(
   SparseStructureTest
   baspacho/tests/SparseStructureTest.cpp
-  )
-add_executable(
+)
+add_baspacho_test(
   EliminationTreeTest
   baspacho/tests/EliminationTreeTest.cpp
-  )
-add_executable(
-  SolverTest
-  baspacho/tests/SolverTest.cpp
-  )
-add_executable(
-  SolverSolveTest
-  baspacho/tests/SolverSolveTest.cpp
-  )
-target_link_libraries(
-  BlockMatrixTest
-	BaSpaCho
-  testing
-  gtest_main
-	gmock
 )
-target_link_libraries(
+add_baspacho_test(
   FactorTest
-	BaSpaCho
-  testing
-  gtest_main
-	gmock
+  baspacho/tests/FactorTest.cpp
 )
-target_link_libraries(
-  SparseStructureTest
-	BaSpaCho
-  testing
-  gtest_main
-	gmock
+add_baspacho_test(
+  SolveTest
+  baspacho/tests/SolveTest.cpp
 )
-target_link_libraries(
-  EliminationTreeTest
-	BaSpaCho
-  testing
-  gtest_main
-	gmock
-)
-target_link_libraries(
-  SolverTest
-	BaSpaCho
-  testing
-  gtest_main
-	gmock
-)
-target_link_libraries(
-  SolverSolveTest
-	BaSpaCho
-  testing
-  gtest_main
-	gmock
-)
-gtest_discover_tests(BlockMatrixTest)
-gtest_discover_tests(FactorTest)
-gtest_discover_tests(SparseStructureTest)
-gtest_discover_tests(EliminationTreeTest)
-gtest_discover_tests(SolverTest)
-gtest_discover_tests(SolverSolveTest)
