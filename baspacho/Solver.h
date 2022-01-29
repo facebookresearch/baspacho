@@ -10,6 +10,11 @@ struct Solver {
            std::vector<uint64_t>&& elimLumpRanges,
            std::vector<uint64_t>&& permutation, OpsPtr&& ops);
 
+    PermutedCoalescedAccessor accessor() const {
+        return PermutedCoalescedAccessor(factorSkel.accessor(),
+                                         permutation.data());
+    }
+
     void solveL(const double* matData, double* vecData, int stride,
                 int nRHS) const;
 

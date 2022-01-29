@@ -27,8 +27,7 @@ void testSolveL(OpsPtr&& ops, int nRHS = 1) {
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
                                   groupedSs.inds);
 
-    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
-    vector<double> data(totData);
+    vector<double> data(skel.dataSize());
     iota(data.begin(), data.end(), 13);
     skel.damp(data, 5, 50);
 
@@ -61,8 +60,7 @@ void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
                                   groupedSs.inds);
 
-    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
-    vector<double> data(totData);
+    vector<double> data(skel.dataSize());
     iota(data.begin(), data.end(), 13);
     skel.damp(data, 5, 50);
 

@@ -114,7 +114,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
 }
 
 Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
-    const std::vector<double>& data) {
+    const std::vector<double>& data) const {
     uint64_t totData = chainData[chainData.size() - 1];
     CHECK_EQ(totData, data.size());
 
@@ -143,7 +143,7 @@ Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
 }
 
 void CoalescedBlockMatrixSkel::damp(std::vector<double>& data, double alpha,
-                                    double beta) {
+                                    double beta) const {
     uint64_t totData = chainData[chainData.size() - 1];
     CHECK_EQ(totData, data.size());
 

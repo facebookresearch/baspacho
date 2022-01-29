@@ -5,6 +5,8 @@
 #include <limits>
 #include <vector>
 
+#include "Accessor.h"
+
 constexpr uint64_t kInvalid = std::numeric_limits<uint64_t>::max();
 
 template <typename T>
@@ -32,17 +34,24 @@ struct CoalescedBlockMatrixSkel {
                              const std::vector<uint64_t>& colPtr,
                              const std::vector<uint64_t>& rowInd);
 
-    Eigen::MatrixXd densify(const std::vector<double>& data);
+    Eigen::MatrixXd densify(const std::vector<double>& data) const;
 
-    void damp(std::vector<double>& data, double alpha, double beta);
+    void damp(std::vector<double>& data, double alpha, double beta) const;
 
-    uint64_t numSpans() { return spanStart.size() - 1; }
+    uint64_t numSpans() const { return spanStart.size() - 1; }
 
-    uint64_t numLumps() { return spanStart.size() - 1; }
+    uint64_t numLumps() const { return spanStart.size() - 1; }
 
-    uint64_t order() { return spanStart[spanStart.size() - 1]; }
+    uint64_t order() const { return spanStart[spanStart.size() - 1]; }
 
-    uint64_t dataSize() { return chainData[chainData.size() - 1]; }
+    uint64_t dataSize() const { return chainData[chainData.size() - 1]; }
+
+    CoalescedAccessor accessor() const {
+        return CoalescedAccessor(spanStart.data(), spanToLump.data(),
+                                 lumpStart.data(), spanOffsetInLump.data(),
+                                 chainColPtr.data(), chainRowSpan.data(),
+                                 chainData.data());
+    }
 
     std::vector<uint64_t> spanStart;  // (with final el)
     std::vector<uint64_t> spanToLump;

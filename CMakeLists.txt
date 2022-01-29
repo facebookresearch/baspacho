@@ -177,6 +177,10 @@ function(add_baspacho_test TARGET)
 endfunction()
 
 add_baspacho_test(
+  AccessorTest
+  baspacho/tests/AccessorTest.cpp
+)
+add_baspacho_test(
   CoalescedBlockMatrixTest
   baspacho/tests/CoalescedBlockMatrixTest.cpp
 )
