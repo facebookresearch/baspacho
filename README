@@ -34,7 +34,7 @@ Show test:
   ctest --test-dir build --show-only
 
 cmake --build build -v -- -j16 SparseStructureTest && ctest --test-dir build -R SparseStructure
-cmake --build build -v -- -j16 BlockMatrixTest     && ctest --test-dir build -R BlockMatrix
+cmake --build build -v -- -j16 CoalescedBlockMatrixTest     && ctest --test-dir build -R CoalescedBlockMatrix
 cmake --build build -v -- -j16 FactorTest          && ctest --test-dir build -R Factor
 cmake --build build -v -- -j16 EliminationTreeTest && ctest --test-dir build -R EliminationTree
 cmake --build build -v -- -j16 SolveTest && ctest --test-dir build -R SolveTree

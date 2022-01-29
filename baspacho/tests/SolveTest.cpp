@@ -8,7 +8,7 @@
 #include <sstream>
 
 #include "../../testing/TestingUtils.h"
-#include "../BlockMatrix.h"
+#include "../CoalescedBlockMatrix.h"
 #include "../EliminationTree.h"
 #include "../Solver.h"
 #include "../SparseStructure.h"
@@ -24,7 +24,8 @@ void testSolveL(OpsPtr&& ops, int nRHS = 1) {
     vector<uint64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
-    BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
+    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
+                                  groupedSs.inds);
 
     uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
@@ -57,7 +58,8 @@ void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
     vector<uint64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
-    BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
+    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
+                                  groupedSs.inds);
 
     uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);

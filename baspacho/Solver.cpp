@@ -15,8 +15,8 @@ using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
-Solver::Solver(BlockMatrixSkel&& skel_, std::vector<uint64_t>&& elimLumpRanges_,
-               OpsPtr&& ops_)
+Solver::Solver(CoalescedBlockMatrixSkel&& skel_,
+               std::vector<uint64_t>&& elimLumpRanges_, OpsPtr&& ops_)
     : skel(std::move(skel_)),
       elimLumpRanges(std::move(elimLumpRanges_)),
       ops(std::move(ops_)) {
@@ -385,9 +385,9 @@ void Solver::solveLt(const double* matData, double* vecData, int stride,
     }
 }
 
-pair<uint64_t, bool> findLargestIndependentLumpSet(const BlockMatrixSkel& skel,
-                                                   uint64_t startLump,
-                                                   uint64_t maxSize = 8) {
+pair<uint64_t, bool> findLargestIndependentLumpSet(
+    const CoalescedBlockMatrixSkel& skel, uint64_t startLump,
+    uint64_t maxSize = 8) {
     uint64_t limit = kInvalid;
     for (uint64_t a = startLump; a < skel.lumpToSpan.size() - 1; a++) {
         if (a >= limit) {
@@ -422,7 +422,8 @@ SolverPtr createSolver(const Settings& settings,
     et.computeMerges();
     et.computeAggregateStruct();
 
-    BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
+                                  et.rowParam);
 
     // find progressive Schur elimination sets
     std::vector<uint64_t> elimLumpRanges{0};
@@ -545,8 +546,8 @@ SolverPtr createSolverSchur(const Settings& settings,
     }
     CHECK_EQ(fullRowParam.size(), fullColStart[fullColStart.size() - 1]);
 
-    BlockMatrixSkel skel(fullSpanStart, fullLumpToSpan, fullColStart,
-                         fullRowParam);
+    CoalescedBlockMatrixSkel skel(fullSpanStart, fullLumpToSpan, fullColStart,
+                                  fullRowParam);
 
     // find (additional) progressive Schur elimination sets
     std::vector<uint64_t> elimLumpRangesArg = elimLumpRanges;

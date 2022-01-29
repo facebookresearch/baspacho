@@ -3,7 +3,7 @@
 
 #include <chrono>
 
-#include "../baspacho/BlockMatrix.h"
+#include "../baspacho/CoalescedBlockMatrix.h"
 #include "../baspacho/EliminationTree.h"
 #include "../baspacho/Solver.h"
 #include "../baspacho/SparseStructure.h"
@@ -143,7 +143,8 @@ void experiment(Data& data) {
     et.computeAggregateStruct();
 
     LOG(INFO) << "Block mat";
-    BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
+                                  et.rowParam);
     uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     LOG(INFO) << "cam-cam blocky (with fill): " << totData << " ("
               << (100.0 * totData / (numCams * numCams)) << "%)";

@@ -1,6 +1,6 @@
 #include <memory>
 
-#include "BlockMatrix.h"
+#include "CoalescedBlockMatrix.h"
 
 struct OpaqueData {
     virtual ~OpaqueData() {}
@@ -12,12 +12,13 @@ struct Ops {
     virtual void printStats() const = 0;
 
     // (optionally) allows creation of op-specific global data (eg GPU copies)
-    virtual OpaqueDataPtr initSymbolicInfo(const BlockMatrixSkel& skel) = 0;
+    virtual OpaqueDataPtr initSymbolicInfo(
+        const CoalescedBlockMatrixSkel& skel) = 0;
 
     // prepares data for a parallel elimination op
-    virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
-                                             uint64_t lumpsBegin,
-                                             uint64_t lumpsEnd) = 0;
+    virtual OpaqueDataPtr prepareElimination(
+        const CoalescedBlockMatrixSkel& skel, uint64_t lumpsBegin,
+        uint64_t lumpsEnd) = 0;
 
     // does (possibly parallel) elimination on a lump of aggregs
     virtual void doElimination(const OpaqueData& skel, double* data,

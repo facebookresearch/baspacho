@@ -1,7 +1,7 @@
 
 #include <memory>
 
-#include "BlockMatrix.h"
+#include "CoalescedBlockMatrix.h"
 #include "MatOps.h"
 #include "SparseStructure.h"
 
@@ -11,8 +11,8 @@ struct Settings {
 };
 
 struct Solver {
-    Solver(BlockMatrixSkel&& skel, std::vector<uint64_t>&& elimLumpRanges,
-           OpsPtr&& ops);
+    Solver(CoalescedBlockMatrixSkel&& skel,
+           std::vector<uint64_t>&& elimLumpRanges, OpsPtr&& ops);
 
     void initElimination();
 
@@ -37,7 +37,7 @@ struct Solver {
     void eliminateBoardBatch(double* data, uint64_t ptr, uint64_t batchSize,
                              OpaqueData& ax) const;
 
-    BlockMatrixSkel skel;
+    CoalescedBlockMatrixSkel skel;
     std::vector<uint64_t> elimLumpRanges;
     OpsPtr ops;
 

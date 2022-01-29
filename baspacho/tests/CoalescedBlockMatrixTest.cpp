@@ -7,7 +7,7 @@
 #include <sstream>
 
 #include "../../testing/TestingUtils.h"
-#include "../BlockMatrix.h"
+#include "../CoalescedBlockMatrix.h"
 #include "../SparseStructure.h"
 
 #if 0
@@ -38,7 +38,7 @@ EXPECT_THAT(foo, testing::ContainerEq(result));
 using namespace std;
 using namespace testing;
 
-TEST(BlockMatrix, BasicAssertions) {
+TEST(CoalescedBlockMatrix, BasicAssertions) {
     // sizes:                     1  1  2  1  2  2  3   2   2
     vector<uint64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
     // sizes:                          1  3  1  4  3  4
@@ -47,7 +47,8 @@ TEST(BlockMatrix, BasicAssertions) {
                                        {3, 4, 5, 8},    {4, 5, 7},
                                        {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
-    BlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs, sStruct.inds);
+    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
+                                  sStruct.inds);
 
     ASSERT_THAT(skel.spanStart, ContainerEq(spanStart));
     ASSERT_THAT(skel.lumpToSpan, ContainerEq(lumpToSpan));
@@ -107,14 +108,15 @@ TEST(BlockMatrix, BasicAssertions) {
                                               3, 3, 2, 1, 1, 0));
 }
 
-TEST(BlockMatrix, Densify) {
+TEST(CoalescedBlockMatrix, Densify) {
     vector<uint64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
     vector<uint64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
     vector<set<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
                                        {3, 4, 5, 8},    {4, 5, 7},
                                        {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
-    BlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs, sStruct.inds);
+    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
+                                  sStruct.inds);
 
     uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
@@ -144,14 +146,15 @@ TEST(BlockMatrix, Densify) {
     ASSERT_EQ(ss.str(), expected);
 }
 
-TEST(BlockMatrix, Damp) {
+TEST(CoalescedBlockMatrix, Damp) {
     vector<uint64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
     vector<uint64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
     vector<set<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
                                        {3, 4, 5, 8},    {4, 5, 7},
                                        {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
-    BlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs, sStruct.inds);
+    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
+                                  sStruct.inds);
 
     uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);

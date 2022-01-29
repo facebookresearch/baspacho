@@ -8,7 +8,7 @@
 #include <sstream>
 
 #include "../../testing/TestingUtils.h"
-#include "../BlockMatrix.h"
+#include "../CoalescedBlockMatrix.h"
 #include "../EliminationTree.h"
 #include "../Utils.h"
 
@@ -36,8 +36,8 @@ TEST(EliminationTree, Build) {
 
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
-                             et.rowParam);
+        CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
+                                      et.rowParam);
         uint64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData, 1);
         Eigen::MatrixXd mat = skel.densify(data);

@@ -130,7 +130,7 @@ include_directories(${sophus_SOURCE_DIR})
 add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 add_library(BaSpaCho
-            baspacho/BlockMatrix.cpp
+            baspacho/CoalescedBlockMatrix.cpp
             baspacho/EliminationTree.cpp
             baspacho/MatOpsBlas.cpp
             baspacho/MatOpsRef.cpp
@@ -175,8 +175,8 @@ function(add_baspacho_test TARGET)
 endfunction()
 
 add_baspacho_test(
-  BlockMatrixTest
-  baspacho/tests/BlockMatrixTest.cpp
+  CoalescedBlockMatrixTest
+  baspacho/tests/CoalescedBlockMatrixTest.cpp
 )
 add_baspacho_test(
   ExperimentalFactorTest

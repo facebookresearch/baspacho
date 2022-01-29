@@ -4,7 +4,7 @@
 
 #include <Eigen/Eigenvalues>
 
-void factor(const BlockMatrixSkel& skel, std::vector<double>& data) {
+void factor(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data) {
     for (size_t l = 0; l < skel.lumpToSpan.size() - 1; l++) {
         factorLump(skel, data, l);
 
@@ -19,7 +19,7 @@ void factor(const BlockMatrixSkel& skel, std::vector<double>& data) {
     }
 }
 
-void factorLump(const BlockMatrixSkel& skel, std::vector<double>& data,
+void factorLump(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data,
                 uint64_t lump) {
     LOG(INFO) << "a: " << lump;
     uint64_t lumpStart = skel.lumpStart[lump];
@@ -64,7 +64,7 @@ uint64_t bisect(const uint64_t* array, uint64_t size, uint64_t needle) {
 }
 
 // returns (offset, stride)
-std::pair<uint64_t, uint64_t> findBlock(const BlockMatrixSkel& skel,
+std::pair<uint64_t, uint64_t> findBlock(const CoalescedBlockMatrixSkel& skel,
                                         uint64_t cParam, uint64_t rParam) {
     uint64_t lump = skel.spanToLump[cParam];
     uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
@@ -84,8 +84,9 @@ using OuterStridedMatM = Eigen::Map<
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
     OuterStride>;
 
-void eliminateBoard(const BlockMatrixSkel& skel, std::vector<double>& data,
-                    uint64_t lump, uint64_t rowItem) {
+void eliminateBoard(const CoalescedBlockMatrixSkel& skel,
+                    std::vector<double>& data, uint64_t lump,
+                    uint64_t rowItem) {
     uint64_t lumpStart = skel.lumpStart[lump];
     uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
     uint64_t colStart = skel.chainColPtr[lump];

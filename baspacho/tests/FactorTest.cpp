@@ -8,7 +8,7 @@
 #include <sstream>
 
 #include "../../testing/TestingUtils.h"
-#include "../BlockMatrix.h"
+#include "../CoalescedBlockMatrix.h"
 #include "../EliminationTree.h"
 #include "../Solver.h"
 #include "../SparseStructure.h"
@@ -24,7 +24,8 @@ void testCoalescedFactor(OpsPtr&& ops) {
     vector<uint64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
-    BlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
+    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
+                                  groupedSs.inds);
 
     uint64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
@@ -65,8 +66,8 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
         et.computeMerges();
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
-                             et.rowParam);
+        CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
+                                      et.rowParam);
 
         uint64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData);
@@ -93,17 +94,17 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
     }
 }
 
-TEST(Factor, DenseFactor_Many_Blas) {
+TEST(Factor, CoalescedFactor_Many_Blas) {
     testCoalescedFactor_Many([] { return blasOps(); });
 }
 
-TEST(Factor, DenseFactor_Many_Ref) {
+TEST(Factor, CoalescedFactor_Many_Ref) {
     testCoalescedFactor_Many([] { return simpleOps(); });
 }
 
-pair<uint64_t, bool> findLargestIndependentLumpSet(const BlockMatrixSkel& skel,
-                                                   uint64_t startLump,
-                                                   uint64_t maxSize = 8);
+pair<uint64_t, bool> findLargestIndependentLumpSet(
+    const CoalescedBlockMatrixSkel& skel, uint64_t startLump,
+    uint64_t maxSize = 8);
 
 void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
@@ -122,8 +123,8 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         et.computeMerges();
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
-                             et.rowParam);
+        CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
+                                      et.rowParam);
 
         uint64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData);
@@ -180,8 +181,8 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
         et.computeMerges();
         et.computeAggregateStruct();
 
-        BlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
-                             et.rowParam);
+        CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
+                                      et.rowParam);
 
         uint64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData);

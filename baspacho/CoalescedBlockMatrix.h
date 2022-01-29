@@ -12,7 +12,7 @@ using MatRMaj =
     Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
 /*
-    Notation for block matrix with grouped columns:
+    Notation for (symmetric) block matrix with coalesced columns:
     Linear data:
     * a `span` is the basic grouping of data (at creation)
     * an `lump` is formed by a few consecutive params
@@ -26,11 +26,11 @@ using MatRMaj =
     matrix. In this way we can refer to the chain sub-matrix,
     or to the whole set of columns as the chain data are consecutive.
 */
-struct BlockMatrixSkel {
-    BlockMatrixSkel(const std::vector<uint64_t>& spanStart,
-                    const std::vector<uint64_t>& lumpToSpan,
-                    const std::vector<uint64_t>& colPtr,
-                    const std::vector<uint64_t>& rowInd);
+struct CoalescedBlockMatrixSkel {
+    CoalescedBlockMatrixSkel(const std::vector<uint64_t>& spanStart,
+                             const std::vector<uint64_t>& lumpToSpan,
+                             const std::vector<uint64_t>& colPtr,
+                             const std::vector<uint64_t>& rowInd);
 
     Eigen::MatrixXd densify(const std::vector<double>& data);
 
@@ -59,13 +59,7 @@ struct BlockMatrixSkel {
     std::vector<uint64_t> boardColOrd;   // board order in col
 };
 
-BlockMatrixSkel initBlockMatrixSkel(const std::vector<uint64_t>& spanStart,
-                                    const std::vector<uint64_t>& lumpToSpan,
-                                    const std::vector<uint64_t>& colPtr,
-                                    const std::vector<uint64_t>& rowInd);
-
-Eigen::MatrixXd densify(const BlockMatrixSkel& skel,
-                        const std::vector<double>& data);
-
-void damp(const BlockMatrixSkel& skel, std::vector<double>& data, double alpha,
-          double beta);
+CoalescedBlockMatrixSkel initCoalescedBlockMatrixSkel(
+    const std::vector<uint64_t>& spanStart,
+    const std::vector<uint64_t>& lumpToSpan,
+    const std::vector<uint64_t>& colPtr, const std::vector<uint64_t>& rowInd);

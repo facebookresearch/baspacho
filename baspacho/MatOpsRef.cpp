@@ -20,13 +20,13 @@ using OuterStridedMatM = Eigen::Map<
 struct SimpleOps : CpuBaseOps {
     // will just contain a reference to the skel
     struct SimpleSymbolicInfo : OpaqueData {
-        SimpleSymbolicInfo(const BlockMatrixSkel& skel) : skel(skel) {}
+        SimpleSymbolicInfo(const CoalescedBlockMatrixSkel& skel) : skel(skel) {}
         virtual ~SimpleSymbolicInfo() {}
-        const BlockMatrixSkel& skel;
+        const CoalescedBlockMatrixSkel& skel;
     };
 
     virtual OpaqueDataPtr initSymbolicInfo(
-        const BlockMatrixSkel& skel) override {
+        const CoalescedBlockMatrixSkel& skel) override {
         return OpaqueDataPtr(new SimpleSymbolicInfo(skel));
     }
 
@@ -40,7 +40,7 @@ struct SimpleOps : CpuBaseOps {
             dynamic_cast<const OpaqueDataElimData*>(&elimData);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pElim);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const OpaqueDataElimData& elim = *pElim;
 
         for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
@@ -67,7 +67,7 @@ struct SimpleOps : CpuBaseOps {
             dynamic_cast<const OpaqueDataElimData*>(&elimData);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pElim);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const OpaqueDataElimData& elim = *pElim;
 
         for (uint64_t a = lumpsBegin; a < lumpsEnd; a++) {
@@ -198,7 +198,7 @@ struct SimpleOps : CpuBaseOps {
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         CHECK_NOTNULL(pInfo);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         AssembleContext* ax = new AssembleContext;
         ax->spanToChainOffset.resize(skel.spanStart.size() - 1);
         ax->tempBuffer.resize(tempBufSize);
@@ -213,7 +213,7 @@ struct SimpleOps : CpuBaseOps {
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pAx);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         AssembleContext& ax = *pAx;
 
         for (uint64_t i = skel.chainColPtr[targetLump],
@@ -237,7 +237,7 @@ struct SimpleOps : CpuBaseOps {
             dynamic_cast<const AssembleContext*>(&assCtx);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pAx);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const AssembleContext& ax = *pAx;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + srcColDataOffset;
@@ -302,7 +302,7 @@ struct SimpleOps : CpuBaseOps {
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         CHECK_NOTNULL(pInfo);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
         const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
@@ -357,7 +357,7 @@ struct SimpleOps : CpuBaseOps {
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         CHECK_NOTNULL(pInfo);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
         const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;

@@ -52,18 +52,19 @@ using tdelta = chrono::duration<double>;
 struct BlasOps : CpuBaseOps {
     // will just contain a reference to the skel
     struct BlasSymbolicInfo : OpaqueData {
-        BlasSymbolicInfo(const BlockMatrixSkel& skel, int numThreads = 16)
+        BlasSymbolicInfo(const CoalescedBlockMatrixSkel& skel,
+                         int numThreads = 16)
             : skel(skel),
               useThreads(numThreads > 1),
               threadPool(useThreads ? numThreads : 0) {}
         virtual ~BlasSymbolicInfo() {}
-        const BlockMatrixSkel& skel;
+        const CoalescedBlockMatrixSkel& skel;
         bool useThreads;
         mutable dispenso::ThreadPool threadPool;
     };
 
     virtual OpaqueDataPtr initSymbolicInfo(
-        const BlockMatrixSkel& skel) override {
+        const CoalescedBlockMatrixSkel& skel) override {
         return OpaqueDataPtr(new BlasSymbolicInfo(skel));
     }
 
@@ -77,7 +78,7 @@ struct BlasOps : CpuBaseOps {
             dynamic_cast<const OpaqueDataElimData*>(&elimData);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pElim);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const OpaqueDataElimData& elim = *pElim;
 
         if (!pInfo->useThreads) {
@@ -377,7 +378,7 @@ struct BlasOps : CpuBaseOps {
         const BlasSymbolicInfo* pInfo =
             dynamic_cast<const BlasSymbolicInfo*>(&info);
         CHECK_NOTNULL(pInfo);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         AssembleContext* ax = new AssembleContext;
         ax->spanToChainOffset.resize(skel.spanStart.size() - 1);
         ax->tempBuffer.resize(tempBufSize * maxBatchSize);
@@ -396,7 +397,7 @@ struct BlasOps : CpuBaseOps {
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pAx);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         AssembleContext& ax = *pAx;
 
         for (uint64_t i = skel.chainColPtr[targetLump],
@@ -419,7 +420,7 @@ struct BlasOps : CpuBaseOps {
             dynamic_cast<const AssembleContext*>(&assCtx);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pAx);
-        const BlockMatrixSkel& skel = pInfo->skel;
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const AssembleContext& ax = *pAx;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + srcColDataOffset;

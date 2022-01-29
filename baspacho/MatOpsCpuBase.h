@@ -33,7 +33,7 @@ struct CpuBaseOps : Ops {
     };
 
     static uint64_t computeMaxBufSize(const OpaqueDataElimData& elim,
-                                      const BlockMatrixSkel& skel,
+                                      const CoalescedBlockMatrixSkel& skel,
                                       uint64_t sRel) {
         uint64_t maxBufferSize = 0;
 
@@ -57,9 +57,9 @@ struct CpuBaseOps : Ops {
         return maxBufferSize;
     }
 
-    virtual OpaqueDataPtr prepareElimination(const BlockMatrixSkel& skel,
-                                             uint64_t lumpsBegin,
-                                             uint64_t lumpsEnd) override {
+    virtual OpaqueDataPtr prepareElimination(
+        const CoalescedBlockMatrixSkel& skel, uint64_t lumpsBegin,
+        uint64_t lumpsEnd) override {
         OpaqueDataElimData* elim = new OpaqueDataElimData;
 
         uint64_t spanRowBegin = skel.lumpToSpan[lumpsEnd];
@@ -113,8 +113,8 @@ struct CpuBaseOps : Ops {
     };
 
     // helper for elimination
-    static inline void factorLump(const BlockMatrixSkel& skel, double* data,
-                                  uint64_t lump) {
+    static inline void factorLump(const CoalescedBlockMatrixSkel& skel,
+                                  double* data, uint64_t lump) {
         uint64_t lumpStart = skel.lumpStart[lump];
         uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
         uint64_t colStart = skel.chainColPtr[lump];
@@ -153,7 +153,7 @@ struct CpuBaseOps : Ops {
     }
 
     static void prepareContextForTargetLump(
-        const BlockMatrixSkel& skel, uint64_t targetLump,
+        const CoalescedBlockMatrixSkel& skel, uint64_t targetLump,
         std::vector<uint64_t>& spanToChainOffset) {
         for (uint64_t i = skel.chainColPtr[targetLump],
                       iEnd = skel.chainColPtr[targetLump + 1];
@@ -163,8 +163,8 @@ struct CpuBaseOps : Ops {
     }
 
     static void eliminateRowChain(const OpaqueDataElimData& elim,
-                                  const BlockMatrixSkel& skel, double* data,
-                                  uint64_t sRel,
+                                  const CoalescedBlockMatrixSkel& skel,
+                                  double* data, uint64_t sRel,
                                   std::vector<uint64_t>& spanToChainOffset,
                                   std::vector<double>& tempBuffer) {
         uint64_t s = sRel + elim.spanRowBegin;
@@ -225,9 +225,9 @@ struct CpuBaseOps : Ops {
         }
     }
 
-    static void eliminateVerySparseRowChain(const OpaqueDataElimData& elim,
-                                            const BlockMatrixSkel& skel,
-                                            double* data, uint64_t sRel) {
+    static void eliminateVerySparseRowChain(
+        const OpaqueDataElimData& elim, const CoalescedBlockMatrixSkel& skel,
+        double* data, uint64_t sRel) {
         uint64_t s = sRel + elim.spanRowBegin;
         if (elim.rowPtr[sRel] == elim.rowPtr[sRel + 1]) {
             return;

@@ -1,4 +1,4 @@
-#include "BlockMatrix.h"
+#include "CoalescedBlockMatrix.h"
 
 #include <glog/logging.h>
 
@@ -8,10 +8,9 @@
 
 using namespace std;
 
-BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
-                                 const vector<uint64_t>& lumpToSpan,
-                                 const vector<uint64_t>& colPtr,
-                                 const vector<uint64_t>& rowInd)
+CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
+    const vector<uint64_t>& spanStart, const vector<uint64_t>& lumpToSpan,
+    const vector<uint64_t>& colPtr, const vector<uint64_t>& rowInd)
     : spanStart(spanStart), lumpToSpan(lumpToSpan) {
     CHECK_GE(spanStart.size(), lumpToSpan.size());
     CHECK_GE(lumpToSpan.size(), 1);
@@ -114,7 +113,8 @@ BlockMatrixSkel::BlockMatrixSkel(const vector<uint64_t>& spanStart,
     rewindVec(boardRowPtr);
 }
 
-Eigen::MatrixXd BlockMatrixSkel::densify(const std::vector<double>& data) {
+Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
+    const std::vector<double>& data) {
     uint64_t totData = chainData[chainData.size() - 1];
     CHECK_EQ(totData, data.size());
 
@@ -142,8 +142,8 @@ Eigen::MatrixXd BlockMatrixSkel::densify(const std::vector<double>& data) {
     return retv;
 }
 
-void BlockMatrixSkel::damp(std::vector<double>& data, double alpha,
-                           double beta) {
+void CoalescedBlockMatrixSkel::damp(std::vector<double>& data, double alpha,
+                                    double beta) {
     uint64_t totData = chainData[chainData.size() - 1];
     CHECK_EQ(totData, data.size());
 
