@@ -5,18 +5,9 @@
 #include "MatOps.h"
 #include "SparseStructure.h"
 
-struct Settings {
-    bool findSparseEliminationRanges = true;
-    int numThreads = 16;
-};
-
 struct Solver {
-    Solver(CoalescedBlockMatrixSkel&& skel,
+    Solver(CoalescedBlockMatrixSkel&& factorSkel,
            std::vector<uint64_t>&& elimLumpRanges, OpsPtr&& ops);
-
-    void initElimination();
-
-    uint64_t boardElimTempSize(uint64_t lump, uint64_t boardIndexInSN) const;
 
     void solveL(const double* matData, double* vecData, int stride,
                 int nRHS) const;
@@ -30,6 +21,10 @@ struct Solver {
 
     void factorXp2(double* data, bool verbose = false) const;
 
+    void initElimination();
+
+    uint64_t boardElimTempSize(uint64_t lump, uint64_t boardIndexInSN) const;
+
     void factorLump(double* data, uint64_t lump) const;
 
     void eliminateBoard(double* data, uint64_t ptr, OpaqueData& ax) const;
@@ -37,18 +32,22 @@ struct Solver {
     void eliminateBoardBatch(double* data, uint64_t ptr, uint64_t batchSize,
                              OpaqueData& ax) const;
 
-    CoalescedBlockMatrixSkel skel;
+    CoalescedBlockMatrixSkel factorSkel;
     std::vector<uint64_t> elimLumpRanges;
-    OpsPtr ops;
 
+    OpsPtr ops;
     OpaqueDataPtr opMatrixSkel;
     std::vector<OpaqueDataPtr> opElimination;
-
-    std::vector<uint64_t> startRowElimPtr;
+    std::vector<uint64_t> startElimRowPtr;
     uint64_t maxElimTempSize;
 };
 
 using SolverPtr = std::unique_ptr<Solver>;
+
+struct Settings {
+    bool findSparseEliminationRanges = true;
+    int numThreads = 16;
+};
 
 SolverPtr createSolver(const Settings& settings,
                        const std::vector<uint64_t>& paramSize,

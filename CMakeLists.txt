@@ -4,20 +4,22 @@ cmake_minimum_required(VERSION 3.20)
 project(BaSpaCho)
 set(CMAKE_CXX_STANDARD 17)
 
-# a few possibilities are:
+message("* Build type: " ${CMAKE_BUILD_TYPE})
+
+# BLAS. a few possibilities are:
 # * ATLAS
 # * OpenBLAS
 # * Intel10_64{i}lp{_seq}
 #   (if 'i' indices are 64bits, if '_seq' sequential ie single thread)
 set(BLA_VENDOR OpenBLAS CACHE STRING
     "BLAS Library to be searched, possibilities are: ATLAS, OpenBLAS, Intel10_64ilp_seq, etc")
-message("BLA_VENDOR = " ${BLA_VENDOR})
+message("* BLA_VENDOR = " ${BLA_VENDOR})
 find_package(BLAS REQUIRED)
-message("BLAS linkerFlags = " ${BLAS_LINKER_FLAGS})
-message("BLAS Libraries = " ${BLAS_LIBRARIES})
+message("* BLAS linkerFlags = " ${BLAS_LINKER_FLAGS})
+message("* BLAS Libraries = " ${BLAS_LIBRARIES})
 if(BLA_VENDOR MATCHES "Intel10_*")
-  message("BLAS appears to be MKL, MKL_ROOT should be set")
-  message("Adding includes:" $ENV{MKLROOT}/include)
+  message("* BLAS appears to be MKL, MKL_ROOT should be set")
+  message("* Adding includes:" $ENV{MKLROOT}/include)
   include_directories($ENV{MKLROOT}/include) # if MKL
   add_compile_definitions(BASPACHO_USE_MKL)
 endif()
@@ -43,9 +45,9 @@ find_library(CHOLMOD_LIBRARIES cholmod
              REQUIRED)
 endif()
 include_directories(${CHOLMOD_INCLUDE_DIR})
-message("CHOLMODDIR = " $ENV{CHOLMODDIR})
-message("Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
-message("Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
+message("* CHOLMODDIR = " $ENV{CHOLMODDIR})
+message("* Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
+message("* Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
 
 # amd
 find_path(AMD_INCLUDE_DIR NAMES amd.h
@@ -56,8 +58,8 @@ find_library(AMD_LIBRARIES amd
              PATHS $ENV{AMDDIR} ${LIB_INSTALL_DIR}
              REQUIRED)
 include_directories(${AMD_INCLUDE_DIR})
-message("Amd Source = " ${AMD_INCLUDE_DIR})
-message("Amd Libraries = " ${AMD_LIBRARIES})
+message("* Amd Source = " ${AMD_INCLUDE_DIR})
+message("* Amd Libraries = " ${AMD_LIBRARIES})
 
 # use fetchcontent to download dependencies
 include(FetchContent)
@@ -74,8 +76,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_MakeAvailable(dispenso)
 unset(CMAKE_POSITION_INDEPENDENT_CODE)
 include_directories(${dispenso_SOURCE_DIR} ${dispenso_SOURCE_DIR}/dispenso/third-party/moodycamel)
-message("Dispenso Source = " ${dispenso_SOURCE_DIR})
-message("Dispenso Library Dir = " ${dispenso_BINARY_DIR})
+message("* Dispenso Source = " ${dispenso_SOURCE_DIR})
+message("* Dispenso Library Dir = " ${dispenso_BINARY_DIR})
 
 # glog
 FetchContent_Declare(
@@ -84,8 +86,8 @@ FetchContent_Declare(
 	)
 set(BUILD_TESTING 0 CACHE BOOL "")
 FetchContent_MakeAvailable(glog)
-message("Glog Source = " ${glog_SOURCE_DIR})
-message("Glog Library Dir = " ${glog_BINARY_DIR})
+message("* Glog Source = " ${glog_SOURCE_DIR})
+message("* Glog Library Dir = " ${glog_BINARY_DIR})
 
 
 # gtest
@@ -95,10 +97,10 @@ FetchContent_Declare(
 	)
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
-message("GTest Source = " ${gtest_SOURCE_DIR})
-message("GTest Library Dir = " ${gtest_BINARY_DIR})
-message("GMock Source = " ${gmock_SOURCE_DIR})
-message("GMock Library Dir = " ${gmock_BINARY_DIR})
+message("* GTest Source = " ${gtest_SOURCE_DIR})
+message("* GTest Library Dir = " ${gtest_BINARY_DIR})
+message("* GMock Source = " ${gmock_SOURCE_DIR})
+message("* GMock Library Dir = " ${gmock_BINARY_DIR})
 include(GoogleTest)
 
 
@@ -110,8 +112,8 @@ FetchContent_Declare(
 if(NOT eigen_POPULATED)
   FetchContent_Populate(eigen)
 endif()
-message("Eigen Source = " ${eigen_SOURCE_DIR})
-message("Eigen Library Dir = " ${eigen_BINARY_DIR})
+message("* Eigen Source = " ${eigen_SOURCE_DIR})
+message("* Eigen Library Dir = " ${eigen_BINARY_DIR})
 include_directories(${eigen_SOURCE_DIR})
 
 
@@ -124,8 +126,8 @@ FetchContent_Declare(
 if(NOT sophus_POPULATED)
   FetchContent_Populate(sophus)
 endif()
-message("Sophus Source = " ${sophus_SOURCE_DIR})
-message("Sophus Library Dir = " ${sophus_BINARY_DIR})
+message("* Sophus Source = " ${sophus_SOURCE_DIR})
+message("* Sophus Library Dir = " ${sophus_BINARY_DIR})
 include_directories(${sophus_SOURCE_DIR})
 add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 

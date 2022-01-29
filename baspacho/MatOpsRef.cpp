@@ -36,12 +36,12 @@ struct SimpleOps : CpuBaseOps {
         OpInstance timer(elimStat);
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
-        const OpaqueDataElimData* pElim =
-            dynamic_cast<const OpaqueDataElimData*>(&elimData);
+        const SparseEliminationInfo* pElim =
+            dynamic_cast<const SparseEliminationInfo*>(&elimData);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pElim);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
-        const OpaqueDataElimData& elim = *pElim;
+        const SparseEliminationInfo& elim = *pElim;
 
         for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
             factorLump(skel, data, l);
@@ -63,12 +63,12 @@ struct SimpleOps : CpuBaseOps {
         OpInstance timer(elimStat);
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
-        const OpaqueDataElimData* pElim =
-            dynamic_cast<const OpaqueDataElimData*>(&elimData);
+        const SparseEliminationInfo* pElim =
+            dynamic_cast<const SparseEliminationInfo*>(&elimData);
         CHECK_NOTNULL(pInfo);
         CHECK_NOTNULL(pElim);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
-        const OpaqueDataElimData& elim = *pElim;
+        const SparseEliminationInfo& elim = *pElim;
 
         for (uint64_t a = lumpsBegin; a < lumpsEnd; a++) {
             factorLump(skel, data, a);

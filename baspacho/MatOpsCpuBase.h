@@ -18,9 +18,9 @@ struct CpuBaseOps : Ops {
                   << "\nasmbl: " << asmblStat.toString();
     }
 
-    struct OpaqueDataElimData : OpaqueData {
-        OpaqueDataElimData() {}
-        virtual ~OpaqueDataElimData() {}
+    struct SparseEliminationInfo : OpaqueData {
+        SparseEliminationInfo() {}
+        virtual ~SparseEliminationInfo() {}
 
         // per-row pointers to chains in a rectagle:
         // * span-rows from lumpToSpan[lumpsEnd],
@@ -32,7 +32,7 @@ struct CpuBaseOps : Ops {
         std::vector<uint64_t> chainColOrd;  // order in col chain elements
     };
 
-    static uint64_t computeMaxBufSize(const OpaqueDataElimData& elim,
+    static uint64_t computeMaxBufSize(const SparseEliminationInfo& elim,
                                       const CoalescedBlockMatrixSkel& skel,
                                       uint64_t sRel) {
         uint64_t maxBufferSize = 0;
@@ -60,7 +60,7 @@ struct CpuBaseOps : Ops {
     virtual OpaqueDataPtr prepareElimination(
         const CoalescedBlockMatrixSkel& skel, uint64_t lumpsBegin,
         uint64_t lumpsEnd) override {
-        OpaqueDataElimData* elim = new OpaqueDataElimData;
+        SparseEliminationInfo* elim = new SparseEliminationInfo;
 
         uint64_t spanRowBegin = skel.lumpToSpan[lumpsEnd];
         uint64_t numSpanRows = skel.spanStart.size() - 1 - spanRowBegin;
@@ -162,7 +162,7 @@ struct CpuBaseOps : Ops {
         }
     }
 
-    static void eliminateRowChain(const OpaqueDataElimData& elim,
+    static void eliminateRowChain(const SparseEliminationInfo& elim,
                                   const CoalescedBlockMatrixSkel& skel,
                                   double* data, uint64_t sRel,
                                   std::vector<uint64_t>& spanToChainOffset,
@@ -226,7 +226,7 @@ struct CpuBaseOps : Ops {
     }
 
     static void eliminateVerySparseRowChain(
-        const OpaqueDataElimData& elim, const CoalescedBlockMatrixSkel& skel,
+        const SparseEliminationInfo& elim, const CoalescedBlockMatrixSkel& skel,
         double* data, uint64_t sRel) {
         uint64_t s = sRel + elim.spanRowBegin;
         if (elim.rowPtr[sRel] == elim.rowPtr[sRel + 1]) {

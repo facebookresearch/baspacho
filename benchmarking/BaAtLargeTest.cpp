@@ -58,10 +58,11 @@ void experiment2(Data& data) {
 
     // generate mock data
     uint64_t totData =
-        solver->skel.chainData[solver->skel.chainData.size() - 1];
+        solver->factorSkel.chainData[solver->factorSkel.chainData.size() - 1];
     vector<double> matData = randomData(totData, -1.0, 1.0, 37);
-    uint64_t order = solver->skel.spanStart[solver->skel.spanStart.size() - 1];
-    solver->skel.damp(matData, 0, order * 1.2);  // make positive def
+    uint64_t order =
+        solver->factorSkel.spanStart[solver->factorSkel.spanStart.size() - 1];
+    solver->factorSkel.damp(matData, 0, order * 1.2);  // make positive def
 
     auto startFactor = hrc::now();
     solver->factor(matData.data(), verbose);
@@ -143,18 +144,19 @@ void experiment(Data& data) {
     et.computeAggregateStruct();
 
     LOG(INFO) << "Block mat";
-    CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
-                                  et.rowParam);
-    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
+    CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
+                                        et.colStart, et.rowParam);
+    uint64_t totData = factorSkel.chainData[factorSkel.chainData.size() - 1];
     LOG(INFO) << "cam-cam blocky (with fill): " << totData << " ("
               << (100.0 * totData / (numCams * numCams)) << "%)";
 
-    LOG(INFO) << "aggregBlocks:" << skel.lumpToSpan.size() - 1;
-    for (size_t a = 0; a < skel.lumpToSpan.size() - 1; a++) {
-        LOG(INFO) << "a." << a
-                  << ": size=" << skel.lumpToSpan[a + 1] - skel.lumpToSpan[a]
-                  << ", nBlockRows="
-                  << skel.boardChainColOrd[skel.boardColPtr[a + 1] - 1];
+    LOG(INFO) << "aggregBlocks:" << factorSkel.lumpToSpan.size() - 1;
+    for (size_t a = 0; a < factorSkel.lumpToSpan.size() - 1; a++) {
+        LOG(INFO)
+            << "a." << a << ": size="
+            << factorSkel.lumpToSpan[a + 1] - factorSkel.lumpToSpan[a]
+            << ", nBlockRows="
+            << factorSkel.boardChainColOrd[factorSkel.boardColPtr[a + 1] - 1];
     }
 
     LOG(INFO) << "Testing Cholmod...";
