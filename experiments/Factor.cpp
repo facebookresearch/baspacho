@@ -50,19 +50,6 @@ void factorLump(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data,
         .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
 }
 
-uint64_t bisect(const uint64_t* array, uint64_t size, uint64_t needle) {
-    uint64_t a = 0, b = size;
-    while (b - a > 1) {
-        uint64_t m = (a + b) / 2;
-        if (needle >= array[m]) {
-            a = m;
-        } else {
-            b = m;
-        }
-    }
-    return a;
-}
-
 // returns (offset, stride)
 std::pair<uint64_t, uint64_t> findBlock(const CoalescedBlockMatrixSkel& skel,
                                         uint64_t cParam, uint64_t rParam) {

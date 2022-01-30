@@ -15,6 +15,13 @@ using OuterStride = Eigen::OuterStride<>;
 using OuterStridedMatM = Eigen::Map<
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
     OuterStride>;
+using OuterStridedCMajMatM = Eigen::Map<
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
+    OuterStride>;
+using OuterStridedCMajMatK =
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                                   Eigen::ColMajor>,
+               0, OuterStride>;
 
 // simple ops implemented using Eigen (therefore single thread)
 struct SimpleOps : CpuBaseOps {
@@ -270,10 +277,6 @@ struct SimpleOps : CpuBaseOps {
     virtual void solveL(const double* data, uint64_t offM, uint64_t n,
                         double* C, uint64_t offC, uint64_t ldc,
                         uint64_t nRHS) override {
-        using OuterStridedCMajMatM =
-            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                                     Eigen::ColMajor>,
-                       0, OuterStride>;
         Eigen::Map<const MatRMaj<double>> matA(data + offM, n, n);
         OuterStridedCMajMatM matC(C + offC, n, nRHS, OuterStride(ldc));
         matA.triangularView<Eigen::Lower>().solveInPlace(matC);
@@ -282,10 +285,6 @@ struct SimpleOps : CpuBaseOps {
     virtual void gemv(const double* data, uint64_t offM, uint64_t nRows,
                       uint64_t nCols, const double* A, uint64_t offA,
                       uint64_t lda, double* C, uint64_t nRHS) override {
-        using OuterStridedCMajMatK =
-            Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic,
-                                           Eigen::Dynamic, Eigen::ColMajor>,
-                       0, OuterStride>;
         Eigen::Map<const MatRMaj<double>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatK matA(A + offA, nCols, nRHS, OuterStride(lda));
         Eigen::Map<MatRMaj<double>> matC(C, nRows, nRHS);
@@ -295,10 +294,6 @@ struct SimpleOps : CpuBaseOps {
     virtual void assembleVec(const OpaqueData& info, const double* A,
                              uint64_t chainColPtr, uint64_t numColItems,
                              double* C, uint64_t ldc, uint64_t nRHS) override {
-        using OuterStridedCMajMatM =
-            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                                     Eigen::ColMajor>,
-                       0, OuterStride>;
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         CHECK_NOTNULL(pInfo);
@@ -324,10 +319,6 @@ struct SimpleOps : CpuBaseOps {
     virtual void solveLt(const double* data, uint64_t offM, uint64_t n,
                          double* C, uint64_t offC, uint64_t ldc,
                          uint64_t nRHS) override {
-        using OuterStridedCMajMatM =
-            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                                     Eigen::ColMajor>,
-                       0, OuterStride>;
         Eigen::Map<const MatRMaj<double>> matA(data + offM, n, n);
         OuterStridedCMajMatM matC(C + offC, n, nRHS, OuterStride(ldc));
         matA.triangularView<Eigen::Lower>().adjoint().solveInPlace(matC);
@@ -336,10 +327,6 @@ struct SimpleOps : CpuBaseOps {
     virtual void gemvT(const double* data, uint64_t offM, uint64_t nRows,
                        uint64_t nCols, const double* C, uint64_t nRHS,
                        double* A, uint64_t offA, uint64_t lda) override {
-        using OuterStridedCMajMatM =
-            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                                     Eigen::ColMajor>,
-                       0, OuterStride>;
         Eigen::Map<const MatRMaj<double>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatM matA(A + offA, nCols, nRHS, OuterStride(lda));
         Eigen::Map<const MatRMaj<double>> matC(C, nRows, nRHS);
@@ -350,10 +337,6 @@ struct SimpleOps : CpuBaseOps {
                               uint64_t ldc, uint64_t nRHS, double* A,
                               uint64_t chainColPtr,
                               uint64_t numColItems) override {
-        using OuterStridedCMajMatK =
-            Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic,
-                                           Eigen::Dynamic, Eigen::ColMajor>,
-                       0, OuterStride>;
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         CHECK_NOTNULL(pInfo);
