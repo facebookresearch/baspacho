@@ -495,28 +495,174 @@ struct BlasOps : CpuBaseOps {
 
     virtual void solveL(const double* data, uint64_t offM, uint64_t n,
                         double* C, uint64_t offC, uint64_t ldc,
-                        uint64_t nRHS) override {}
+                        uint64_t nRHS) override {
+        BLAS_INT argM = n;
+        BLAS_INT argN = nRHS;
+        double argAlpha = 1.0;
+        const double* argA = data + offM;
+        BLAS_INT argLdA = n;
+        double* argB = C + offC;
+        BLAS_INT argLdB = ldc;
+#ifdef BASPACHO_USE_MKL
+        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
+                    CblasNonUnit, argM, argN, argAlpha, argA, argLdA, argB,
+                    argLdB);
+#else
+        char argSide = 'L';
+        char argUpLo = 'U';
+        char argTransA = 'C';
+        char argDiag = 'N';
+        dtrsm_(&argSide, &argUpLo, &argTransA, &argDiag, &argM, &argN,
+               &argAlpha, argA, &argLdA, argB, &argLdB);
+#endif
+    }
 
     virtual void gemv(const double* data, uint64_t offM, uint64_t nRows,
                       uint64_t nCols, const double* A, uint64_t offA,
-                      uint64_t lda, double* C, uint64_t nRHS) override {}
+                      uint64_t lda, double* C, uint64_t nRHS) override {
+        BLAS_INT argM = nRHS;
+        BLAS_INT argN = nRows;
+        BLAS_INT argK = nCols;
+        double argAlpha = 1.0;
+        const double* argA = A + offA;
+        BLAS_INT argLdA = lda;
+        const double* argB = data + offM;
+        BLAS_INT argLdB = nCols;
+        double argBeta = 0.0;
+        double* argC = C;
+        BLAS_INT argLdC = nRHS;
+#ifdef BASPACHO_USE_MKL
+        cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, argM, argN,
+                    argK, argAlpha, argA, argLdA, argB, argLdB, argBeta, argC,
+                    argLdC);
+#else
+        char argTransA = 'C';
+        char argTransB = 'N';
+        dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha, argA,
+               &argLdA, argB, &argLdB, &argBeta, argC, &argLdC);
+#endif
+    }
 
-    virtual void assembleVec(const OpaqueData& skel, const double* A,
+    static inline void stridedTransSub(double* dst, uint64_t dstStride,
+                                       const double* src, uint64_t srcStride,
+                                       uint64_t rSize, uint64_t cSize) {
+        for (uint j = 0; j < rSize; j++) {
+            double* pDst = dst + j;
+            for (uint i = 0; i < cSize; i++) {
+                *pDst -= src[i];
+                pDst += dstStride;
+            }
+            src += srcStride;
+        }
+    }
+
+    virtual void assembleVec(const OpaqueData& info, const double* A,
                              uint64_t chainColPtr, uint64_t numColItems,
-                             double* C, uint64_t ldc, uint64_t nRHS) override {}
+                             double* C, uint64_t ldc, uint64_t nRHS) override {
+        const BlasSymbolicInfo* pInfo =
+            dynamic_cast<const BlasSymbolicInfo*>(&info);
+        CHECK_NOTNULL(pInfo);
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
+        const uint64_t* chainRowsTillEnd =
+            skel.chainRowsTillEnd.data() + chainColPtr;
+        const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
+        uint64_t startRow = chainRowsTillEnd[-1];
+        for (uint64_t i = 0; i < numColItems; i++) {
+            uint64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
+            uint64_t span = toSpan[i];
+            uint64_t spanStart = skel.spanStart[span];
+            uint64_t spanSize = skel.spanStart[span + 1] - spanStart;
 
-    virtual void solveLt(const double* data, uint64_t offset, uint64_t n,
+            stridedTransSub(C + spanStart, ldc, A + rowOffset * nRHS, nRHS,
+                            spanSize, nRHS);
+        }
+    }
+
+    virtual void solveLt(const double* data, uint64_t offM, uint64_t n,
                          double* C, uint64_t offC, uint64_t ldc,
-                         uint64_t nRHS) override {}
+                         uint64_t nRHS) override {
+        BLAS_INT argM = n;
+        BLAS_INT argN = nRHS;
+        double argAlpha = 1.0;
+        const double* argA = data + offM;
+        BLAS_INT argLdA = n;
+        double* argB = C + offC;
+        BLAS_INT argLdB = ldc;
+#ifdef BASPACHO_USE_MKL
+        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans,
+                    CblasNonUnit, argM, argN, argAlpha, argA, argLdA, argB,
+                    argLdB);
+#else
+        char argSide = 'L';
+        char argUpLo = 'U';
+        char argTransA = 'N';
+        char argDiag = 'N';
+        dtrsm_(&argSide, &argUpLo, &argTransA, &argDiag, &argM, &argN,
+               &argAlpha, argA, &argLdA, argB, &argLdB);
+#endif
+    }
 
-    virtual void gemvT(const double* data, uint64_t offset, uint64_t nRows,
+    virtual void gemvT(const double* data, uint64_t offM, uint64_t nRows,
                        uint64_t nCols, const double* C, uint64_t nRHS,
-                       double* A, uint64_t offA, uint64_t lda) override {}
+                       double* A, uint64_t offA, uint64_t lda) override {
+        BLAS_INT argM = nCols;
+        BLAS_INT argN = nRHS;
+        BLAS_INT argK = nRows;
+        double argAlpha = -1.0;
+        const double* argA = data + offM;
+        BLAS_INT argLdA = nCols;
+        const double* argB = C;
+        BLAS_INT argLdB = nRHS;
+        double argBeta = 1.0;
+        double* argC = A + offA;
+        BLAS_INT argLdC = lda;
+#ifdef BASPACHO_USE_MKL
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, argM, argN,
+                    argK, argAlpha, argA, argLdA, argB, argLdB, argBeta, argC,
+                    argLdC);
+#else
+        char argTransA = 'N';
+        char argTransB = 'C';
+        dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha, argA,
+               &argLdA, argB, &argLdB, &argBeta, argC, &argLdC);
+#endif
+    }
 
-    virtual void assembleVecT(const OpaqueData& skel, const double* C,
+    static inline void stridedTransSet(double* dst, uint64_t dstStride,
+                                       const double* src, uint64_t srcStride,
+                                       uint64_t rSize, uint64_t cSize) {
+        for (uint j = 0; j < rSize; j++) {
+            double* pDst = dst + j;
+            for (uint i = 0; i < cSize; i++) {
+                *pDst = src[i];
+                pDst += dstStride;
+            }
+            src += srcStride;
+        }
+    }
+
+    virtual void assembleVecT(const OpaqueData& info, const double* C,
                               uint64_t ldc, uint64_t nRHS, double* A,
                               uint64_t chainColPtr,
-                              uint64_t numColItems) override {}
+                              uint64_t numColItems) override {
+        const BlasSymbolicInfo* pInfo =
+            dynamic_cast<const BlasSymbolicInfo*>(&info);
+        CHECK_NOTNULL(pInfo);
+        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
+        const uint64_t* chainRowsTillEnd =
+            skel.chainRowsTillEnd.data() + chainColPtr;
+        const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
+        uint64_t startRow = chainRowsTillEnd[-1];
+        for (uint64_t i = 0; i < numColItems; i++) {
+            uint64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
+            uint64_t span = toSpan[i];
+            uint64_t spanStart = skel.spanStart[span];
+            uint64_t spanSize = skel.spanStart[span + 1] - spanStart;
+
+            stridedTransSet(A + rowOffset * nRHS, nRHS, C + spanStart, ldc,
+                            nRHS, spanSize);
+        }
+    }
 };
 
 OpsPtr blasOps() { return OpsPtr(new BlasOps); }

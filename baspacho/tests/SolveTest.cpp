@@ -47,6 +47,8 @@ void testSolveL(OpsPtr&& ops, int nRHS = 1) {
                 0, 1e-5);
 }
 
+TEST(Solve, SolveL_Blas) { testSolveL(blasOps(), 5); }
+
 TEST(Solve, SolveL_Ref) { testSolveL(simpleOps(), 5); }
 
 void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
@@ -79,5 +81,7 @@ void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
                     .norm(),
                 0, 1e-5);
 }
+
+TEST(Solve, SolveLt_Blas) { testSolveLt(blasOps(), 5); }
 
 TEST(Solve, SolveLt_Ref) { testSolveLt(simpleOps(), 5); }
