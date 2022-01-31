@@ -68,7 +68,7 @@ https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors
 BaSpaCho can use either the implementation in Eigen of AMD (by default), or
 the version in library AMD as part of SuiteSparse.
 
-# Caveats
+## Caveats
 
 * Only supernodal Cholesky is implemented. We focused on problems having at least a certain degree of
 interconnectedness, which will benefit of Blas libraries and parallelism. If working with a problem where
