@@ -1,4 +1,6 @@
 
+#include <glog/logging.h>
+
 #include <Eigen/Geometry>
 #include <tuple>
 
@@ -51,6 +53,36 @@ struct CoalescedAccessor {
                               lumpSize);
     }
 
+    template <int rowSize = Eigen::Dynamic, int64_t colSize = Eigen::Dynamic,
+              typename T>
+    auto block(T* data, uint64_t rowBlockIndex, uint64_t colBlockIndex) const {
+        using namespace Eigen;
+        auto [offset, stride] = blockOffset(rowBlockIndex, colBlockIndex);
+        if (rowSize != Dynamic) {
+            CHECK_EQ(rowSize, paramSize(rowBlockIndex));
+        }
+        if (colSize != Dynamic) {
+            CHECK_EQ(colSize, paramSize(colBlockIndex));
+        }
+        return Map<Matrix<T, rowSize, colSize, RowMajor>, 0, OuterStride<>>(
+            data + offset,
+            rowSize != Dynamic ? rowSize : paramSize(rowBlockIndex),
+            colSize != Dynamic ? colSize : paramSize(colBlockIndex),
+            OuterStride<>(stride));
+    }
+
+    template <int size = Eigen::Dynamic, typename T>
+    auto diagBlock(T* data, uint64_t blockIndex) const {
+        using namespace Eigen;
+        auto [offset, stride] = diagBlockOffset(blockIndex);
+        if (size != Dynamic) {
+            CHECK_EQ(size, paramSize(blockIndex));
+        }
+        int pSize = size != Dynamic ? size : paramSize(blockIndex);
+        return Map<Matrix<T, size, size, RowMajor>, 0, OuterStride<>>(
+            data + offset, pSize, pSize, OuterStride<>(stride));
+    }
+
     const uint64_t* spanStart;
     const uint64_t* spanToLump;
     const uint64_t* lumpStart;
@@ -84,8 +116,39 @@ struct PermutedCoalescedAccessor {
         return std::make_tuple(off, stride, flipped);
     }
 
-    std::pair<uint64_t, uint64_t> diagBlockOffset(uint64_t blockIndex) {
+    std::pair<uint64_t, uint64_t> diagBlockOffset(uint64_t blockIndex) const {
         return plainAcc.diagBlockOffset(permutation[blockIndex]);
+    }
+
+    template <int rowSize = Eigen::Dynamic, int64_t colSize = Eigen::Dynamic,
+              typename T>
+    auto block(T* data, uint64_t rowBlockIndex, uint64_t colBlockIndex) const {
+        using namespace Eigen;
+        if (rowSize != Dynamic) {
+            CHECK_EQ(rowSize, paramSize(rowBlockIndex));
+        }
+        if (colSize != Dynamic) {
+            CHECK_EQ(colSize, paramSize(colBlockIndex));
+        }
+        auto [offset, stride, flip] = blockOffset(rowBlockIndex, colBlockIndex);
+        return Map<Matrix<T, rowSize, colSize, RowMajor>, 0,
+                   Stride<Dynamic, Dynamic>>(
+            data + offset,
+            rowSize != Dynamic ? rowSize : paramSize(rowBlockIndex),
+            colSize != Dynamic ? colSize : paramSize(colBlockIndex),
+            Stride<Dynamic, Dynamic>(flip ? 1 : stride, flip ? stride : 1));
+    }
+
+    template <int size = Eigen::Dynamic, typename T>
+    auto diagBlock(T* data, uint64_t blockIndex) const {
+        using namespace Eigen;
+        auto [offset, stride] = diagBlockOffset(blockIndex);
+        if (size != Dynamic) {
+            CHECK_EQ(size, paramSize(blockIndex));
+        }
+        int pSize = size != Dynamic ? size : paramSize(blockIndex);
+        return Map<Matrix<T, size, size, RowMajor>, 0, OuterStride<>>(
+            data + offset, pSize, pSize, OuterStride<>(stride));
     }
 
     CoalescedAccessor plainAcc;
