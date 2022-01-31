@@ -1,7 +1,11 @@
 
 #include "SparseStructure.h"
 
+#if BASPACHO_USE_SUITESPARSE_AMD
 #include <amd.h>
+#else
+#include <Eigen/OrderingMethods>
+#endif
 
 #include <algorithm>
 
@@ -287,6 +291,8 @@ SparseStructure SparseStructure::addFullEliminationFill() const {
     return retv;
 }
 
+#if BASPACHO_USE_SUITESPARSE_AMD
+
 std::vector<uint64_t> SparseStructure::fillReducingPermutation() const {
     std::vector<int64_t> colPtr(ptrs.begin(), ptrs.end()),
         rowInd(inds.begin(), inds.end());
@@ -302,6 +308,31 @@ std::vector<uint64_t> SparseStructure::fillReducingPermutation() const {
 
     return std::vector<uint64_t>(P.begin(), P.end());
 }
+
+#else
+
+std::vector<uint64_t> SparseStructure::fillReducingPermutation() const {
+    using INT = int;
+    std::vector<INT> colPtr(ptrs.begin(), ptrs.end()),
+        rowInd(inds.begin(), inds.end());
+
+    using namespace Eigen;
+
+    // NOTE: feeding directly Map<...> references to AMDOrdering doesn't work,
+    // this is probably a bug/limitation of Eigen
+    vector<int8_t> fakeData(rowInd.size());
+    Map<SparseMatrix<int8_t, ColMajor, INT> > matMap(
+        colPtr.size() - 1, colPtr.size() - 1, rowInd.size(), colPtr.data(),
+        rowInd.data(), (int8_t*)fakeData.data());
+    SparseMatrix<int8_t, ColMajor, INT> mat = matMap;
+    PermutationMatrix<Dynamic, Dynamic, INT> perm;
+    AMDOrdering<INT>()(mat, perm);
+
+    return std::vector<uint64_t>(perm.indices().data(),
+                                 perm.indices().data() + perm.size());
+}
+
+#endif
 
 SparseStructure SparseStructure::extractRightBottom(uint64_t startRow) {
     uint64_t ord = order();

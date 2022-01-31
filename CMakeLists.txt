@@ -11,6 +11,7 @@ message("* Build type: " ${CMAKE_BUILD_TYPE})
 # * OpenBLAS
 # * Intel10_64{i}lp{_seq}
 #   (if 'i' indices are 64bits, if '_seq' sequential ie single thread)
+message("==============================[ BLAS ]==================================")
 set(BLA_VENDOR OpenBLAS CACHE STRING
     "BLAS Library to be searched, possibilities are: ATLAS, OpenBLAS, Intel10_64ilp_seq, etc")
 message("* BLA_VENDOR = " ${BLA_VENDOR})
@@ -24,42 +25,48 @@ if(BLA_VENDOR MATCHES "Intel10_*")
   add_compile_definitions(BASPACHO_USE_MKL)
 endif()
 
+# amd, if using amd from SuiteSparse
+message("===============[ minimum degree reordering algorithm ]==================")
+set(USE_SUITESPARSE_AMD OFF CACHE BOOL "If on, will use AMD algorithm in SuiteSparse (must be installed)")
+if(USE_SUITESPARSE_AMD)
+  set(HAVE_AMD 1)
+  find_path(AMD_INCLUDE_DIR NAMES amd.h
+            PATHS $ENV{AMDDIR} ${INCLUDE_INSTALL_DIR}
+            PATH_SUFFIXES suitesparse ufsparse
+            REQUIRED)
+  find_library(AMD_LIBRARIES amd
+              PATHS $ENV{AMDDIR} ${LIB_INSTALL_DIR}
+              REQUIRED)
+  include_directories(${AMD_INCLUDE_DIR})
+  message("* Using Algebraic Minimum Degree (AMD) algorithm from SuiteSparse")
+  message("* Amd Source = " ${AMD_INCLUDE_DIR})
+  message("* Amd Libraries = " ${AMD_LIBRARIES})
+  add_compile_definitions(BASPACHO_USE_SUITESPARSE_AMD=1)
+else()
+  set(HAVE_AMD 0)
+  message("* Using Algebraic Minimum Degree (AMD) algorithm from Eigen")
+endif()
+
 
 # cholmod (for benchmarking comparison)
-if(false) # use local installation dir
-  find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
-            PATHS $ENV{CHOLMODDIR}/Include
-            NO_DEFAULT_PATH
-            REQUIRED)
-  find_library(CHOLMOD_LIBRARIES cholmod
-            PATHS $ENV{CHOLMODDIR}/Lib
-            NO_DEFAULT_PATH
-            REQUIRED)
-else()
+message("============================[ CHOLMOD ]=================================")
 find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
-          PATHS $ENV{CHOLMODDIR} ${INCLUDE_INSTALL_DIR}
-          PATH_SUFFIXES suitesparse ufsparse
-          REQUIRED)
-find_library(CHOLMOD_LIBRARIES cholmod
-             PATHS $ENV{CHOLMODDIR} ${LIB_INSTALL_DIR}
-             REQUIRED)
+          PATHS ${INCLUDE_INSTALL_DIR}
+          PATH_SUFFIXES suitesparse ufsparse)
+find_library(CHOLMOD_LIBRARIES qcholmod
+             PATHS ${LIB_INSTALL_DIR})
+if((CHOLMOD_INCLUDE_DIR STREQUAL "CHOLMOD_INCLUDE_DIR-NOTFOUND")
+  OR (CHOLMOD_LIBRARIES STREQUAL "CHOLMOD_LIBRARIES-NOTFOUND"))
+  set(HAVE_CHOLMOD 0)
+  message("* Cholmod not found! Benchmarking tools will not support it")
+else()
+  set(HAVE_CHOLMOD 1)
+  message("* Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
+  message("* Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
+  add_compile_definitions(BASPACHO_HAVE_CHOLMOD=1)
+  include_directories(${CHOLMOD_INCLUDE_DIR})
 endif()
-include_directories(${CHOLMOD_INCLUDE_DIR})
-message("* CHOLMODDIR = " $ENV{CHOLMODDIR})
-message("* Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
-message("* Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
 
-# amd
-find_path(AMD_INCLUDE_DIR NAMES amd.h
-          PATHS $ENV{AMDDIR} ${INCLUDE_INSTALL_DIR}
-          PATH_SUFFIXES suitesparse ufsparse
-          REQUIRED)
-find_library(AMD_LIBRARIES amd
-             PATHS $ENV{AMDDIR} ${LIB_INSTALL_DIR}
-             REQUIRED)
-include_directories(${AMD_INCLUDE_DIR})
-message("* Amd Source = " ${AMD_INCLUDE_DIR})
-message("* Amd Libraries = " ${AMD_LIBRARIES})
 
 # use fetchcontent to download dependencies
 include(FetchContent)
@@ -67,6 +74,7 @@ cmake_policy(SET CMP0077 NEW)
 
 # dispenso for multithreading
 # currently in facebookincubator, soon to be opensourced
+message("============================[ dispenso ]================================")
 FetchContent_Declare(
   dispenso
   GIT_REPOSITORY git@github.com:facebookincubator/dispenso.git
@@ -81,6 +89,7 @@ message("* Dispenso Library Dir = " ${dispenso_BINARY_DIR})
 
 
 # gtest
+message("=============================[ GTest ]==================================")
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
@@ -95,6 +104,7 @@ include(GoogleTest)
 
 
 # eigen
+message("=============================[ Eigen ]==================================")
 FetchContent_Declare(
   eigen
   URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip
@@ -108,9 +118,10 @@ include_directories(${eigen_SOURCE_DIR})
 
 
 # sophus (for testing on BA problem)
+message("=============================[ Sophus ]=================================")
 FetchContent_Declare(
   sophus
-  GIT_REPOSITORY https://github.com/strasdat/Sophus.git
+  GIT_REPOSITORY git@github.com:strasdat/Sophus.git # https://github.com/
   GIT_TAG 49a7e1286910019f74fb4f0bb3e213c909f8e1b7
 )
 if(NOT sophus_POPULATED)
@@ -121,6 +132,7 @@ message("* Sophus Library Dir = " ${sophus_BINARY_DIR})
 include_directories(${sophus_SOURCE_DIR})
 add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
+
 add_library(BaSpaCho
             baspacho/CoalescedBlockMatrix.cpp
             baspacho/EliminationTree.cpp
@@ -129,10 +141,11 @@ add_library(BaSpaCho
             baspacho/Solver.cpp
             baspacho/SparseStructure.cpp
             baspacho/Utils.cpp)
-target_link_libraries (BaSpaCho dispenso ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
+target_link_libraries (BaSpaCho dispenso ${BLAS_LIBRARIES})
 
-# IF have blas
-target_link_libraries (BaSpaCho ${BLAS_LIBRARIES})
+if(HAVE_AMD)
+  target_link_libraries (BaSpaCho ${AMD_LIBRARIES})
+endif()
 
 add_library(testing
             testing/TestingMatGen.cpp
@@ -140,16 +153,29 @@ add_library(testing
 
 target_link_libraries (testing BaSpaCho)
 
-add_executable(BAL_test
-               benchmarking/BaAtLarge.cpp
-               benchmarking/BaAtLargeTest.cpp
-               benchmarking/BenchCholmod.cpp)
+
+set(BAL_test_sources
+    benchmarking/BaAtLarge.cpp
+    benchmarking/BaAtLargeTest.cpp)
+set(bench_sources
+    benchmarking/Bench.cpp)
+
+if(HAVE_CHOLMOD)
+  list(APPEND BAL_test_sources benchmarking/BenchCholmod.cpp)
+  list(APPEND bench_sources benchmarking/BenchCholmod.cpp)
+endif()
+
+add_executable(BAL_test ${BAL_test_sources})
 target_link_libraries (BAL_test BaSpaCho testing)
 
-add_executable(bench
-               benchmarking/Bench.cpp 
-               benchmarking/BenchCholmod.cpp)
+add_executable(bench ${bench_sources})
 target_link_libraries (bench BaSpaCho testing)
+
+if(HAVE_CHOLMOD)
+  target_link_libraries (BAL_test ${CHOLMOD_LIBRARIES})
+  target_link_libraries (bench ${CHOLMOD_LIBRARIES})
+endif()
+
 
 # unit tests
 enable_testing()

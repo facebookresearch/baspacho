@@ -9,7 +9,10 @@
 #include "../baspacho/Utils.h"
 #include "../testing/TestingUtils.h"
 #include "BaAtLarge.h"
+
+#ifdef BASPACHO_HAVE_CHOLMOD
 #include "BenchCholmod.h"
+#endif
 
 using namespace ba_at_large;
 using namespace std;
@@ -159,8 +162,10 @@ void experiment(Data& data) {
             << std::endl;
     }
 
+#ifdef BASPACHO_HAVE_CHOLMOD
     std::cout << "Testing Cholmod..." << std::endl;
     benchmarkCholmodSolve(paramSz, camCamSs);
+#endif
 }
 
 int main(int argc, char* argv[]) {
