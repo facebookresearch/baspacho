@@ -1,4 +1,4 @@
-
+#if 0
 #include <alloca.h>
 #include <dispenso/parallel_for.h>
 
@@ -666,3 +666,4 @@ struct BlasOps : CpuBaseOps {
 };
 
 OpsPtr blasOps() { return OpsPtr(new BlasOps); }
+#endif

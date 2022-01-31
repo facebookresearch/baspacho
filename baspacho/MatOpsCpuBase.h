@@ -5,34 +5,25 @@
 #include "MatOps.h"
 #include "Utils.h"
 
+struct CpuBaseSymElimCtx : SymElimCtx {
+    CpuBaseSymElimCtx() {}
+    virtual ~CpuBaseSymElimCtx() override {}
+
+    // per-row pointers to chains in a rectagle:
+    // * span-rows from lumpToSpan[lumpsEnd],
+    // * board cols in interval lumpsBegin:lumpsEnd
+    uint64_t spanRowBegin;
+    uint64_t maxBufferSize;
+    std::vector<uint64_t> rowPtr;       // row data pointer
+    std::vector<uint64_t> colLump;      // col-lump
+    std::vector<uint64_t> chainColOrd;  // order in col chain elements
+};
+
 // common code for ref and blas implementations
-struct CpuBaseOps : Ops {
-    virtual void printStats() const override {
-        std::cout << "matOp stats:"
-                  << "\nelim: " << elimStat.toString()
-                  << "\nBiggest dense block: " << potrfBiggestN
-                  << "\npotrf: " << potrfStat.toString()
-                  << "\ntrsm: " << trsmStat.toString()  //
-                  << "\nsyrk/gemm(" << syrkCalls << "+" << gemmCalls
-                  << "): " << sygeStat.toString()
-                  << "\nasmbl: " << asmblStat.toString() << std::endl;
-    }
+struct CpuBaseSymbolicCtx : SymbolicCtx {
+    CpuBaseSymbolicCtx(const CoalescedBlockMatrixSkel& skel) : skel(skel) {}
 
-    struct SparseEliminationInfo : OpaqueData {
-        SparseEliminationInfo() {}
-        virtual ~SparseEliminationInfo() {}
-
-        // per-row pointers to chains in a rectagle:
-        // * span-rows from lumpToSpan[lumpsEnd],
-        // * board cols in interval lumpsBegin:lumpsEnd
-        uint64_t spanRowBegin;
-        uint64_t maxBufferSize;
-        std::vector<uint64_t> rowPtr;       // row data pointer
-        std::vector<uint64_t> colLump;      // col-lump
-        std::vector<uint64_t> chainColOrd;  // order in col chain elements
-    };
-
-    static uint64_t computeMaxBufSize(const SparseEliminationInfo& elim,
+    static uint64_t computeMaxBufSize(const CpuBaseSymElimCtx& elim,
                                       const CoalescedBlockMatrixSkel& skel,
                                       uint64_t sRel) {
         uint64_t maxBufferSize = 0;
@@ -58,10 +49,9 @@ struct CpuBaseOps : Ops {
         return maxBufferSize;
     }
 
-    virtual OpaqueDataPtr prepareElimination(
-        const CoalescedBlockMatrixSkel& skel, uint64_t lumpsBegin,
-        uint64_t lumpsEnd) override {
-        SparseEliminationInfo* elim = new SparseEliminationInfo;
+    virtual SymElimCtxPtr prepareElimination(uint64_t lumpsBegin,
+                                             uint64_t lumpsEnd) override {
+        CpuBaseSymElimCtx* elim = new CpuBaseSymElimCtx;
 
         uint64_t spanRowBegin = skel.lumpToSpan[lumpsEnd];
         uint64_t numSpanRows = skel.spanStart.size() - 1 - spanRowBegin;
@@ -103,28 +93,39 @@ struct CpuBaseOps : Ops {
             elim->maxBufferSize = std::max(elim->maxBufferSize,
                                            computeMaxBufSize(*elim, skel, r));
         }
-        return OpaqueDataPtr(elim);
+        return SymElimCtxPtr(elim);
     }
 
-    struct ElimContext {
-        std::vector<double> tempBuffer;
-        std::vector<uint64_t> spanToChainOffset;
-        ElimContext(uint64_t bufSize, uint64_t numSpans)
-            : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
-    };
+    const CoalescedBlockMatrixSkel& skel;
+};
+
+template <typename T>
+struct CpuBaseNumericCtx : NumericCtx<T> {
+    CpuBaseNumericCtx(uint64_t bufSize, uint64_t numSpans)
+        : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
+
+    virtual void printStats() const override {
+        std::cout << "matOp stats:"
+                  << "\nelim: " << elimStat.toString()
+                  << "\nBiggest dense block: " << potrfBiggestN
+                  << "\npotrf: " << potrfStat.toString()
+                  << "\ntrsm: " << trsmStat.toString()  //
+                  << "\nsyrk/gemm(" << syrkCalls << "+" << gemmCalls
+                  << "): " << sygeStat.toString()
+                  << "\nasmbl: " << asmblStat.toString() << std::endl;
+    }
 
     // helper for elimination
-    static inline void factorLump(const CoalescedBlockMatrixSkel& skel,
-                                  double* data, uint64_t lump) {
+    static inline void factorLump(const CoalescedBlockMatrixSkel& skel, T* data,
+                                  uint64_t lump) {
         uint64_t lumpStart = skel.lumpStart[lump];
         uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
         uint64_t colStart = skel.chainColPtr[lump];
         uint64_t dataPtr = skel.chainData[colStart];
 
         // in-place lower diag cholesky dec on diagonal block
-        Eigen::Map<MatRMaj<double>> diagBlock(data + dataPtr, lumpSize,
-                                              lumpSize);
-        { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
+        Eigen::Map<MatRMaj<T>> diagBlock(data + dataPtr, lumpSize, lumpSize);
+        { Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(diagBlock); }
 
         uint64_t gatheredStart = skel.boardColPtr[lump];
         uint64_t gatheredEnd = skel.boardColPtr[lump + 1];
@@ -134,16 +135,16 @@ struct CpuBaseOps : Ops {
         uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
                            skel.chainRowsTillEnd[colStart + rowDataStart - 1];
 
-        Eigen::Map<MatRMaj<double>> belowDiagBlock(data + belowDiagStart,
-                                                   numRows, lumpSize);
-        diagBlock.triangularView<Eigen::Lower>()
+        Eigen::Map<MatRMaj<T>> belowDiagBlock(data + belowDiagStart, numRows,
+                                              lumpSize);
+        diagBlock.template triangularView<Eigen::Lower>()
             .transpose()
-            .solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
+            .template solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
     }
 
-    static inline void stridedMatSub(double* dst, uint64_t dstStride,
-                                     const double* src, uint64_t srcStride,
-                                     uint64_t rSize, uint64_t cSize) {
+    static inline void stridedMatSub(T* dst, uint64_t dstStride, const T* src,
+                                     uint64_t srcStride, uint64_t rSize,
+                                     uint64_t cSize) {
         for (uint j = 0; j < rSize; j++) {
             for (uint i = 0; i < cSize; i++) {
                 dst[i] -= src[i];
@@ -163,11 +164,11 @@ struct CpuBaseOps : Ops {
         }
     }
 
-    static void eliminateRowChain(const SparseEliminationInfo& elim,
-                                  const CoalescedBlockMatrixSkel& skel,
-                                  double* data, uint64_t sRel,
+    static void eliminateRowChain(const CpuBaseSymElimCtx& elim,
+                                  const CoalescedBlockMatrixSkel& skel, T* data,
+                                  uint64_t sRel,
                                   std::vector<uint64_t>& spanToChainOffset,
-                                  std::vector<double>& tempBuffer) {
+                                  std::vector<T>& tempBuffer) {
         uint64_t s = sRel + elim.spanRowBegin;
         if (elim.rowPtr[sRel] == elim.rowPtr[sRel + 1]) {
             return;
@@ -199,14 +200,14 @@ struct CpuBaseOps : Ops {
                               skel.spanStart[s + 1] - skel.spanStart[s]);
             uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
 
-            Eigen::Map<MatRMaj<double>> chainSubMat(data + dataOffset,
-                                                    nRowsChain, lumpSize);
-            Eigen::Map<MatRMaj<double>> chainOnwardSubMat(
-                data + dataOffset, nRowsOnward, lumpSize);
+            Eigen::Map<MatRMaj<T>> chainSubMat(data + dataOffset, nRowsChain,
+                                               lumpSize);
+            Eigen::Map<MatRMaj<T>> chainOnwardSubMat(data + dataOffset,
+                                                     nRowsOnward, lumpSize);
 
             BASPACHO_CHECK_GE(tempBuffer.size(), nRowsOnward * nRowsChain);
-            Eigen::Map<MatRMaj<double>> prod(tempBuffer.data(), nRowsOnward,
-                                             nRowsChain);
+            Eigen::Map<MatRMaj<T>> prod(tempBuffer.data(), nRowsOnward,
+                                        nRowsChain);
             prod.noalias() = chainOnwardSubMat * chainSubMat.transpose();
 
             // assemble blocks, iterating on chain and below chains
@@ -218,8 +219,7 @@ struct CpuBaseOps : Ops {
 
                 // incomment below if check is needed
                 // BASPACHO_CHECK(spanToChainOffset[s2] != kInvalid);
-                double* targetData =
-                    data + spanOffsetInLump + spanToChainOffset[s2];
+                T* targetData = data + spanOffsetInLump + spanToChainOffset[s2];
 
                 stridedMatSub(targetData, targetLumpSize,
                               tempBuffer.data() + nRowsChain * relRow,
@@ -229,8 +229,8 @@ struct CpuBaseOps : Ops {
     }
 
     static void eliminateVerySparseRowChain(
-        const SparseEliminationInfo& elim, const CoalescedBlockMatrixSkel& skel,
-        double* data, uint64_t sRel) {
+        const CpuBaseSymElimCtx& elim, const CoalescedBlockMatrixSkel& skel,
+        T* data, uint64_t sRel) {
         uint64_t s = sRel + elim.spanRowBegin;
         if (elim.rowPtr[sRel] == elim.rowPtr[sRel + 1]) {
             return;
@@ -263,15 +263,13 @@ struct CpuBaseOps : Ops {
                               skel.spanStart[s + 1] - skel.spanStart[s]);
             uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
 
-            Eigen::Map<MatRMaj<double>> chainSubMat(data + dataOffset,
-                                                    nRowsChain, lumpSize);
-            Eigen::Map<MatRMaj<double>> chainOnwardSubMat(
-                data + dataOffset, nRowsOnward, lumpSize);
+            Eigen::Map<MatRMaj<T>> chainSubMat(data + dataOffset, nRowsChain,
+                                               lumpSize);
+            Eigen::Map<MatRMaj<T>> chainOnwardSubMat(data + dataOffset,
+                                                     nRowsOnward, lumpSize);
 
-            double* tempBuffer =
-                (double*)alloca(sizeof(double) * nRowsOnward * nRowsChain);
-            Eigen::Map<MatRMaj<double>> prod(tempBuffer, nRowsOnward,
-                                             nRowsChain);
+            T* tempBuffer = (T*)alloca(sizeof(T) * nRowsOnward * nRowsChain);
+            Eigen::Map<MatRMaj<T>> prod(tempBuffer, nRowsOnward, nRowsChain);
             prod.noalias() = chainOnwardSubMat * chainSubMat.transpose();
 
             // assemble blocks, iterating on chain and below chains
@@ -284,7 +282,7 @@ struct CpuBaseOps : Ops {
                 uint64_t pos = bisect(skel.chainRowSpan.data() + bisectStart,
                                       bisectEnd - bisectStart, s2);
                 uint64_t chainOffset = skel.chainData[bisectStart + pos];
-                double* targetData = data + spanOffsetInLump + chainOffset;
+                T* targetData = data + spanOffsetInLump + chainOffset;
 
                 stridedMatSub(targetData, targetLumpSize,
                               tempBuffer + nRowsChain * relRow, nRowsChain,
@@ -292,6 +290,10 @@ struct CpuBaseOps : Ops {
             }
         }
     }
+
+    // temporary data
+    std::vector<T> tempBuffer;
+    std::vector<uint64_t> spanToChainOffset;
 
     OpStat elimStat;
     OpStat potrfStat;

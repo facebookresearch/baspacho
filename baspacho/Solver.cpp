@@ -22,23 +22,24 @@ Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_,
       elimLumpRanges(std::move(elimLumpRanges_)),
       permutation(std::move(permutation_)),
       ops(std::move(ops_)) {
-    opMatrixSkel = ops->initSymbolicInfo(factorSkel);
+    symCtx = ops->initSymbolicInfo(factorSkel);
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
-        opElimination.push_back(ops->prepareElimination(
-            factorSkel, elimLumpRanges[l], elimLumpRanges[l + 1]));
+        elimCtxs.push_back(symCtx->prepareElimination(elimLumpRanges[l],
+                                                      elimLumpRanges[l + 1]));
     }
 
     initElimination();
 }
 
-void Solver::factorLump(double* data, uint64_t lump) const {
+void Solver::factorLump(NumericCtx<double>& numCtx, double* data,
+                        uint64_t lump) const {
     uint64_t lumpStart = factorSkel.lumpStart[lump];
     uint64_t lumpSize = factorSkel.lumpStart[lump + 1] - lumpStart;
     uint64_t chainColBegin = factorSkel.chainColPtr[lump];
     uint64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
 
     // compute lower diag cholesky dec on diagonal block
-    ops->potrf(lumpSize, data + diagBlockOffset);
+    numCtx.potrf(lumpSize, data + diagBlockOffset);
 
     uint64_t boardColBegin = factorSkel.boardColPtr[lump];
     uint64_t boardColEnd = factorSkel.boardColPtr[lump + 1];
@@ -54,11 +55,12 @@ void Solver::factorLump(double* data, uint64_t lump) const {
         return;
     }
 
-    ops->trsm(lumpSize, numRowsBelowDiag, data + diagBlockOffset,
-              data + belowDiagOffset);
+    numCtx.trsm(lumpSize, numRowsBelowDiag, data + diagBlockOffset,
+                data + belowDiagOffset);
 }
 
-void Solver::eliminateBoard(double* data, uint64_t ptr, OpaqueData& ax) const {
+void Solver::eliminateBoard(NumericCtx<double>& numCtx, double* data,
+                            uint64_t ptr) const {
     uint64_t origLump = factorSkel.boardColLump[ptr];
     uint64_t boardIndexInCol = factorSkel.boardColOrd[ptr];
 
@@ -86,8 +88,8 @@ void Solver::eliminateBoard(double* data, uint64_t ptr, OpaqueData& ax) const {
         factorSkel.chainRowsTillEnd[chainColBegin + rowDataEnd1 - 1] -
         rectRowBegin;
 
-    ops->saveSyrkGemm(ax, numRowsSub, numRowsFull, origLumpSize, data,
-                      belowDiagStart);
+    numCtx.saveSyrkGemm(numRowsSub, numRowsFull, origLumpSize, data,
+                        belowDiagStart);
 
     uint64_t targetLump =
         factorSkel.boardRowLump[boardColBegin + boardIndexInCol];
@@ -97,14 +99,14 @@ void Solver::eliminateBoard(double* data, uint64_t ptr, OpaqueData& ax) const {
     uint64_t numBlockRows = rowDataEnd1 - belowDiagChainColOrd;
     uint64_t numBlockCols = rowDataEnd0 - belowDiagChainColOrd;
 
-    ops->assemble(*opMatrixSkel, ax, data, rectRowBegin,
-                  targetLumpSize,    //
-                  srcColDataOffset,  //
-                  numRowsSub, numBlockRows, numBlockCols);
+    numCtx.assemble(data, rectRowBegin,
+                    targetLumpSize,    //
+                    srcColDataOffset,  //
+                    numRowsSub, numBlockRows, numBlockCols);
 }
 
-void Solver::eliminateBoardBatch(double* data, uint64_t ptr, uint64_t batchSize,
-                                 OpaqueData& ax) const {
+void Solver::eliminateBoardBatch(NumericCtx<double>& numCtx, double* data,
+                                 uint64_t ptr, uint64_t batchSize) const {
     uint64_t* numRowsSubBatch = (uint64_t*)alloca(batchSize * sizeof(uint64_t));
     uint64_t* numRowsFullBatch =
         (uint64_t*)alloca(batchSize * sizeof(uint64_t));
@@ -147,9 +149,9 @@ void Solver::eliminateBoardBatch(double* data, uint64_t ptr, uint64_t batchSize,
         belowDiagStartBatch[i] = belowDiagStart;
     }
 
-    ops->saveSyrkGemmBatched(ax, numRowsSubBatch, numRowsFullBatch,
-                             origLumpSizeBatch, data, belowDiagStartBatch,
-                             batchSize);
+    numCtx.saveSyrkGemmBatched(numRowsSubBatch, numRowsFullBatch,
+                               origLumpSizeBatch, data, belowDiagStartBatch,
+                               batchSize);
 
     for (int i = 0; i < batchSize; i++) {
         uint64_t origLump = factorSkel.boardColLump[ptr + i];
@@ -188,10 +190,10 @@ void Solver::eliminateBoardBatch(double* data, uint64_t ptr, uint64_t batchSize,
         uint64_t numBlockRows = rowDataEnd1 - belowDiagChainColOrd;
         uint64_t numBlockCols = rowDataEnd0 - belowDiagChainColOrd;
 
-        ops->assemble(*opMatrixSkel, ax, data, rectRowBegin,
-                      targetLumpSize,    //
-                      srcColDataOffset,  //
-                      numRowsSub, numBlockRows, numBlockCols, i);
+        numCtx.assemble(data, rectRowBegin,
+                        targetLumpSize,    //
+                        srcColDataOffset,  //
+                        numRowsSub, numBlockRows, numBlockCols, i);
     }
 }
 
@@ -267,13 +269,17 @@ void Solver::factor(double* data, bool verbose) const {
 }
 
 void Solver::factorXp2(double* data, bool verbose) const {
+    int maxBatchSize = max(min(4, 1000000 / (int)(maxElimTempSize + 1)), 1);
+    NumericCtxPtr<double> numCtx =
+        symCtx->createDoubleContext(maxElimTempSize, maxBatchSize);
+
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
         if (verbose) {
             std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
                       << elimLumpRanges[l + 1] << ")" << std::endl;
         }
-        ops->doElimination(*opMatrixSkel, data, elimLumpRanges[l],
-                           elimLumpRanges[l + 1], *opElimination[l]);
+        numCtx->doElimination(*elimCtxs[l], data, elimLumpRanges[l],
+                              elimLumpRanges[l + 1]);
     }
 
     uint64_t denseOpsFromLump =
@@ -282,34 +288,35 @@ void Solver::factorXp2(double* data, bool verbose) const {
         std::cout << "Block-Fact from: " << denseOpsFromLump << std::endl;
     }
 
-    int maxBatchSize = max(min(4, 1000000 / (int)(maxElimTempSize + 1)), 1);
-    OpaqueDataPtr ax = ops->createAssembleContext(
-        *opMatrixSkel, maxElimTempSize, maxBatchSize);
     for (uint64_t l = denseOpsFromLump; l < factorSkel.chainColPtr.size() - 1;
          l++) {
         uint64_t rPtr = startElimRowPtr[l - denseOpsFromLump],
                  rEnd = factorSkel.boardRowPtr[l + 1] -
                         1;  // skip last (diag block)
 
-        ops->prepareAssembleContext(*opMatrixSkel, *ax, l);
+        numCtx->prepareAssemble(l);
 
         for (uint64_t ptr = rPtr; ptr < rEnd; ptr += maxBatchSize) {
-            eliminateBoardBatch(data, ptr, min(maxBatchSize, (int)(rEnd - ptr)),
-                                *ax);
+            eliminateBoardBatch(*numCtx, data, ptr,
+                                min(maxBatchSize, (int)(rEnd - ptr)));
         }
 
-        factorLump(data, l);
+        factorLump(*numCtx, data, l);
     }
 }
 
 void Solver::factorXp(double* data, bool verbose) const {
+    int maxBatchSize = max(min(4, 1000000 / (int)(maxElimTempSize + 1)), 1);
+    NumericCtxPtr<double> numCtx =
+        symCtx->createDoubleContext(maxElimTempSize, maxBatchSize);
+
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
         if (verbose) {
             std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
                       << elimLumpRanges[l + 1] << ")" << std::endl;
         }
-        ops->doElimination(*opMatrixSkel, data, elimLumpRanges[l],
-                           elimLumpRanges[l + 1], *opElimination[l]);
+        numCtx->doElimination(*elimCtxs[l], data, elimLumpRanges[l],
+                              elimLumpRanges[l + 1]);
     }
 
     uint64_t denseOpsFromLump =
@@ -318,21 +325,19 @@ void Solver::factorXp(double* data, bool verbose) const {
         std::cout << "Block-Fact from: " << denseOpsFromLump << std::endl;
     }
 
-    OpaqueDataPtr ax =
-        ops->createAssembleContext(*opMatrixSkel, maxElimTempSize);
     for (uint64_t l = denseOpsFromLump; l < factorSkel.chainColPtr.size() - 1;
          l++) {
-        ops->prepareAssembleContext(*opMatrixSkel, *ax, l);
+        numCtx->prepareAssemble(l);
 
         //  iterate over columns having a non-trivial a-block
         for (uint64_t rPtr = startElimRowPtr[l - denseOpsFromLump],
                       rEnd = factorSkel.boardRowPtr[l + 1] -
                              1;  // skip last (diag block)
              rPtr < rEnd; rPtr++) {
-            eliminateBoard(data, rPtr, *ax);
+            eliminateBoard(*numCtx, data, rPtr);
         }
 
-        factorLump(data, l);
+        factorLump(*numCtx, data, l);
     }
 }
 
@@ -341,14 +346,15 @@ void Solver::solveL(const double* matData, double* vecData, int stride,
     int order = factorSkel.spanStart[factorSkel.spanStart.size() - 1];
     vector<double> tmpData(order * nRHS);
 
+    NumericCtxPtr<double> numCtx = symCtx->createDoubleContext(0, 0);
     for (uint64_t l = 0; l < factorSkel.chainColPtr.size() - 1; l++) {
         uint64_t lumpStart = factorSkel.lumpStart[l];
         uint64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
         uint64_t chainColBegin = factorSkel.chainColPtr[l];
         uint64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
 
-        ops->solveL(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
-                    stride, nRHS);
+        numCtx->solveL(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
+                       stride, nRHS);
 
         uint64_t boardColBegin = factorSkel.boardColPtr[l];
         uint64_t boardColEnd = factorSkel.boardColPtr[l + 1];
@@ -365,13 +371,13 @@ void Solver::solveL(const double* matData, double* vecData, int stride,
             continue;
         }
 
-        ops->gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize, vecData,
-                  lumpStart, stride, tmpData.data(), nRHS);
+        numCtx->gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
+                     vecData, lumpStart, stride, tmpData.data(), nRHS);
 
         uint64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
-        ops->assembleVec(*opMatrixSkel, tmpData.data(), chainColPtr,
-                         numColChains - belowDiagChainColOrd, vecData, stride,
-                         nRHS);
+        numCtx->assembleVec(tmpData.data(), chainColPtr,
+                            numColChains - belowDiagChainColOrd, vecData,
+                            stride, nRHS);
     }
 }
 
@@ -380,6 +386,7 @@ void Solver::solveLt(const double* matData, double* vecData, int stride,
     int order = factorSkel.spanStart[factorSkel.spanStart.size() - 1];
     vector<double> tmpData(order * nRHS);
 
+    NumericCtxPtr<double> numCtx = symCtx->createDoubleContext(0, 0);
     for (uint64_t l = factorSkel.chainColPtr.size() - 2; (int64_t)l >= 0; l--) {
         uint64_t lumpStart = factorSkel.lumpStart[l];
         uint64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
@@ -399,17 +406,17 @@ void Solver::solveLt(const double* matData, double* vecData, int stride,
 
         if (numRowsBelowDiag > 0) {
             uint64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
-            ops->assembleVecT(*opMatrixSkel, vecData, stride, nRHS,
-                              tmpData.data(), chainColPtr,
-                              numColChains - belowDiagChainColOrd);
+            numCtx->assembleVecT(vecData, stride, nRHS, tmpData.data(),
+                                 chainColPtr,
+                                 numColChains - belowDiagChainColOrd);
 
-            ops->gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
-                       tmpData.data(), nRHS, vecData, lumpStart, stride);
+            numCtx->gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
+                          tmpData.data(), nRHS, vecData, lumpStart, stride);
         }
 
         uint64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
-        ops->solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
-                     stride, nRHS);
+        numCtx->solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
+                        stride, nRHS);
     }
 }
 

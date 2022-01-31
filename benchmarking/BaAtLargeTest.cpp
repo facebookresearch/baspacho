@@ -68,7 +68,7 @@ void experiment2(Data& data) {
     double factorTime = tdelta(hrc::now() - startFactor).count();
 
     if (verbose) {
-        solver->ops->printStats();
+        // solver->ops->printStats(); // FIXME
         if (verbose) {
             std::cout << "factor: " << factorTime << endl << std::endl;
         }

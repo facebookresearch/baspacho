@@ -40,7 +40,7 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob, bool verbose) {
     double factorTime = tdelta(hrc::now() - startFactor).count();
 
     if (verbose) {
-        solver->ops->printStats();
+        // solver->ops->printStats(); // FIXME
         std::cout << "analysis: " << analysisTime << ", factor: " << factorTime
                   << std::endl
                   << std::endl;

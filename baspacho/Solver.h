@@ -31,20 +31,22 @@ struct Solver {
 
     uint64_t boardElimTempSize(uint64_t lump, uint64_t boardIndexInSN) const;
 
-    void factorLump(double* data, uint64_t lump) const;
+    void factorLump(NumericCtx<double>& numCtx, double* data,
+                    uint64_t lump) const;
 
-    void eliminateBoard(double* data, uint64_t ptr, OpaqueData& ax) const;
+    void eliminateBoard(NumericCtx<double>& numCtx, double* data,
+                        uint64_t ptr) const;
 
-    void eliminateBoardBatch(double* data, uint64_t ptr, uint64_t batchSize,
-                             OpaqueData& ax) const;
+    void eliminateBoardBatch(NumericCtx<double>& numCtx, double* data,
+                             uint64_t ptr, uint64_t batchSize) const;
 
     CoalescedBlockMatrixSkel factorSkel;
     std::vector<uint64_t> elimLumpRanges;
     std::vector<uint64_t> permutation;  // *on indices*: v'[p[i]] = v[i];
 
     OpsPtr ops;
-    OpaqueDataPtr opMatrixSkel;
-    std::vector<OpaqueDataPtr> opElimination;
+    SymbolicCtxPtr symCtx;
+    std::vector<SymElimCtxPtr> elimCtxs;
     std::vector<uint64_t> startElimRowPtr;
     uint64_t maxElimTempSize;
 };
