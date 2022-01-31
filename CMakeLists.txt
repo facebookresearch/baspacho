@@ -79,16 +79,6 @@ include_directories(${dispenso_SOURCE_DIR} ${dispenso_SOURCE_DIR}/dispenso/third
 message("* Dispenso Source = " ${dispenso_SOURCE_DIR})
 message("* Dispenso Library Dir = " ${dispenso_BINARY_DIR})
 
-# glog
-FetchContent_Declare(
-  glog
-  URL https://github.com/google/glog/archive/refs/tags/v0.5.0.zip
-	)
-set(BUILD_TESTING 0 CACHE BOOL "")
-FetchContent_MakeAvailable(glog)
-message("* Glog Source = " ${glog_SOURCE_DIR})
-message("* Glog Library Dir = " ${glog_BINARY_DIR})
-
 
 # gtest
 FetchContent_Declare(
@@ -139,7 +129,7 @@ add_library(BaSpaCho
             baspacho/Solver.cpp
             baspacho/SparseStructure.cpp
             baspacho/Utils.cpp)
-target_link_libraries (BaSpaCho glog::glog dispenso ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
+target_link_libraries (BaSpaCho dispenso ${AMD_LIBRARIES} ${CHOLMOD_LIBRARIES})
 
 # IF have blas
 target_link_libraries (BaSpaCho ${BLAS_LIBRARIES})
@@ -160,7 +150,6 @@ add_executable(bench
                benchmarking/Bench.cpp 
                benchmarking/BenchCholmod.cpp)
 target_link_libraries (bench BaSpaCho testing)
-
 
 # unit tests
 enable_testing()

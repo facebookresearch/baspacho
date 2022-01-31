@@ -1,9 +1,8 @@
 
-#include <glog/logging.h>
-
 #include <chrono>
 #include <iostream>
 
+#include "DebugMacros.h"
 #include "MatOpsCpuBase.h"
 #include "Utils.h"
 
@@ -45,8 +44,8 @@ struct SimpleOps : CpuBaseOps {
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         const SparseEliminationInfo* pElim =
             dynamic_cast<const SparseEliminationInfo*>(&elimData);
-        CHECK_NOTNULL(pInfo);
-        CHECK_NOTNULL(pElim);
+        BASPACHO_CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pElim);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const SparseEliminationInfo& elim = *pElim;
 
@@ -72,8 +71,8 @@ struct SimpleOps : CpuBaseOps {
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         const SparseEliminationInfo* pElim =
             dynamic_cast<const SparseEliminationInfo*>(&elimData);
-        CHECK_NOTNULL(pInfo);
-        CHECK_NOTNULL(pElim);
+        BASPACHO_CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pElim);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const SparseEliminationInfo& elim = *pElim;
 
@@ -99,18 +98,20 @@ struct SimpleOps : CpuBaseOps {
                  i < iEnd; i++) {
                 uint64_t lump = elim.colLump[i];
                 uint64_t chainColOrd = elim.chainColOrd[i];
-                CHECK_GE(chainColOrd, 1);  // there must be a diagonal block
+                BASPACHO_CHECK_GE(chainColOrd,
+                                  1);  // there must be a diagonal block
 
                 uint64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
                 uint64_t ptrEnd = skel.chainColPtr[lump + 1];
-                CHECK_EQ(skel.chainRowSpan[ptrStart], s);
+                BASPACHO_CHECK_EQ(skel.chainRowSpan[ptrStart], s);
 
                 uint64_t nRowsAbove = skel.chainRowsTillEnd[ptrStart - 1];
                 uint64_t nRowsChain =
                     skel.chainRowsTillEnd[ptrStart] - nRowsAbove;
                 uint64_t nRowsOnward = skel.chainRowsTillEnd[ptrEnd - 1];
                 uint64_t dataOffset = skel.chainData[ptrStart];
-                CHECK_EQ(nRowsChain, skel.spanStart[s + 1] - skel.spanStart[s]);
+                BASPACHO_CHECK_EQ(nRowsChain,
+                                  skel.spanStart[s + 1] - skel.spanStart[s]);
                 uint64_t lumpSize =
                     skel.lumpStart[lump + 1] - skel.lumpStart[lump];
 
@@ -131,12 +132,12 @@ struct SimpleOps : CpuBaseOps {
                         skel.chainRowsTillEnd[ptr - 1] - nRowsAbove;
                     uint64_t s2_size =
                         skel.chainRowsTillEnd[ptr] - nRowsAbove - relRow;
-                    CHECK_EQ(s2_size,
-                             skel.spanStart[s2 + 1] - skel.spanStart[s2]);
+                    BASPACHO_CHECK_EQ(
+                        s2_size, skel.spanStart[s2 + 1] - skel.spanStart[s2]);
 
                     double* targetData =
                         data + spanOffsetInLump + spanToChainOffset[s2];
-                    CHECK(spanToChainOffset[s2] != kInvalid);
+                    BASPACHO_CHECK(spanToChainOffset[s2] != kInvalid);
 
                     OuterStridedMatM targetBlock(targetData, s2_size,
                                                  nRowsChain,
@@ -180,9 +181,9 @@ struct SimpleOps : CpuBaseOps {
                               uint64_t offset) override {
         OpInstance timer(sygeStat);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pAx);
+        BASPACHO_CHECK_NOTNULL(pAx);
         AssembleContext& ax = *pAx;
-        CHECK_LE(m * n, ax.tempBuffer.size());
+        BASPACHO_CHECK_LE(m * n, ax.tempBuffer.size());
 
         const double* AB = data + offset;
         double* C = ax.tempBuffer.data();
@@ -196,7 +197,7 @@ struct SimpleOps : CpuBaseOps {
                                      uint64_t* ns, uint64_t* ks,
                                      const double* data, uint64_t* offsets,
                                      int batchSize) {
-        LOG(FATAL) << "Batching not supported";
+        BASPACHO_CHECK(!"Batching not supported");
     }
 
     virtual OpaqueDataPtr createAssembleContext(const OpaqueData& info,
@@ -204,7 +205,7 @@ struct SimpleOps : CpuBaseOps {
                                                 int maxBatchSize = 1) override {
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
-        CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pInfo);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         AssembleContext* ax = new AssembleContext;
         ax->spanToChainOffset.resize(skel.spanStart.size() - 1);
@@ -218,8 +219,8 @@ struct SimpleOps : CpuBaseOps {
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pInfo);
-        CHECK_NOTNULL(pAx);
+        BASPACHO_CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pAx);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         AssembleContext& ax = *pAx;
 
@@ -236,14 +237,14 @@ struct SimpleOps : CpuBaseOps {
                           uint64_t srcColDataOffset, uint64_t srcRectWidth,
                           uint64_t numBlockRows, uint64_t numBlockCols,
                           int numBatch = -1) override {
-        CHECK_EQ(numBatch, -1) << "Batching not supported";
+        BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
         OpInstance timer(asmblStat);
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
         const AssembleContext* pAx =
             dynamic_cast<const AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pInfo);
-        CHECK_NOTNULL(pAx);
+        BASPACHO_CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pAx);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const AssembleContext& ax = *pAx;
         const uint64_t* chainRowsTillEnd =
@@ -296,7 +297,7 @@ struct SimpleOps : CpuBaseOps {
                              double* C, uint64_t ldc, uint64_t nRHS) override {
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
-        CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pInfo);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
@@ -339,7 +340,7 @@ struct SimpleOps : CpuBaseOps {
                               uint64_t numColItems) override {
         const SimpleSymbolicInfo* pInfo =
             dynamic_cast<const SimpleSymbolicInfo*>(&info);
-        CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pInfo);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;

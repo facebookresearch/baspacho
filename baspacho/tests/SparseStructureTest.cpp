@@ -1,8 +1,8 @@
-#include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "../../testing/TestingUtils.h"
+#include "../DebugMacros.h"
 #include "../SparseStructure.h"
 #include "../Utils.h"
 
@@ -148,7 +148,7 @@ TEST(SparseStructure, FillReducingPermutation) {
 
     SparseStructure ss =
         ssOrig.symmetricPermutation(invPerm, false).addFullEliminationFill();
-    LOG(INFO) << "perm:\n" << printPattern(ss, false);
-    LOG(INFO) << "entries: " << ss.inds.size();
+    std::cout << "perm:\n" << printPattern(ss, false) << std::endl;
+    std::cout << "entries: " << ss.inds.size() << std::endl;
     ASSERT_LE(ss.inds.size(), 130);  // should be 120
 }

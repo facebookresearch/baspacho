@@ -2,10 +2,10 @@
 #include "SparseStructure.h"
 
 #include <amd.h>
-#include <glog/logging.h>
 
 #include <algorithm>
 
+#include "DebugMacros.h"
 #include "Utils.h"
 
 using namespace std;
@@ -30,7 +30,7 @@ SparseStructure SparseStructure::transpose(bool sortIndices) const {
         uint64_t end = ptrs[i + 1];
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
-            CHECK_LT(j, ord);
+            BASPACHO_CHECK_LT(j, ord);
             retv.ptrs[j]++;
         }
     }
@@ -43,8 +43,8 @@ SparseStructure SparseStructure::transpose(bool sortIndices) const {
         uint64_t end = ptrs[i + 1];
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
-            CHECK_LT(j, ord);
-            CHECK_LT(retv.ptrs[j], retv.inds.size());
+            BASPACHO_CHECK_LT(j, ord);
+            BASPACHO_CHECK_LT(retv.ptrs[j], retv.inds.size());
             retv.inds[retv.ptrs[j]++] = i;
         }
     }
@@ -69,7 +69,7 @@ SparseStructure SparseStructure::clear(bool lowerHalf) const {
         uint64_t end = ptrs[i + 1];
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
-            CHECK_LT(j, ord);
+            BASPACHO_CHECK_LT(j, ord);
             if (i != j && (j > i) == lowerHalf) {
                 continue;
             }
@@ -85,11 +85,11 @@ SparseStructure SparseStructure::clear(bool lowerHalf) const {
         uint64_t end = ptrs[i + 1];
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
-            CHECK_LT(j, ord);
+            BASPACHO_CHECK_LT(j, ord);
             if (i != j && (j > i) == lowerHalf) {
                 continue;
             }
-            CHECK_LT(retv.ptrs[i], retv.inds.size());
+            BASPACHO_CHECK_LT(retv.ptrs[i], retv.inds.size());
             retv.inds[retv.ptrs[i]++] = j;
         }
     }
@@ -103,7 +103,7 @@ SparseStructure SparseStructure::symmetricPermutation(
     const std::vector<uint64_t>& mapPerm, bool lowerHalf,
     bool sortIndices) const {
     uint64_t ord = order();
-    CHECK_EQ(ord, mapPerm.size());
+    BASPACHO_CHECK_EQ(ord, mapPerm.size());
 
     SparseStructure retv;
     retv.ptrs.assign(ord + 1, 0);
@@ -112,12 +112,12 @@ SparseStructure SparseStructure::symmetricPermutation(
         uint64_t start = ptrs[i];
         uint64_t end = ptrs[i + 1];
         uint64_t newI = mapPerm[i];
-        CHECK_LT(newI, ord);
+        BASPACHO_CHECK_LT(newI, ord);
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
-            CHECK_LT(j, ord);
+            BASPACHO_CHECK_LT(j, ord);
             uint64_t newJ = mapPerm[j];
-            CHECK_LT(newJ, ord);
+            BASPACHO_CHECK_LT(newJ, ord);
             uint64_t col = lowerHalf ? min(newI, newJ) : max(newI, newJ);
             retv.ptrs[col]++;
         }
@@ -130,15 +130,15 @@ SparseStructure SparseStructure::symmetricPermutation(
         uint64_t start = ptrs[i];
         uint64_t end = ptrs[i + 1];
         uint64_t newI = mapPerm[i];
-        CHECK_LT(newI, ord);
+        BASPACHO_CHECK_LT(newI, ord);
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
-            CHECK_LT(j, ord);
+            BASPACHO_CHECK_LT(j, ord);
             uint64_t newJ = mapPerm[j];
-            CHECK_LT(newJ, ord);
+            BASPACHO_CHECK_LT(newJ, ord);
             uint64_t col = lowerHalf ? min(newI, newJ) : max(newI, newJ);
             uint64_t row = lowerHalf ? max(newI, newJ) : min(newI, newJ);
-            CHECK_LT(retv.ptrs[col], retv.inds.size());
+            BASPACHO_CHECK_LT(retv.ptrs[col], retv.inds.size());
             retv.inds[retv.ptrs[col]++] = row;
         }
     }
@@ -298,15 +298,15 @@ std::vector<uint64_t> SparseStructure::fillReducingPermutation() const {
 
     int result = amd_l_order(P.size(), colPtr.data(), rowInd.data(), P.data(),
                              Control, Info);
-    CHECK_EQ(result, AMD_OK);
+    BASPACHO_CHECK_EQ(result, AMD_OK);
 
     return std::vector<uint64_t>(P.begin(), P.end());
 }
 
 SparseStructure SparseStructure::extractRightBottom(uint64_t startRow) {
     uint64_t ord = order();
-    CHECK_LT(startRow, ord);
-    CHECK_GE(startRow, 0);
+    BASPACHO_CHECK_LT(startRow, ord);
+    BASPACHO_CHECK_GE(startRow, 0);
     uint64_t newOrd = ord - startRow;
 
     SparseStructure retv;
@@ -317,7 +317,7 @@ SparseStructure SparseStructure::extractRightBottom(uint64_t startRow) {
         uint64_t end = ptrs[i + 1];
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
-            CHECK_LT(j, ord);
+            BASPACHO_CHECK_LT(j, ord);
             if (j >= startRow) {
                 retv.ptrs[i - startRow]++;
             }
@@ -332,9 +332,9 @@ SparseStructure SparseStructure::extractRightBottom(uint64_t startRow) {
         uint64_t end = ptrs[i + 1];
         for (uint64_t k = start; k < end; k++) {
             uint64_t j = inds[k];
-            CHECK_LT(j, ord);
+            BASPACHO_CHECK_LT(j, ord);
             if (j >= startRow) {
-                CHECK_LT(retv.ptrs[i - startRow], retv.inds.size());
+                BASPACHO_CHECK_LT(retv.ptrs[i - startRow], retv.inds.size());
                 retv.inds[retv.ptrs[i - startRow]++] = j - startRow;
             }
         }

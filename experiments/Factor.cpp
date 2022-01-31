@@ -1,8 +1,8 @@
 #include "Factor.h"
 
-#include <glog/logging.h>
-
 #include <Eigen/Eigenvalues>
+
+#include "../baspacho/DebugMacros.h"
 
 void factor(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data) {
     for (size_t l = 0; l < skel.lumpToSpan.size() - 1; l++) {
@@ -11,7 +11,7 @@ void factor(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data) {
         uint64_t ptrBegin = skel.boardColPtr[l];
         uint64_t numBoards = skel.boardColPtr[l + 1] - ptrBegin;
 
-        CHECK_EQ(skel.boardRowLump[ptrBegin], l);
+        BASPACHO_CHECK_EQ(skel.boardRowLump[ptrBegin], l);
 
         for (uint64_t i = 1; i < numBoards - 1; i++) {
             eliminateBoard(skel, data, l, i);
@@ -21,15 +21,12 @@ void factor(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data) {
 
 void factorLump(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data,
                 uint64_t lump) {
-    LOG(INFO) << "a: " << lump;
     uint64_t lumpStart = skel.lumpStart[lump];
     uint64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
     uint64_t colStart = skel.chainColPtr[lump];
     uint64_t dataPtr = skel.chainData[colStart];
 
     // compute lower diag cholesky dec on diagonal block
-    LOG(INFO) << "d: " << data.data() << ", ptr: " << dataPtr
-              << ", asz: " << lumpSize;
     Eigen::Map<MatRMaj<double>> diagBlock(data.data() + dataPtr, lumpSize,
                                           lumpSize);
     { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(diagBlock); }
@@ -41,8 +38,6 @@ void factorLump(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data,
     uint64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
                        skel.chainRowsTillEnd[colStart + rowDataStart - 1];
 
-    LOG(INFO) << "d: " << data.data() << ", ptr: " << belowDiagStart
-              << ", nrows: " << numRows;
     Eigen::Map<MatRMaj<double>> belowDiagBlock(data.data() + belowDiagStart,
                                                numRows, lumpSize);
     diagBlock.triangularView<Eigen::Lower>()
@@ -61,7 +56,7 @@ std::pair<uint64_t, uint64_t> findBlock(const CoalescedBlockMatrixSkel& skel,
     // bisect to find rParam in chainRowSpan[start:end]
     uint64_t pos =
         bisect(skel.chainRowSpan.data() + start, end - start, rParam);
-    CHECK_EQ(skel.chainRowSpan[start + pos], rParam);
+    BASPACHO_CHECK_EQ(skel.chainRowSpan[start + pos], rParam);
     return std::make_pair(skel.chainData[start + pos] + offsetInAggreg,
                           lumpSize);
 }
@@ -90,7 +85,7 @@ void eliminateBoard(const CoalescedBlockMatrixSkel& skel,
     uint64_t numRowsFull =
         skel.chainRowsTillEnd[colStart + rowDataEnd1 - 1] - rowStart;
 
-    // LOG(INFO) << "lump: " << lump << ", item: " << rowItem;
+    // std::cout  << "lump: " << lump << ", item: " << rowItem << std::endl;
     // LOG(INFO) << "sizes: " << numRowsSub << " " << numRowsFull << " " <<
     // lumpSize;
     Eigen::Map<MatRMaj<double>> belowDiagBlockSub(data.data() + belowDiagStart,
@@ -98,10 +93,10 @@ void eliminateBoard(const CoalescedBlockMatrixSkel& skel,
     Eigen::Map<MatRMaj<double>> belowDiagBlockFull(data.data() + belowDiagStart,
                                                    numRowsFull, lumpSize);
 
-    // LOG(INFO) << "sub:\n" << belowDiagBlockSub;
-    // LOG(INFO) << "full:\n" << belowDiagBlockFull;
+    // std::cout  << "sub:\n" << belowDiagBlockSub << std::endl;
+    // std::cout  << "full:\n" << belowDiagBlockFull << std::endl;
     MatRMaj<double> prod = belowDiagBlockFull * belowDiagBlockSub.transpose();
-    // LOG(INFO) << "prod:\n" << prod;
+    // std::cout  << "prod:\n" << prod << std::endl;
 
     for (uint64_t c = rowDataStart; c < rowDataEnd0; c++) {
         uint64_t cStart = skel.chainRowsTillEnd[colStart + c - 1] - rowStart;
@@ -121,8 +116,8 @@ void eliminateBoard(const CoalescedBlockMatrixSkel& skel,
             OuterStridedMatM target(data.data() + offset, rSize, cSize,
                                     OuterStride(stride));
             auto orig = prod.block(rBegin, cStart, rSize, cSize);
-            // LOG(INFO) << "orig:\n" << orig;
-            // LOG(INFO) << "target:\n" << target;
+            // std::cout  << "orig:\n" << orig << std::endl;
+            // std::cout  << "target:\n" << target << std::endl;
             target -= orig;
         }
     }

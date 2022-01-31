@@ -6,7 +6,6 @@ decomposition and solving of linear systems, with support for Cuda.
 * AMD, from SuiteSparse
 * CHOLMOD (only for comparison benchmarks and tests)
 Libraries fetched automatical by build:
-* glog (CHECK macros are handy)
 * gtest
 * Eigen
 * Sophus (only used in BA demo)

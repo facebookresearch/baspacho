@@ -2,12 +2,12 @@
 #include "Solver.h"
 
 #include <dispenso/parallel_for.h>
-#include <glog/logging.h>
 
 #include <Eigen/Eigenvalues>
 #include <iostream>
 #include <numeric>
 
+#include "DebugMacros.h"
 #include "EliminationTree.h"
 #include "Utils.h"
 
@@ -232,9 +232,10 @@ void Solver::initElimination() {
         //  iterate over columns having a non-trivial a-block
         uint64_t rPtr = factorSkel.boardRowPtr[l];
         uint64_t rEnd = factorSkel.boardRowPtr[l + 1];
-        CHECK_EQ(factorSkel.boardColLump[rEnd - 1], l);
+        BASPACHO_CHECK_EQ(factorSkel.boardColLump[rEnd - 1], l);
         while (factorSkel.boardColLump[rPtr] < denseOpsFromLump) rPtr++;
-        CHECK_LT(rPtr, rEnd);  // will stop before end as l > denseOpsFromLump
+        BASPACHO_CHECK_LT(
+            rPtr, rEnd);  // will stop before end as l > denseOpsFromLump
         startElimRowPtr[l - denseOpsFromLump] = rPtr;
 
         for (uint64_t rPtr = startElimRowPtr[l - denseOpsFromLump],
@@ -245,8 +246,9 @@ void Solver::initElimination() {
             uint64_t boardIndexInCol = factorSkel.boardColOrd[rPtr];
             uint64_t boardSNDataStart = factorSkel.boardColPtr[origLump];
             uint64_t boardSNDataEnd = factorSkel.boardColPtr[origLump + 1];
-            CHECK_LT(boardIndexInCol, boardSNDataEnd - boardSNDataStart);
-            CHECK_EQ(
+            BASPACHO_CHECK_LT(boardIndexInCol,
+                              boardSNDataEnd - boardSNDataStart);
+            BASPACHO_CHECK_EQ(
                 l, factorSkel.boardRowLump[boardSNDataStart + boardIndexInCol]);
             maxElimTempSize = max(maxElimTempSize,
                                   boardElimTempSize(origLump, boardIndexInCol));
@@ -256,25 +258,29 @@ void Solver::initElimination() {
 
 void Solver::factor(double* data, bool verbose) const {
     if (getenv("BATCHED")) {
-        // LOG(INFO) << "BATCHED";
+        // std::cout << "BATCHED" << std::endl;
         factorXp2(data, verbose);
     } else {
-        // LOG(INFO) << "SIMPLE";
+        // std::cout << "SIMPLE" << std::endl;
         factorXp(data, verbose);
     }
 }
 
 void Solver::factorXp2(double* data, bool verbose) const {
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
-        LOG_IF(INFO, verbose) << "Elim set: " << l << " (" << elimLumpRanges[l]
-                              << ".." << elimLumpRanges[l + 1] << ")";
+        if (verbose) {
+            std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
+                      << elimLumpRanges[l + 1] << ")" << std::endl;
+        }
         ops->doElimination(*opMatrixSkel, data, elimLumpRanges[l],
                            elimLumpRanges[l + 1], *opElimination[l]);
     }
 
     uint64_t denseOpsFromLump =
         elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
-    LOG_IF(INFO, verbose) << "Block-Fact from: " << denseOpsFromLump;
+    if (verbose) {
+        std::cout << "Block-Fact from: " << denseOpsFromLump << std::endl;
+    }
 
     int maxBatchSize = max(min(4, 1000000 / (int)(maxElimTempSize + 1)), 1);
     OpaqueDataPtr ax = ops->createAssembleContext(
@@ -298,15 +304,19 @@ void Solver::factorXp2(double* data, bool verbose) const {
 
 void Solver::factorXp(double* data, bool verbose) const {
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
-        LOG_IF(INFO, verbose) << "Elim set: " << l << " (" << elimLumpRanges[l]
-                              << ".." << elimLumpRanges[l + 1] << ")";
+        if (verbose) {
+            std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
+                      << elimLumpRanges[l + 1] << ")" << std::endl;
+        }
         ops->doElimination(*opMatrixSkel, data, elimLumpRanges[l],
                            elimLumpRanges[l + 1], *opElimination[l]);
     }
 
     uint64_t denseOpsFromLump =
         elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
-    LOG_IF(INFO, verbose) << "Block-Fact from: " << denseOpsFromLump;
+    if (verbose) {
+        std::cout << "Block-Fact from: " << denseOpsFromLump << std::endl;
+    }
 
     OpaqueDataPtr ax =
         ops->createAssembleContext(*opMatrixSkel, maxElimTempSize);
@@ -416,8 +426,8 @@ pair<uint64_t, bool> findLargestIndependentLumpSet(
         }
         uint64_t aPtrStart = factorSkel.boardColPtr[a];
         uint64_t aPtrEnd = factorSkel.boardColPtr[a + 1];
-        CHECK_EQ(factorSkel.boardRowLump[aPtrStart], a);
-        CHECK_LE(2, aPtrEnd - aPtrStart);
+        BASPACHO_CHECK_EQ(factorSkel.boardRowLump[aPtrStart], a);
+        BASPACHO_CHECK_LE(2, aPtrEnd - aPtrStart);
         limit = min(factorSkel.boardRowLump[aPtrStart + 1], limit);
     }
     return make_pair(min(limit, factorSkel.lumpToSpan.size()), false);
@@ -453,8 +463,10 @@ SolverPtr createSolver(const Settings& settings,
             if (rangeEnd < rangeStart + 10) {
                 break;
             }
-            LOG_IF(INFO, verbose) << "Adding indep set: " << rangeStart << ".."
-                                  << rangeEnd << endl;
+            if (verbose) {
+                std::cout << "Adding indep set: " << rangeStart << ".."
+                          << rangeEnd << std::endl;
+            }
             elimLumpRanges.push_back(rangeEnd);
             if (hitSizeLimit) {
                 break;
@@ -478,7 +490,7 @@ SolverPtr createSolverSchur(const Settings& settings,
                             const SparseStructure& ss_,
                             const std::vector<uint64_t>& elimLumpRanges,
                             bool verbose) {
-    CHECK_GE(elimLumpRanges.size(), 2);
+    BASPACHO_CHECK_GE(elimLumpRanges.size(), 2);
     SparseStructure ss =
         ss_.addIndependentEliminationFill(elimLumpRanges[0], elimLumpRanges[1]);
     for (uint64_t e = 1; e < elimLumpRanges.size() - 1; e++) {
@@ -516,7 +528,8 @@ SolverPtr createSolverSchur(const Settings& settings,
                                sortedBottomParamSize.begin(),
                                sortedBottomParamSize.end());
 
-    CHECK_EQ(et.spanStart.size() - 1, et.lumpToSpan[et.lumpToSpan.size() - 1]);
+    BASPACHO_CHECK_EQ(et.spanStart.size() - 1,
+                      et.lumpToSpan[et.lumpToSpan.size() - 1]);
 
     // compute span start as cumSum of `sortedFullParamSize`
     vector<uint64_t> fullSpanStart;
@@ -532,8 +545,8 @@ SolverPtr createSolverSchur(const Settings& settings,
     for (size_t i = 0; i < et.lumpToSpan.size(); i++) {
         fullLumpToSpan[i + elimEnd] = elimEnd + et.lumpToSpan[i];
     }
-    CHECK_EQ(fullSpanStart.size() - 1,
-             fullLumpToSpan[fullLumpToSpan.size() - 1]);
+    BASPACHO_CHECK_EQ(fullSpanStart.size() - 1,
+                      fullLumpToSpan[fullLumpToSpan.size() - 1]);
 
     // colStart are aggregate lump columns
     // ss last rows are to be permuted according to etTotalInvPerm
@@ -556,7 +569,7 @@ SolverPtr createSolverSchur(const Settings& settings,
     for (size_t i = 0; i < et.colStart.size(); i++) {
         fullColStart.push_back(elimEndDataPtr + et.colStart[i]);
     }
-    CHECK_EQ(fullColStart.size(), fullLumpToSpan.size());
+    BASPACHO_CHECK_EQ(fullColStart.size(), fullLumpToSpan.size());
 
     // fullRowParam joining sortedSsT.inds and et.rowParam (moved)
     vector<uint64_t> fullRowParam;
@@ -566,7 +579,8 @@ SolverPtr createSolverSchur(const Settings& settings,
     for (size_t i = 0; i < et.rowParam.size(); i++) {
         fullRowParam.push_back(et.rowParam[i] + elimEnd);
     }
-    CHECK_EQ(fullRowParam.size(), fullColStart[fullColStart.size() - 1]);
+    BASPACHO_CHECK_EQ(fullRowParam.size(),
+                      fullColStart[fullColStart.size() - 1]);
 
     CoalescedBlockMatrixSkel factorSkel(fullSpanStart, fullLumpToSpan,
                                         fullColStart, fullRowParam);
@@ -581,8 +595,10 @@ SolverPtr createSolverSchur(const Settings& settings,
             if (rangeEnd < rangeStart + 10) {
                 break;
             }
-            LOG_IF(INFO, verbose) << "Adding indep set: " << rangeStart << ".."
-                                  << rangeEnd << endl;
+            if (verbose) {
+                std::cout << "Adding indep set: " << rangeStart << ".."
+                          << rangeEnd << std::endl;
+            }
             elimLumpRangesArg.push_back(rangeEnd);
             if (hitSizeLimit) {
                 break;

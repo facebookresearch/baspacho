@@ -1,4 +1,4 @@
-#include <glog/logging.h>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -9,6 +9,7 @@
 
 #include "../../testing/TestingUtils.h"
 #include "../CoalescedBlockMatrix.h"
+#include "../DebugMacros.h"
 #include "../EliminationTree.h"
 #include "../Utils.h"
 
@@ -25,7 +26,7 @@ TEST(EliminationTree, Build) {
 
         SparseStructure ss = ssOrig.symmetricPermutation(invPerm, false);
 
-        LOG(INFO) << "perm:\n" << printPattern(ss, false);
+        std::cout << "perm:\n" << printPattern(ss, false) << std::endl;
 
         vector<uint64_t> paramSize(ssOrig.ptrs.size() - 1, 1);
         EliminationTree et(paramSize, ss);
@@ -41,7 +42,7 @@ TEST(EliminationTree, Build) {
         uint64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData, 1);
         Eigen::MatrixXd mat = skel.densify(data);
-        LOG(INFO) << "densified:\n" << mat;
+        std::cout << "densified:\n" << mat << std::endl;
 
         // original must be contained via idMap
         vector<uint64_t> idMap = composePermutations(et.permInverse, invPerm);
@@ -62,7 +63,7 @@ TEST(EliminationTree, Build) {
         SparseStructure checkSs =
             ss.symmetricPermutation(et.permInverse, false, true)
                 .addFullEliminationFill();
-        LOG(INFO) << "check:\n" << printPattern(checkSs, false);
+        std::cout << "check:\n" << printPattern(checkSs, false) << std::endl;
         for (uint64_t i = 0; i < checkSs.ptrs.size() - 1; i++) {
             uint64_t start = checkSs.ptrs[i];
             uint64_t end = checkSs.ptrs[i + 1];

@@ -1,7 +1,7 @@
 
 #include "EliminationTree.h"
 
-#include <glog/logging.h>
+#include "DebugMacros.h"
 
 #include <algorithm>
 
@@ -12,7 +12,7 @@ using namespace std;
 EliminationTree::EliminationTree(const std::vector<uint64_t>& paramSize,
                                  const SparseStructure& ss)
     : paramSize(paramSize), ss(ss) {
-    CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
+    BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
 }
 
 void EliminationTree::buildTree() {
@@ -145,22 +145,22 @@ void EliminationTree::computeAggregateStruct() {
     for (int64_t idx = heightNode.size() - 1; idx >= 0; idx--) {
         auto [_1, _2, k] = heightNode[idx];
 
-        CHECK_GT(agIdx, 0);
+        BASPACHO_CHECK_GT(agIdx, 0);
         lumpStart[--agIdx] = nodeSize[k];
 
-        CHECK_GT(pIdx, 0);
+        BASPACHO_CHECK_GT(pIdx, 0);
         permutation[--pIdx] = k;
         spanToLump[k] = agIdx;
         lumpToSpan[agIdx]++;
         for (int64_t q = firstMergeChild[k]; q != -1; q = nextMergeSibling[q]) {
-            CHECK_GT(pIdx, 0);
+            BASPACHO_CHECK_GT(pIdx, 0);
             permutation[--pIdx] = q;
             spanToLump[q] = agIdx;
             lumpToSpan[agIdx]++;
         }
     }
-    CHECK_EQ(pIdx, 0);
-    CHECK_EQ(agIdx, 0);
+    BASPACHO_CHECK_EQ(pIdx, 0);
+    BASPACHO_CHECK_EQ(agIdx, 0);
 
     // cum-sum lumpStart
     cumSumVec(lumpToSpan);

@@ -1,6 +1,4 @@
 
-#include <glog/logging.h>
-
 #include <chrono>
 #include <iomanip>
 #include <iostream>
@@ -8,6 +6,7 @@
 #include <random>
 #include <regex>
 
+#include "../baspacho/DebugMacros.h"
 #include "../baspacho/Solver.h"
 #include "../testing/TestingMatGen.h"
 #include "../testing/TestingUtils.h"
@@ -39,8 +38,9 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob, bool verbose) {
 
     if (verbose) {
         solver->ops->printStats();
-        LOG_IF(INFO, verbose) << "analysis: " << analysisTime
-                              << ", factor: " << factorTime << endl;
+        std::cout << "analysis: " << analysisTime << ", factor: " << factorTime
+                  << std::endl
+                  << std::endl;
     }
 
     return std::make_pair(analysisTime, factorTime);
@@ -153,9 +153,12 @@ struct BenchmarkSettings {
 
 void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
     if (!settings.referenceSolver.empty()) {
-        CHECK(solvers.find(settings.referenceSolver) != solvers.end())
-            << "Solver '" << settings.referenceSolver
-            << "' does not exist or not available at compile time";
+        if (solvers.find(settings.referenceSolver) == solvers.end()) {
+            std::cerr << "Solver '" << settings.referenceSolver
+                      << "' does not exist or not available at compile time"
+                      << std::endl;
+            exit(1);
+        }
     }
     int numSolversToTest = 0;
     for (auto [solvName, solv] : solvers) {
@@ -173,7 +176,7 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
             continue;
         }
 
-        cout << "prob: " << probName << endl;
+        cout << "\nProblem type: " << probName << endl;
 
         map<string, vector<double>> factorTimings;
         int prevLen = 0;
@@ -224,18 +227,23 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
             }
         } else {
             auto it = factorTimings.find(settings.referenceSolver);
-            CHECK(it != factorTimings.end());
+            BASPACHO_CHECK(it != factorTimings.end());
             const vector<double>& refTimings = it->second;
             for (auto [solvName, timings] : factorTimings) {
                 if (solvName == settings.referenceSolver) {
                     continue;
                 }
-                vector<double> relTimings(timings.size());
+
+                stringstream ss;
+                ss << "Timings of " << solvName << " vs. "
+                   << settings.referenceSolver << ": [";
                 for (size_t i = 0; i < timings.size(); i++) {
-                    relTimings[i] = timings[i] / refTimings[i];
+                    double percent = (timings[i] / refTimings[i] - 1.0) * 100.0;
+                    ss << (i == 0 ? "" : ", ") << (percent > 0 ? "+" : "")
+                       << fixed << std::setprecision(2) << percent << "%";
                 }
-                cout << solvName << " VS " << settings.referenceSolver
-                     << ":\n  " << printVec(relTimings) << endl;
+                ss << "]";
+                cout << ss.str() << endl;
             }
         }
     }
@@ -331,6 +339,8 @@ int main(int argc, char* argv[]) {
             settings.selectSolvers = regex(argv[++i]);
         } else if (!strcmp(argv[i], "-E") && i < argc - 1) {
             settings.excludeSolvers = regex(argv[++i]);
+        } else if (!strcmp(argv[i], "-B") && i < argc - 1) {
+            settings.referenceSolver = argv[++i];
         }
     }
 

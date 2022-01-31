@@ -1,9 +1,9 @@
 
 #include "Utils.h"
 
-#include <glog/logging.h>
-
 #include <sstream>
+
+#include "DebugMacros.h"
 
 using namespace std;
 
@@ -28,7 +28,7 @@ OpInstance::~OpInstance() {
 
 std::vector<uint64_t> composePermutations(const std::vector<uint64_t>& v,
                                           const std::vector<uint64_t>& w) {
-    CHECK_EQ(v.size(), w.size());
+    BASPACHO_CHECK_EQ(v.size(), w.size());
     std::vector<uint64_t> retv(v.size());
     for (size_t i = 0; i < v.size(); i++) {
         retv[i] = v[w[i]];

@@ -1,9 +1,8 @@
 #include "CoalescedBlockMatrix.h"
 
-#include <glog/logging.h>
-
 #include <iostream>
 
+#include "DebugMacros.h"
 #include "Utils.h"
 
 using namespace std;
@@ -12,12 +11,12 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
     const vector<uint64_t>& spanStart, const vector<uint64_t>& lumpToSpan,
     const vector<uint64_t>& colPtr, const vector<uint64_t>& rowInd)
     : spanStart(spanStart), lumpToSpan(lumpToSpan) {
-    CHECK_GE(spanStart.size(), lumpToSpan.size());
-    CHECK_GE(lumpToSpan.size(), 1);
-    CHECK_EQ(spanStart.size() - 1, lumpToSpan[lumpToSpan.size() - 1]);
-    CHECK_EQ(colPtr.size(), lumpToSpan.size());
-    CHECK(isStrictlyIncreasing(spanStart, 0, spanStart.size()));
-    CHECK(isStrictlyIncreasing(lumpToSpan, 0, lumpToSpan.size()));
+    BASPACHO_CHECK_GE(spanStart.size(), lumpToSpan.size());
+    BASPACHO_CHECK_GE(lumpToSpan.size(), 1);
+    BASPACHO_CHECK_EQ(spanStart.size() - 1, lumpToSpan[lumpToSpan.size() - 1]);
+    BASPACHO_CHECK_EQ(colPtr.size(), lumpToSpan.size());
+    BASPACHO_CHECK(isStrictlyIncreasing(spanStart, 0, spanStart.size()));
+    BASPACHO_CHECK(isStrictlyIncreasing(lumpToSpan, 0, lumpToSpan.size()));
 
     uint64_t totSize = spanStart[spanStart.size() - 1];
     uint64_t numSpans = spanStart.size() - 1;
@@ -51,7 +50,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
     for (size_t l = 0; l < numLumps; l++) {
         uint64_t colStart = colPtr[l];
         uint64_t colEnd = colPtr[l + 1];
-        CHECK(isStrictlyIncreasing(rowInd, colStart, colEnd));
+        BASPACHO_CHECK(isStrictlyIncreasing(rowInd, colStart, colEnd));
         uint64_t lSpanBegin = lumpToSpan[l];
         uint64_t lSpanEnd = lumpToSpan[l + 1];
         uint64_t lSpanSize = lSpanEnd - lSpanBegin;
@@ -59,12 +58,12 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
 
         // check the initial section is the set of params from `a`, and
         // therefore the full diagonal block is contained in the matrix
-        CHECK_GE(colEnd - colStart, lSpanSize)
-            << "Column must contain full diagonal block";
-        CHECK_EQ(rowInd[colStart], lSpanBegin)
-            << "Column data must start at diagonal block";
-        CHECK_EQ(rowInd[colStart + lSpanSize - 1], lSpanEnd - 1)
-            << "Column must contain full diagonal block";
+        // Column must contain full diagonal block:
+        BASPACHO_CHECK_GE(colEnd - colStart, lSpanSize);
+        // Column data must start at diagonal block:
+        BASPACHO_CHECK_EQ(rowInd[colStart], lSpanBegin);
+        // Column must contain full diagonal block:
+        BASPACHO_CHECK_EQ(rowInd[colStart + lSpanSize - 1], lSpanEnd - 1);
 
         chainColPtr[l] = chainRowSpan.size();
         boardColPtr[l] = boardRowLump.size();
@@ -116,7 +115,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
 Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
     const std::vector<double>& data) const {
     uint64_t totData = chainData[chainData.size() - 1];
-    CHECK_EQ(totData, data.size());
+    BASPACHO_CHECK_EQ(totData, data.size());
 
     uint64_t totSize = spanStart[spanStart.size() - 1];
     Eigen::MatrixXd retv(totSize, totSize);
@@ -145,7 +144,7 @@ Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
 void CoalescedBlockMatrixSkel::damp(std::vector<double>& data, double alpha,
                                     double beta) const {
     uint64_t totData = chainData[chainData.size() - 1];
-    CHECK_EQ(totData, data.size());
+    BASPACHO_CHECK_EQ(totData, data.size());
 
     uint64_t totSize = spanStart[spanStart.size() - 1];
 

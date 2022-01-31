@@ -8,14 +8,14 @@
 // common code for ref and blas implementations
 struct CpuBaseOps : Ops {
     virtual void printStats() const override {
-        LOG(INFO) << "matOp stats:"
+        std::cout << "matOp stats:"
                   << "\nelim: " << elimStat.toString()
                   << "\nBiggest dense block: " << potrfBiggestN
                   << "\npotrf: " << potrfStat.toString()
                   << "\ntrsm: " << trsmStat.toString()  //
                   << "\nsyrk/gemm(" << syrkCalls << "+" << gemmCalls
                   << "): " << sygeStat.toString()
-                  << "\nasmbl: " << asmblStat.toString();
+                  << "\nasmbl: " << asmblStat.toString() << std::endl;
     }
 
     struct SparseEliminationInfo : OpaqueData {
@@ -42,7 +42,8 @@ struct CpuBaseOps : Ops {
              i < iEnd; i++) {
             uint64_t lump = elim.colLump[i];
             uint64_t chainColOrd = elim.chainColOrd[i];
-            CHECK_GE(chainColOrd, 1);  // there must be a diagonal block
+            BASPACHO_CHECK_GE(chainColOrd,
+                              1);  // there must be a diagonal block
 
             uint64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
             uint64_t ptrEnd = skel.chainColPtr[lump + 1];
@@ -183,17 +184,19 @@ struct CpuBaseOps : Ops {
              i < iEnd; i++) {
             uint64_t lump = elim.colLump[i];
             uint64_t chainColOrd = elim.chainColOrd[i];
-            CHECK_GE(chainColOrd, 1);  // there must be a diagonal block
+            BASPACHO_CHECK_GE(chainColOrd,
+                              1);  // there must be a diagonal block
 
             uint64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
             uint64_t ptrEnd = skel.chainColPtr[lump + 1];
-            CHECK_EQ(skel.chainRowSpan[ptrStart], s);
+            BASPACHO_CHECK_EQ(skel.chainRowSpan[ptrStart], s);
 
             uint64_t nRowsAbove = skel.chainRowsTillEnd[ptrStart - 1];
             uint64_t nRowsChain = skel.chainRowsTillEnd[ptrStart] - nRowsAbove;
             uint64_t nRowsOnward = skel.chainRowsTillEnd[ptrEnd - 1];
             uint64_t dataOffset = skel.chainData[ptrStart];
-            CHECK_EQ(nRowsChain, skel.spanStart[s + 1] - skel.spanStart[s]);
+            BASPACHO_CHECK_EQ(nRowsChain,
+                              skel.spanStart[s + 1] - skel.spanStart[s]);
             uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
 
             Eigen::Map<MatRMaj<double>> chainSubMat(data + dataOffset,
@@ -201,7 +204,7 @@ struct CpuBaseOps : Ops {
             Eigen::Map<MatRMaj<double>> chainOnwardSubMat(
                 data + dataOffset, nRowsOnward, lumpSize);
 
-            CHECK_GE(tempBuffer.size(), nRowsOnward * nRowsChain);
+            BASPACHO_CHECK_GE(tempBuffer.size(), nRowsOnward * nRowsChain);
             Eigen::Map<MatRMaj<double>> prod(tempBuffer.data(), nRowsOnward,
                                              nRowsChain);
             prod.noalias() = chainOnwardSubMat * chainSubMat.transpose();
@@ -214,7 +217,7 @@ struct CpuBaseOps : Ops {
                     skel.chainRowsTillEnd[ptr] - nRowsAbove - relRow;
 
                 // incomment below if check is needed
-                // CHECK(spanToChainOffset[s2] != kInvalid);
+                // BASPACHO_CHECK(spanToChainOffset[s2] != kInvalid);
                 double* targetData =
                     data + spanOffsetInLump + spanToChainOffset[s2];
 
@@ -245,17 +248,19 @@ struct CpuBaseOps : Ops {
              i < iEnd; i++) {
             uint64_t lump = elim.colLump[i];
             uint64_t chainColOrd = elim.chainColOrd[i];
-            CHECK_GE(chainColOrd, 1);  // there must be a diagonal block
+            BASPACHO_CHECK_GE(chainColOrd,
+                              1);  // there must be a diagonal block
 
             uint64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
             uint64_t ptrEnd = skel.chainColPtr[lump + 1];
-            CHECK_EQ(skel.chainRowSpan[ptrStart], s);
+            BASPACHO_CHECK_EQ(skel.chainRowSpan[ptrStart], s);
 
             uint64_t nRowsAbove = skel.chainRowsTillEnd[ptrStart - 1];
             uint64_t nRowsChain = skel.chainRowsTillEnd[ptrStart] - nRowsAbove;
             uint64_t nRowsOnward = skel.chainRowsTillEnd[ptrEnd - 1];
             uint64_t dataOffset = skel.chainData[ptrStart];
-            CHECK_EQ(nRowsChain, skel.spanStart[s + 1] - skel.spanStart[s]);
+            BASPACHO_CHECK_EQ(nRowsChain,
+                              skel.spanStart[s + 1] - skel.spanStart[s]);
             uint64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
 
             Eigen::Map<MatRMaj<double>> chainSubMat(data + dataOffset,

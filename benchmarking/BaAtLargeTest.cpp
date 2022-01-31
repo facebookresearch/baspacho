@@ -1,9 +1,8 @@
 
-#include <glog/logging.h>
-
 #include <chrono>
 
 #include "../baspacho/CoalescedBlockMatrix.h"
+#include "../baspacho/DebugMacros.h"
 #include "../baspacho/EliminationTree.h"
 #include "../baspacho/Solver.h"
 #include "../baspacho/SparseStructure.h"
@@ -26,7 +25,7 @@ void computeCost(Data& data) {
             Cost::compute_residual(obs.imgPos, pt, cam.T_W_C, cam.f_k1_k2);
         totCost += 0.5 * err.squaredNorm();
     }
-    LOG(INFO) << "tot cost: " << totCost;
+    std::cout << "tot cost: " << totCost << std::endl;
 }
 
 void experiment2(Data& data) {
@@ -34,7 +33,7 @@ void experiment2(Data& data) {
     uint64_t numCams = data.cameras.size();
     uint64_t totNumParams = numPts + numCams;
 
-    LOG(INFO) << "Build struct...";
+    std::cout << "Build struct..." << std::endl;
     vector<uint64_t> paramSize(totNumParams);
     vector<set<uint64_t>> colBlocks(totNumParams);
     for (uint64_t i = 0; i < numPts; i++) {  // points go first
@@ -49,7 +48,7 @@ void experiment2(Data& data) {
         colBlocks[obs.ptIdx].insert(numPts + obs.camIdx);
     }
 
-    LOG(INFO) << "Building ss...";
+    std::cout << "Building ss..." << std::endl;
     SparseStructure origSs = columnsToCscStruct(colBlocks).transpose();
 
     bool verbose = 1;
@@ -67,7 +66,9 @@ void experiment2(Data& data) {
 
     if (verbose) {
         solver->ops->printStats();
-        LOG_IF(INFO, verbose) << "factor: " << factorTime << endl;
+        if (verbose) {
+            std::cout << "factor: " << factorTime << endl << std::endl;
+        }
     }
 }
 
@@ -76,7 +77,7 @@ void experiment(Data& data) {
     uint64_t numCams = data.cameras.size();
     uint64_t totNumParams = numPts + numCams;
 
-    LOG(INFO) << "Build struct...";
+    std::cout << "Build struct..." << std::endl;
     vector<uint64_t> paramSize(totNumParams);
     vector<set<uint64_t>> colBlocks(totNumParams);
     for (uint64_t i = 0; i < numPts; i++) {  // points go first
@@ -91,24 +92,24 @@ void experiment(Data& data) {
         colBlocks[obs.ptIdx].insert(numPts + obs.camIdx);
     }
 
-    LOG(INFO) << "Building ss...";
+    std::cout << "Building ss..." << std::endl;
     SparseStructure origSs = columnsToCscStruct(colBlocks).transpose();
 
-    LOG(INFO) << "Elim pts...";
+    std::cout << "Elim pts..." << std::endl;
     SparseStructure elimPtSs = origSs.addIndependentEliminationFill(0, numPts);
-    LOG(INFO) << "done!";
+    std::cout << "done!" << std::endl;
 
     SparseStructure elimPtSsT = elimPtSs.transpose();
     uint64_t totPossible = numCams * (numCams + 1) / 2;
     uint64_t camCamBlocks =
         elimPtSsT.ptrs[totNumParams] - elimPtSsT.ptrs[numPts];
-    LOG(INFO) << "cam-cam blocks (from pts): " << camCamBlocks << " ("
-              << (100.0 * camCamBlocks / totPossible) << "%)";
+    std::cout << "cam-cam blocks (from pts): " << camCamBlocks << " ("
+              << (100.0 * camCamBlocks / totPossible) << "%)" << std::endl;
 
     SparseStructure camCamSs = elimPtSs.extractRightBottom(numPts);
 
 #if 1
-    LOG(INFO) << "Applying permutation...";
+    std::cout << "Applying permutation..." << std::endl;
     vector<uint64_t> permutation = camCamSs.fillReducingPermutation();
     vector<uint64_t> invPerm = inversePermutation(permutation);
     SparseStructure sortedCamCamSs =
@@ -117,52 +118,54 @@ void experiment(Data& data) {
     SparseStructure sortedCamCamSs = camCamSs;
 #endif
 
-    LOG(INFO) << "Computing remaining fill in...";
+    std::cout << "Computing remaining fill in..." << std::endl;
     SparseStructure filledSs = sortedCamCamSs.addFullEliminationFill();
-    LOG(INFO) << "done!";
+    std::cout << "done!" << std::endl;
 
     SparseStructure filledSsT = filledSs.transpose();
     uint64_t camCamBlocks2 = filledSsT.ptrs[numCams];
-    LOG(INFO) << "cam-cam blocks (with fill): " << camCamBlocks2 << " ("
-              << (100.0 * camCamBlocks2 / totPossible) << "%)";
+    std::cout << "cam-cam blocks (with fill): " << camCamBlocks2 << " ("
+              << (100.0 * camCamBlocks2 / totPossible) << "%)" << std::endl;
 
-    LOG(INFO) << "Computing elim tree";
+    std::cout << "Computing elim tree" << std::endl;
 
     vector<uint64_t> paramSz(sortedCamCamSs.ptrs.size() - 1, 6);
     EliminationTree et(paramSz, sortedCamCamSs);
 
-    LOG(INFO) << "Build tree";
+    std::cout << "Build tree" << std::endl;
     et.buildTree();
 
-    LOG(INFO) << "Merges";
+    std::cout << "Merges" << std::endl;
     et.computeMerges();
 
-    LOG(INFO) << "Aggreg";
+    std::cout << "Aggreg" << std::endl;
     et.computeAggregateStruct();
 
-    LOG(INFO) << "Block mat";
+    std::cout << "Block mat" << std::endl;
     CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
                                         et.colStart, et.rowParam);
     uint64_t totData = factorSkel.dataSize();
-    LOG(INFO) << "cam-cam blocky (with fill): " << totData << " ("
-              << (100.0 * totData / (numCams * numCams)) << "%)";
+    std::cout << "cam-cam blocky (with fill): " << totData << " ("
+              << (100.0 * totData / (numCams * numCams)) << "%)" << std::endl;
 
-    LOG(INFO) << "aggregBlocks:" << factorSkel.lumpToSpan.size() - 1;
+    std::cout << "aggregBlocks:" << factorSkel.lumpToSpan.size() - 1
+              << std::endl;
     for (size_t a = 0; a < factorSkel.lumpToSpan.size() - 1; a++) {
-        LOG(INFO)
+        std::cout
             << "a." << a << ": size="
             << factorSkel.lumpToSpan[a + 1] - factorSkel.lumpToSpan[a]
             << ", nBlockRows="
-            << factorSkel.boardChainColOrd[factorSkel.boardColPtr[a + 1] - 1];
+            << factorSkel.boardChainColOrd[factorSkel.boardColPtr[a + 1] - 1]
+            << std::endl;
     }
 
-    LOG(INFO) << "Testing Cholmod...";
+    std::cout << "Testing Cholmod..." << std::endl;
     benchmarkCholmodSolve(paramSz, camCamSs);
 }
 
 int main(int argc, char* argv[]) {
     if (argc <= 1) {
-        LOG(INFO) << "Usage: prog bal_file.txt";
+        std::cout << "Usage: prog bal_file.txt" << std::endl;
         return 1;
     }
 

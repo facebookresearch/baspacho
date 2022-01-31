@@ -1,7 +1,7 @@
 
 #include "TestingMatGen.h"
 
-#include <glog/logging.h>
+#include "../baspacho/DebugMacros.h"
 
 using namespace std;
 
@@ -15,10 +15,10 @@ SparseMatGenerator::SparseMatGenerator(int64_t size, int64_t seed)
 void SparseMatGenerator::connectRanges(int64_t begin1, int64_t end1,
                                        int64_t begin2, int64_t end2,
                                        double fill, int64_t maxOffset) {
-    CHECK_GE(begin1, 0);
-    CHECK_GE(begin2, 0);
-    CHECK_LE(end1, columns.size());
-    CHECK_LE(end2, columns.size());
+    BASPACHO_CHECK_GE(begin1, 0);
+    BASPACHO_CHECK_GE(begin2, 0);
+    BASPACHO_CHECK_LE(end1, columns.size());
+    BASPACHO_CHECK_LE(end2, columns.size());
 
     if (begin1 > begin2) {
         connectRanges(begin2, end2, begin1, end1, fill, maxOffset);
@@ -88,8 +88,8 @@ SparseMatGenerator SparseMatGenerator::genMeridians(
     int64_t size = lineLen * num + hairLen * totHairs;
     int64_t endMeridians = lineLen * num;
 
-    CHECK_LE(bandSize, lineLen);
-    CHECK_LE(bandSize, hairLen);
+    BASPACHO_CHECK_LE(bandSize, lineLen);
+    BASPACHO_CHECK_LE(bandSize, hairLen);
 
     SparseMatGenerator retv(size, seed);
     // build structure of meridians and hairs

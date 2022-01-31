@@ -1,10 +1,10 @@
 
 #include <alloca.h>
 #include <dispenso/parallel_for.h>
-#include <glog/logging.h>
 
 #include <chrono>
 
+#include "DebugMacros.h"
 #include "MatOpsCpuBase.h"
 #include "Utils.h"
 
@@ -76,8 +76,8 @@ struct BlasOps : CpuBaseOps {
             dynamic_cast<const BlasSymbolicInfo*>(&info);
         const SparseEliminationInfo* pElim =
             dynamic_cast<const SparseEliminationInfo*>(&elimData);
-        CHECK_NOTNULL(pInfo);
-        CHECK_NOTNULL(pElim);
+        BASPACHO_CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pElim);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const SparseEliminationInfo& elim = *pElim;
 
@@ -241,9 +241,9 @@ struct BlasOps : CpuBaseOps {
                               uint64_t offset) override {
         OpInstance timer(sygeStat);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pAx);
+        BASPACHO_CHECK_NOTNULL(pAx);
         AssembleContext& ax = *pAx;
-        CHECK_LE(m * n, ax.tempBuffer.size());
+        BASPACHO_CHECK_LE(m * n, ax.tempBuffer.size());
 
         // in some cases it could be faster with syrk+gemm
         // as it saves some computation, not the case in practice
@@ -306,19 +306,19 @@ struct BlasOps : CpuBaseOps {
                                      const double* data, uint64_t* offsets,
                                      int batchSize) {
 #ifndef BASPACHO_USE_MKL
-        LOG(FATAL) << "Batching not supported";
+        BASPACHO_CHECK(!"Batching not supported");
 #else
         OpInstance timer(sygeStat);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pAx);
+        BASPACHO_CHECK_NOTNULL(pAx);
         AssembleContext& ax = *pAx;
-        CHECK_LE(batchSize, ax.maxBatchSize);
+        BASPACHO_CHECK_LE(batchSize, ax.maxBatchSize);
 
         // for testing: serial execution of the batch
         /*ax.tempBufPtrs.clear();
         double* ptr = ax.tempBuffer.data();
         for (int i = 0; i < batchSize; i++) {
-            CHECK_LE(ms[i] * ns[i], ax.tempCtxSize);
+            BASPACHO_CHECK_LE(ms[i] * ns[i], ax.tempCtxSize);
             this->gemm(ms[i], ns[i], ks[i], data + offsets[i],
                        data + offsets[i], ptr);
             ax.tempBufPtrs.push_back(ptr);
@@ -353,7 +353,7 @@ struct BlasOps : CpuBaseOps {
             argCs[i] = ptr;
             argGroupSize[i] = 1;
 
-            CHECK_LE(ms[i] * ns[i], ax.tempCtxSize);
+            BASPACHO_CHECK_LE(ms[i] * ns[i], ax.tempCtxSize);
             ax.tempBufPtrs.push_back(ptr);
             ptr += ms[i] * ns[i];
         }
@@ -373,11 +373,11 @@ struct BlasOps : CpuBaseOps {
                                                 uint64_t tempBufSize,
                                                 int maxBatchSize = 1) override {
 #ifndef BASPACHO_USE_MKL
-        CHECK_EQ(maxBatchSize, 1) << "Batching not supported";
+        BASPACHO_CHECK_EQ(maxBatchSize, 1);  // Batching not supported
 #endif
         const BlasSymbolicInfo* pInfo =
             dynamic_cast<const BlasSymbolicInfo*>(&info);
-        CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pInfo);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         AssembleContext* ax = new AssembleContext;
         ax->spanToChainOffset.resize(skel.spanStart.size() - 1);
@@ -395,8 +395,8 @@ struct BlasOps : CpuBaseOps {
         const BlasSymbolicInfo* pInfo =
             dynamic_cast<const BlasSymbolicInfo*>(&info);
         AssembleContext* pAx = dynamic_cast<AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pInfo);
-        CHECK_NOTNULL(pAx);
+        BASPACHO_CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pAx);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         AssembleContext& ax = *pAx;
 
@@ -418,8 +418,8 @@ struct BlasOps : CpuBaseOps {
             dynamic_cast<const BlasSymbolicInfo*>(&info);
         const AssembleContext* pAx =
             dynamic_cast<const AssembleContext*>(&assCtx);
-        CHECK_NOTNULL(pInfo);
-        CHECK_NOTNULL(pAx);
+        BASPACHO_CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pAx);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const AssembleContext& ax = *pAx;
         const uint64_t* chainRowsTillEnd =
@@ -432,7 +432,7 @@ struct BlasOps : CpuBaseOps {
         const double* matRectPtr =
             numBatch == -1 ? ax.tempBuffer.data() : ax.tempBufPtrs[numBatch];
 #else
-        CHECK_EQ(numBatch, -1) << "Batching not supported";
+        BASPACHO_CHECK_EQ(numBatch, -1);  // Batching not supported
         const double* matRectPtr = ax.tempBuffer.data();
 #endif
 
@@ -561,7 +561,7 @@ struct BlasOps : CpuBaseOps {
                              double* C, uint64_t ldc, uint64_t nRHS) override {
         const BlasSymbolicInfo* pInfo =
             dynamic_cast<const BlasSymbolicInfo*>(&info);
-        CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pInfo);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
@@ -647,7 +647,7 @@ struct BlasOps : CpuBaseOps {
                               uint64_t numColItems) override {
         const BlasSymbolicInfo* pInfo =
             dynamic_cast<const BlasSymbolicInfo*>(&info);
-        CHECK_NOTNULL(pInfo);
+        BASPACHO_CHECK_NOTNULL(pInfo);
         const CoalescedBlockMatrixSkel& skel = pInfo->skel;
         const uint64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;

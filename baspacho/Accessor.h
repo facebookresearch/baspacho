@@ -1,9 +1,8 @@
 
-#include <glog/logging.h>
-
 #include <Eigen/Geometry>
 #include <tuple>
 
+#include "DebugMacros.h"
 #include "Utils.h"
 
 struct CoalescedAccessor {
@@ -31,7 +30,7 @@ struct CoalescedAccessor {
     // returns: pair (offset, stride)
     std::pair<uint64_t, uint64_t> blockOffset(uint64_t rowBlockIndex,
                                               uint64_t colBlockIndex) const {
-        // CHECK_GE(rowBlockIndex, colBlockIndex);
+        // BASPACHO_CHECK_GE(rowBlockIndex, colBlockIndex);
         uint64_t lump = spanToLump[colBlockIndex];
         uint64_t lumpSize = lumpStart[lump + 1] - lumpStart[lump];
         uint64_t offsetInLump = spanOffsetInLump[colBlockIndex];
@@ -39,7 +38,7 @@ struct CoalescedAccessor {
         uint64_t end = chainColPtr[lump + 1];
         // bisect to find `rowBlockIndex` in chainRowSpan[start:end]
         uint64_t pos = bisect(chainRowSpan + start, end - start, rowBlockIndex);
-        // CHECK_EQ(chainRowSpan[start + pos], rowBlockIndex);
+        // BASPACHO_CHECK_EQ(chainRowSpan[start + pos], rowBlockIndex);
         return std::make_pair(chainData[start + pos] + offsetInLump, lumpSize);
     }
 
@@ -59,10 +58,10 @@ struct CoalescedAccessor {
         using namespace Eigen;
         auto [offset, stride] = blockOffset(rowBlockIndex, colBlockIndex);
         if (rowSize != Dynamic) {
-            CHECK_EQ(rowSize, paramSize(rowBlockIndex));
+            BASPACHO_CHECK_EQ(rowSize, paramSize(rowBlockIndex));
         }
         if (colSize != Dynamic) {
-            CHECK_EQ(colSize, paramSize(colBlockIndex));
+            BASPACHO_CHECK_EQ(colSize, paramSize(colBlockIndex));
         }
         return Map<Matrix<T, rowSize, colSize, RowMajor>, 0, OuterStride<>>(
             data + offset,
@@ -76,7 +75,7 @@ struct CoalescedAccessor {
         using namespace Eigen;
         auto [offset, stride] = diagBlockOffset(blockIndex);
         if (size != Dynamic) {
-            CHECK_EQ(size, paramSize(blockIndex));
+            BASPACHO_CHECK_EQ(size, paramSize(blockIndex));
         }
         int pSize = size != Dynamic ? size : paramSize(blockIndex);
         return Map<Matrix<T, size, size, RowMajor>, 0, OuterStride<>>(
@@ -125,10 +124,10 @@ struct PermutedCoalescedAccessor {
     auto block(T* data, uint64_t rowBlockIndex, uint64_t colBlockIndex) const {
         using namespace Eigen;
         if (rowSize != Dynamic) {
-            CHECK_EQ(rowSize, paramSize(rowBlockIndex));
+            BASPACHO_CHECK_EQ(rowSize, paramSize(rowBlockIndex));
         }
         if (colSize != Dynamic) {
-            CHECK_EQ(colSize, paramSize(colBlockIndex));
+            BASPACHO_CHECK_EQ(colSize, paramSize(colBlockIndex));
         }
         auto [offset, stride, flip] = blockOffset(rowBlockIndex, colBlockIndex);
         return Map<Matrix<T, rowSize, colSize, RowMajor>, 0,
@@ -144,7 +143,7 @@ struct PermutedCoalescedAccessor {
         using namespace Eigen;
         auto [offset, stride] = diagBlockOffset(blockIndex);
         if (size != Dynamic) {
-            CHECK_EQ(size, paramSize(blockIndex));
+            BASPACHO_CHECK_EQ(size, paramSize(blockIndex));
         }
         int pSize = size != Dynamic ? size : paramSize(blockIndex);
         return Map<Matrix<T, size, size, RowMajor>, 0, OuterStride<>>(
