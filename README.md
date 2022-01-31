@@ -38,18 +38,26 @@ Optional libraries:
 ## Configure and Install
 
 Configuring with system blas (eg OpenBLAS):
-`cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+```
 Configuring with MKL:
 ```
 . /opt/intel/oneapi/setvars.sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBLA_VENDOR=Intel10_64lp
 ```
 Compiling and testing:
-`cmake --build build -v -- -j16 && ctest --test-dir build`
-Compiling and benchmarking:
-`cmake --build build -v -- -j16 && build/bench`
+```
+cmake --build build -v -- -j16 && ctest --test-dir build
+```
+Compiling and benchmarking (using CHOLMOD as baseline):
+```
+cmake --build build -v -- -j16 && build/bench -B CHOLMOD
+```
 Show tests:
-`ctest --test-dir build --show-only`
+```
+ctest --test-dir build --show-only
+```
 
 ### Blas
 
@@ -66,7 +74,8 @@ https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors
 ## Reordering algorithms Approximate Minimum Degree (AMD)
 
 BaSpaCho can use either the implementation in Eigen of AMD (by default), or
-the version in library AMD as part of SuiteSparse.
+the version in library AMD as part of SuiteSparse. Add `-DUSE_SUITESPARSE_AMD=1`
+to the build step to use the implementation in SuiteSparse instead of Eigen.
 
 ## Caveats
 
