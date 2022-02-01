@@ -1,7 +1,7 @@
 
-#include "TestingMatGen.h"
+#include "baspacho/testing/TestingMatGen.h"
 
-#include "../baspacho/DebugMacros.h"
+#include "baspacho/DebugMacros.h"
 
 using namespace std;
 

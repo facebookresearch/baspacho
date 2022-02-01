@@ -6,10 +6,10 @@
 #include <random>
 #include <regex>
 
-#include "../baspacho/DebugMacros.h"
-#include "../baspacho/Solver.h"
-#include "../testing/TestingMatGen.h"
-#include "../testing/TestingUtils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/Solver.h"
+#include "baspacho/testing/TestingMatGen.h"
+#include "baspacho/testing/TestingUtils.h"
 
 #ifdef BASPACHO_HAVE_CHOLMOD
 #include "BenchCholmod.h"

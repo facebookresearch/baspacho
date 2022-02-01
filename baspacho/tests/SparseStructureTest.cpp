@@ -1,10 +1,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "../../testing/TestingUtils.h"
-#include "../DebugMacros.h"
-#include "../SparseStructure.h"
-#include "../Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/SparseStructure.h"
+#include "baspacho/Utils.h"
+#include "baspacho/testing/TestingUtils.h"
 
 using namespace std;
 using namespace testing;

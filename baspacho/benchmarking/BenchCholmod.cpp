@@ -1,5 +1,5 @@
 
-#include "BenchCholmod.h"
+#include "baspacho/benchmarking/BenchCholmod.h"
 
 #include <cholmod.h>
 
@@ -7,8 +7,8 @@
 #include <iostream>
 #include <random>
 
-#include "../baspacho/DebugMacros.h"
-#include "../baspacho/Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/Utils.h"
 
 using namespace std;
 using hrc = chrono::high_resolution_clock;

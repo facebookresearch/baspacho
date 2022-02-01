@@ -7,12 +7,12 @@
 #include <random>
 #include <sstream>
 
-#include "../../testing/TestingUtils.h"
-#include "../CoalescedBlockMatrix.h"
-#include "../EliminationTree.h"
-#include "../Solver.h"
-#include "../SparseStructure.h"
-#include "../Utils.h"
+#include "baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/EliminationTree.h"
+#include "baspacho/Solver.h"
+#include "baspacho/SparseStructure.h"
+#include "baspacho/Utils.h"
+#include "baspacho/testing/TestingUtils.h"
 
 using namespace std;
 

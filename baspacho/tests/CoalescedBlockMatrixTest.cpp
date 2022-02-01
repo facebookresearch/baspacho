@@ -6,9 +6,9 @@
 #include <numeric>
 #include <sstream>
 
-#include "../../testing/TestingUtils.h"
-#include "../CoalescedBlockMatrix.h"
-#include "../SparseStructure.h"
+#include "baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/SparseStructure.h"
+#include "baspacho/testing/TestingUtils.h"
 
 #if 0
 //CHEAT SHEET:

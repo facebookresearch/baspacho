@@ -1,9 +1,9 @@
-#include "CoalescedBlockMatrix.h"
+#include "baspacho/CoalescedBlockMatrix.h"
 
 #include <iostream>
 
-#include "DebugMacros.h"
-#include "Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/Utils.h"
 
 using namespace std;
 

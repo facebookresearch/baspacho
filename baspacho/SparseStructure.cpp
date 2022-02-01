@@ -1,5 +1,5 @@
 
-#include "SparseStructure.h"
+#include "baspacho/SparseStructure.h"
 
 #if BASPACHO_USE_SUITESPARSE_AMD
 #include <amd.h>
@@ -9,8 +9,8 @@
 
 #include <algorithm>
 
-#include "DebugMacros.h"
-#include "Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/Utils.h"
 
 using namespace std;
 

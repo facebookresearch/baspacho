@@ -1,14 +1,14 @@
 
 #include <chrono>
 
-#include "../baspacho/CoalescedBlockMatrix.h"
-#include "../baspacho/DebugMacros.h"
-#include "../baspacho/EliminationTree.h"
-#include "../baspacho/Solver.h"
-#include "../baspacho/SparseStructure.h"
-#include "../baspacho/Utils.h"
-#include "../testing/TestingUtils.h"
-#include "BaAtLarge.h"
+#include "baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/EliminationTree.h"
+#include "baspacho/Solver.h"
+#include "baspacho/SparseStructure.h"
+#include "baspacho/Utils.h"
+#include "baspacho/benchmarking/BaAtLarge.h"
+#include "baspacho/testing/TestingUtils.h"
 
 #ifdef BASPACHO_HAVE_CHOLMOD
 #include "BenchCholmod.h"

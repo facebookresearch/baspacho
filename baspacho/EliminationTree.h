@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SparseStructure.h"
+#include "baspacho/SparseStructure.h"
 
 struct EliminationTree {
     EliminationTree(const std::vector<int64_t>& paramSize,

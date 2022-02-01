@@ -7,9 +7,9 @@
 #include <iostream>
 #include <numeric>
 
-#include "DebugMacros.h"
-#include "EliminationTree.h"
-#include "Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/EliminationTree.h"
+#include "baspacho/Utils.h"
 
 using namespace std;
 using hrc = chrono::high_resolution_clock;

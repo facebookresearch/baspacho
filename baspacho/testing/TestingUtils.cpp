@@ -1,10 +1,10 @@
 
-#include "TestingUtils.h"
+#include "baspacho/testing/TestingUtils.h"
 
 #include <algorithm>
 #include <random>
 
-#include "../baspacho/DebugMacros.h"
+#include "baspacho/DebugMacros.h"
 
 using namespace std;
 

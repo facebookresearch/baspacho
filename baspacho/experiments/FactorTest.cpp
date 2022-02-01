@@ -6,10 +6,10 @@
 #include <numeric>
 #include <sstream>
 
-#include "../baspacho/CoalescedBlockMatrix.h"
-#include "../baspacho/SparseStructure.h"
-#include "../testing/TestingUtils.h"
-#include "Factor.h"
+#include "baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/SparseStructure.h"
+#include "baspacho/experiments/Factor.h"
+#include "baspacho/testing/TestingUtils.h"
 
 using namespace std;
 

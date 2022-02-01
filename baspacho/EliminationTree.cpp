@@ -1,10 +1,10 @@
 
-#include "EliminationTree.h"
+#include "baspacho/EliminationTree.h"
 
 #include <algorithm>
 
-#include "DebugMacros.h"
-#include "Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/Utils.h"
 
 using namespace std;
 

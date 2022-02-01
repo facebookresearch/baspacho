@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/CoalescedBlockMatrix.h"
 
 void factor(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data);
 

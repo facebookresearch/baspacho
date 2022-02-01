@@ -2,9 +2,9 @@
 #include <chrono>
 #include <iostream>
 
-#include "DebugMacros.h"
-#include "MatOpsCpuBase.h"
-#include "Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/MatOpsCpuBase.h"
+#include "baspacho/Utils.h"
 
 using namespace std;
 using hrc = chrono::high_resolution_clock;

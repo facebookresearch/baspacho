@@ -1,8 +1,8 @@
-#include "Factor.h"
+#include "baspacho/experiments/Factor.h"
 
 #include <Eigen/Eigenvalues>
 
-#include "../baspacho/DebugMacros.h"
+#include "baspacho/DebugMacros.h"
 
 void factor(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data) {
     for (size_t l = 0; l < skel.lumpToSpan.size() - 1; l++) {

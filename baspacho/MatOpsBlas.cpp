@@ -3,9 +3,9 @@
 
 #include <chrono>
 
-#include "DebugMacros.h"
-#include "MatOpsCpuBase.h"
-#include "Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/MatOpsCpuBase.h"
+#include "baspacho/Utils.h"
 
 #ifdef BASPACHO_USE_MKL
 
@@ -15,7 +15,7 @@
 
 #else
 
-#include "BlasDefs.h"
+#include "baspacho/BlasDefs.h"
 
 #endif
 

@@ -2,8 +2,8 @@
 #include <Eigen/Geometry>
 #include <tuple>
 
-#include "DebugMacros.h"
-#include "Utils.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/Utils.h"
 
 struct CoalescedAccessor {
     CoalescedAccessor(const int64_t* spanStart, const int64_t* spanToLump,

@@ -1,9 +1,9 @@
 
 #include <memory>
 
-#include "CoalescedBlockMatrix.h"
-#include "MatOps.h"
-#include "SparseStructure.h"
+#include "baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/MatOps.h"
+#include "baspacho/SparseStructure.h"
 
 struct Solver {
     Solver(CoalescedBlockMatrixSkel&& factorSkel,

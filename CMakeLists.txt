@@ -133,6 +133,8 @@ include_directories(${sophus_SOURCE_DIR})
 add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 
+include_directories ("${PROJECT_SOURCE_DIR}")
+
 add_library(BaSpaCho
             baspacho/CoalescedBlockMatrix.cpp
             baspacho/EliminationTree.cpp
@@ -148,21 +150,21 @@ if(HAVE_AMD)
 endif()
 
 add_library(testing
-            testing/TestingMatGen.cpp
-            testing/TestingUtils.cpp)
+            baspacho/testing/TestingMatGen.cpp
+            baspacho/testing/TestingUtils.cpp)
 
 target_link_libraries (testing BaSpaCho)
 
 
 set(BAL_test_sources
-    benchmarking/BaAtLarge.cpp
-    benchmarking/BaAtLargeTest.cpp)
+    baspacho/benchmarking/BaAtLarge.cpp
+    baspacho/benchmarking/BaAtLargeTest.cpp)
 set(bench_sources
-    benchmarking/Bench.cpp)
+    baspacho/benchmarking/Bench.cpp)
 
 if(HAVE_CHOLMOD)
-  list(APPEND BAL_test_sources benchmarking/BenchCholmod.cpp)
-  list(APPEND bench_sources benchmarking/BenchCholmod.cpp)
+  list(APPEND BAL_test_sources baspacho/benchmarking/BenchCholmod.cpp)
+  list(APPEND bench_sources baspacho/benchmarking/BenchCholmod.cpp)
 endif()
 
 add_executable(BAL_test ${BAL_test_sources})
@@ -201,8 +203,8 @@ add_baspacho_test(
 )
 add_baspacho_test(
   ExperimentalFactorTest
-  experiments/Factor.cpp
-  experiments/FactorTest.cpp
+  baspacho/experiments/Factor.cpp
+  baspacho/experiments/FactorTest.cpp
 )
 add_baspacho_test(
   SparseStructureTest

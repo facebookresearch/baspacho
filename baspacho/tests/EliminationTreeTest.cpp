@@ -7,11 +7,11 @@
 #include <random>
 #include <sstream>
 
-#include "../../testing/TestingUtils.h"
-#include "../CoalescedBlockMatrix.h"
-#include "../DebugMacros.h"
-#include "../EliminationTree.h"
-#include "../Utils.h"
+#include "baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/DebugMacros.h"
+#include "baspacho/EliminationTree.h"
+#include "baspacho/Utils.h"
+#include "baspacho/testing/TestingUtils.h"
 
 using namespace std;
 using namespace testing;

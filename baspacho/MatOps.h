@@ -1,6 +1,6 @@
 #include <memory>
 
-#include "CoalescedBlockMatrix.h"
+#include "baspacho/CoalescedBlockMatrix.h"
 
 struct Ops;
 struct SymbolicCtx;

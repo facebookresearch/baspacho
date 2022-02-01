@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "MatOps.h"
-#include "Utils.h"
+#include "baspacho/MatOps.h"
+#include "baspacho/Utils.h"
 
 struct CpuBaseSymElimCtx : SymElimCtx {
     CpuBaseSymElimCtx() {}
