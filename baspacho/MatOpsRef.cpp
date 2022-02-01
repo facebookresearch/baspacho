@@ -72,91 +72,6 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
         }
     }
 
-    /*virtual void doEliminationQ(const OpaqueData& info, T* data,
-                                uint64_t lumpsBegin, uint64_t lumpsEnd,
-                                const OpaqueData& elimData) {
-        OpInstance timer(elimStat);
-        const SimpleSymbolicInfo* pInfo =
-            dynamic_cast<const SimpleSymbolicInfo*>(&info);
-        const SparseEliminationInfo* pElim =
-            dynamic_cast<const SparseEliminationInfo*>(&elimData);
-        BASPACHO_CHECK_NOTNULL(pInfo);
-        BASPACHO_CHECK_NOTNULL(pElim);
-        const CoalescedBlockMatrixSkel& skel = pInfo->skel;
-        const SparseEliminationInfo& elim = *pElim;
-
-        for (uint64_t a = lumpsBegin; a < lumpsEnd; a++) {
-            factorLump(skel, data, a);
-        }
-
-        std::vector<T> tempBuffer;                // ctx
-        std::vector<uint64_t> spanToChainOffset;  // ctx
-
-        uint64_t spanRowBegin = skel.lumpToSpan[lumpsEnd];
-        for (uint64_t sRel = 0; sRel < elim.rowPtr.size() - 1; sRel++) {
-            uint64_t s = sRel + spanRowBegin;
-            uint64_t targetLump = skel.spanToLump[s];
-            uint64_t targetLumpSize =
-                skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
-            uint64_t spanOffsetInLump =
-                skel.spanStart[s] - skel.lumpStart[targetLump];
-            prepareContextForTargetLump(skel, targetLump, spanToChainOffset);
-
-            // iterate over chains present in this row
-            for (uint64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
-                 i < iEnd; i++) {
-                uint64_t lump = elim.colLump[i];
-                uint64_t chainColOrd = elim.chainColOrd[i];
-                BASPACHO_CHECK_GE(chainColOrd,
-                                  1);  // there must be a diagonal block
-
-                uint64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
-                uint64_t ptrEnd = skel.chainColPtr[lump + 1];
-                BASPACHO_CHECK_EQ(skel.chainRowSpan[ptrStart], s);
-
-                uint64_t nRowsAbove = skel.chainRowsTillEnd[ptrStart - 1];
-                uint64_t nRowsChain =
-                    skel.chainRowsTillEnd[ptrStart] - nRowsAbove;
-                uint64_t nRowsOnward = skel.chainRowsTillEnd[ptrEnd - 1];
-                uint64_t dataOffset = skel.chainData[ptrStart];
-                BASPACHO_CHECK_EQ(nRowsChain,
-                                  skel.spanStart[s + 1] - skel.spanStart[s]);
-                uint64_t lumpSize =
-                    skel.lumpStart[lump + 1] - skel.lumpStart[lump];
-
-                Eigen::Map<MatRMaj<T>> chainSubMat(data + dataOffset,
-                                                   nRowsChain, lumpSize);
-                Eigen::Map<MatRMaj<T>> chainOnwardSubMat(data + dataOffset,
-                                                         nRowsOnward, lumpSize);
-
-                tempBuffer.resize(nRowsOnward * nRowsChain);
-                Eigen::Map<MatRMaj<T>> prod(tempBuffer.data(), nRowsOnward,
-                                            nRowsChain);
-                prod = chainOnwardSubMat * chainSubMat.transpose();
-
-                // assemble blocks, iterating on chain and below chains
-                for (uint64_t ptr = ptrStart; ptr < ptrEnd; ptr++) {
-                    uint64_t s2 = skel.chainRowSpan[ptr];
-                    uint64_t relRow =
-                        skel.chainRowsTillEnd[ptr - 1] - nRowsAbove;
-                    uint64_t s2_size =
-                        skel.chainRowsTillEnd[ptr] - nRowsAbove - relRow;
-                    BASPACHO_CHECK_EQ(
-                        s2_size, skel.spanStart[s2 + 1] - skel.spanStart[s2]);
-
-                    T* targetData =
-                        data + spanOffsetInLump + spanToChainOffset[s2];
-                    BASPACHO_CHECK(spanToChainOffset[s2] != kInvalid);
-
-                    OuterStridedMatM targetBlock(targetData, s2_size,
-                                                 nRowsChain,
-                                                 OuterStride(targetLumpSize));
-                    targetBlock -= prod.block(relRow, 0, s2_size, nRowsChain);
-                }
-            }
-        }
-    }*/
-
     virtual void potrf(uint64_t n, T* A) override {
         OpInstance timer(potrfStat);
 
@@ -358,5 +273,3 @@ SolveCtxPtr<double> SimpleSymbolicCtx::createDoubleSolveContext() {
 }
 
 OpsPtr simpleOps() { return OpsPtr(new SimpleOps); }
-
-OpsPtr blasOps() { return OpsPtr(new SimpleOps); }
