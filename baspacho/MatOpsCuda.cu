@@ -283,38 +283,6 @@ struct CudaNumericCtx : NumericCtx<T> {
             numBlockRows, numBlockCols, rectRowBegin, srcRectWidth, dstStride,
             pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
             matRectPtr, data);
-
-#if 0
-        BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
-        OpInstance timer(asmblStat);
-        const CoalescedBlockMatrixSkel& skel = sym.skel;
-        const int64_t* pChainRowsTillEnd =
-            skel.chainRowsTillEnd.data() + srcColDataOffset;
-        const int64_t* pToSpan = skel.chainRowSpan.data() + srcColDataOffset;
-        const int64_t* pSpanToChainOffset = spanToChainOffset.data();
-        const int64_t* pSpanOffsetInLump = skel.spanOffsetInLump.data();
-
-        const T* matRectPtr = tempBuffer.data();
-
-        for (int64_t r = 0; r < numBlockRows; r++) {
-            int64_t rBegin = pChainRowsTillEnd[r - 1] - rectRowBegin;
-            int64_t rSize = pChainRowsTillEnd[r] - rBegin - rectRowBegin;
-            int64_t rParam = pToSpan[r];
-            int64_t rOffset = pSpanToChainOffset[rParam];
-            const T* matRowPtr = matRectPtr + rBegin * srcRectWidth;
-
-            int64_t cEnd = std::min(numBlockCols, r + 1);
-            for (int64_t c = 0; c < cEnd; c++) {
-                int64_t cStart = pChainRowsTillEnd[c - 1] - rectRowBegin;
-                int64_t cSize = pChainRowsTillEnd[c] - cStart - rectRowBegin;
-                int64_t offset = rOffset + pSpanOffsetInLump[pToSpan[c]];
-
-                T* dst = data + offset;
-                const T* src = matRowPtr + cStart;
-                stridedMatSub(dst, dstStride, src, srcRectWidth, rSize, cSize);
-            }
-        }
-#endif
     }
 
     OpStat elimStat;
