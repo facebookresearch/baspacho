@@ -71,12 +71,12 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
     virtual void doElimination(const SymElimCtx& elimData, double* data,
                                int64_t lumpsBegin, int64_t lumpsEnd) override {
-        OpInstance timer(elimStat);
         const CpuBaseSymElimCtx* pElim =
             dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
         BASPACHO_CHECK_NOTNULL(pElim);
         const CpuBaseSymElimCtx& elim = *pElim;
         const CoalescedBlockMatrixSkel& skel = sym.skel;
+        OpInstance timer(elim.elimStat);
 
         if (!sym.useThreads) {
             for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
@@ -142,12 +142,15 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
     }
 
     virtual void potrf(int64_t n, T* A) override {
-        OpInstance timer(potrfStat);
+        OpInstance timer(sym.potrfStat);
+
         LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', n, A, n);
+
+        sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
     }
 
     virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
-        OpInstance timer(trsmStat);
+        OpInstance timer(sym.trsmStat);
 
         // TSRM should be fast but appears very slow in OpenBLAS
         static constexpr bool slowTrsmWorkaround = BASPACHO_USE_TRSM_WORAROUND;
@@ -173,7 +176,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override {
-        OpInstance timer(sygeStat);
+        OpInstance timer(sym.sygeStat);
         BASPACHO_CHECK_LE(m * n, tempBuffer.size());
 
         // in some cases it could be faster with syrk+gemm
@@ -184,7 +187,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         if (doSyrk) {
             cblas_dsyrk(CblasColMajor, CblasUpper, CblasConjTrans, m, k, 1.0,
                         data + offset, k, 0.0, tempBuffer.data(), m);
-            syrkCalls++;
+            sym.syrkCalls++;
         }
 
         if (doGemm) {
@@ -195,7 +198,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                         n - gemmStart, k, 1.0, data + offset, k,
                         data + offset + gemmInOffset, k, 0.0,
                         tempBuffer.data() + gemmOutOffset, m);
-            gemmCalls++;
+            sym.gemmCalls++;
         }
     }
 
@@ -205,7 +208,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 #ifndef BASPACHO_HAVE_GEMM_BATCH
         BASPACHO_CHECK(!"Batching not supported");
 #else
-        OpInstance timer(sygeStat);
+        OpInstance timer(sym.sygeStat);
         BASPACHO_CHECK_LE(batchSize, maxBatchSize);
 
         // for testing: serial execution of the batch
@@ -259,7 +262,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         cblas_dgemm_batch(CblasColMajor, argTransAs, argTransBs, argMs, argNs,
                           argKs, argAlphas, argAs, argLdAs, argAs, argLdBs,
                           argBetas, argCs, argLdCs, argNumGroups, argGroupSize);
-        gemmCalls++;
+        sym.gemmCalls++;
 #endif
     }
 
@@ -278,7 +281,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                           int64_t srcColDataOffset, int64_t srcRectWidth,
                           int64_t numBlockRows, int64_t numBlockCols,
                           int numBatch = -1) override {
-        OpInstance timer(asmblStat);
+        OpInstance timer(sym.asmblStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + srcColDataOffset;
@@ -356,15 +359,6 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
     using CpuBaseNumericCtx<T>::tempBuffer;
     using CpuBaseNumericCtx<T>::spanToChainOffset;
-
-    using CpuBaseNumericCtx<T>::elimStat;
-    using CpuBaseNumericCtx<T>::potrfStat;
-    using CpuBaseNumericCtx<T>::potrfBiggestN;
-    using CpuBaseNumericCtx<T>::trsmStat;
-    using CpuBaseNumericCtx<T>::sygeStat;
-    using CpuBaseNumericCtx<T>::gemmCalls;
-    using CpuBaseNumericCtx<T>::syrkCalls;
-    using CpuBaseNumericCtx<T>::asmblStat;
 
     const BlasSymbolicCtx& sym;
 #ifdef BASPACHO_HAVE_GEMM_BATCH

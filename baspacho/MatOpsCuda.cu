@@ -32,11 +32,13 @@ using OuterStridedCMajMatK = Eigen::Map<
 struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     CudaSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
         : CpuBaseSymbolicCtx(skel) {
+        // cout << "sym-init Hs" << endl;
         cublasCHECK(cublasCreate(&cublasH));
         // cublasCHECK(cublasSetStream(cublasH, stream));
         cusolverCHECK(cusolverDnCreate(&cusolverDnH));
         // cusolverCHECK(cusolverDnSetStream(cusolverDnH, stream));
 
+        // cout << "sym-init..." << endl;
         cuCHECK(cudaMalloc((void**)&devChainRowsTillEnd,
                            skel.chainRowsTillEnd.size() * sizeof(int64_t)));
         cuCHECK(cudaMemcpy(devChainRowsTillEnd, skel.chainRowsTillEnd.data(),
@@ -52,6 +54,7 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         cuCHECK(cudaMemcpy(devSpanOffsetInLump, skel.spanOffsetInLump.data(),
                            skel.spanOffsetInLump.size() * sizeof(int64_t),
                            cudaMemcpyHostToDevice));
+        // cout << "sym-init done!" << endl;
     }
 
     virtual ~CudaSymbolicCtx() override {
@@ -96,6 +99,7 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
 struct CudaOps : Ops {
     virtual SymbolicCtxPtr createSymbolicCtx(
         const CoalescedBlockMatrixSkel& skel) override {
+        // cout << "create sym..." << endl;
         return SymbolicCtxPtr(new CudaSymbolicCtx(skel));
     }
 };
@@ -149,9 +153,11 @@ struct CudaNumericCtx : NumericCtx<T> {
     CudaNumericCtx(const CudaSymbolicCtx& sym, int64_t bufSize,
                    int64_t numSpans)
         : spanToChainOffset(numSpans), sym(sym) {
+        // cout << "num-init..." << endl;
         cuCHECK(cudaMalloc((void**)&devTempBuffer, bufSize * sizeof(T)));
         cuCHECK(cudaMalloc((void**)&devSpanToChainOffset,
                            spanToChainOffset.size() * sizeof(int64_t)));
+        // cout << "num-init done!" << endl;
     }
 
     virtual ~CudaNumericCtx() override {
@@ -163,27 +169,16 @@ struct CudaNumericCtx : NumericCtx<T> {
         }
     }
 
-    virtual void printStats() const override {
-        std::cout << "matOp stats:"
-                  << "\nelim: " << elimStat.toString()
-                  << "\nBiggest dense block: " << potrfBiggestN
-                  << "\npotrf: " << potrfStat.toString()
-                  << "\ntrsm: " << trsmStat.toString()  //
-                  << "\nsyrk/gemm(" << syrkCalls << "+" << gemmCalls
-                  << "): " << sygeStat.toString()
-                  << "\nasmbl: " << asmblStat.toString() << std::endl;
-    }
-
     virtual void doElimination(const SymElimCtx& elimData, T* data,
                                int64_t lumpsBegin, int64_t lumpsEnd) override {
         BASPACHO_CHECK(!"Not implemented yet!");
 #if 0
-        OpInstance timer(elimStat);
         const CpuBaseSymElimCtx* pElim =
             dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
         BASPACHO_CHECK_NOTNULL(pElim);
         const CpuBaseSymElimCtx& elim = *pElim;
         const CoalescedBlockMatrixSkel& skel = sym.skel;
+        OpInstance timer(elim.elimStat);
 
         for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
             factorLump(skel, data, l);
@@ -201,7 +196,8 @@ struct CudaNumericCtx : NumericCtx<T> {
     }
 
     virtual void potrf(int64_t n, T* A) override {
-        OpInstance timer(potrfStat);
+        // cout << "potrf n=" << n << endl;
+        OpInstance timer(sym.potrfStat);
 
         int workspaceSize;
         cusolverCHECK(cusolverDnDpotrf_bufferSize(
@@ -224,7 +220,8 @@ struct CudaNumericCtx : NumericCtx<T> {
     }
 
     virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
-        OpInstance timer(trsmStat);
+        // cout << "trsm n=" << n << ", k=" << k << endl;
+        OpInstance timer(sym.trsmStat);
 
         T alpha(1.0);
         cublasCHECK(cublasDtrsm(
@@ -234,10 +231,15 @@ struct CudaNumericCtx : NumericCtx<T> {
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override {
+        // cout << "gemm m=" << m << ", n=" << n << ", k=" << k << endl;
+        OpInstance timer(sym.sygeStat);
+
         T alpha(1.0), beta(0.0);
         cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k,
                                 &alpha, data + offset, k, data + offset, k,
                                 &beta, devTempBuffer, m));
+
+        sym.gemmCalls++;
     }
 
     virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
@@ -265,10 +267,12 @@ struct CudaNumericCtx : NumericCtx<T> {
                           int64_t srcColDataOffset, int64_t srcRectWidth,
                           int64_t numBlockRows, int64_t numBlockCols,
                           int numBatch = -1) override {
+        // cout << "assembl rows=" << numBlockRows << ", cols=" << numBlockCols
+        //     << endl;
         // BASPACHO_CHECK(!"Not implemented yet!");
 
         BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
-        OpInstance timer(asmblStat);
+        OpInstance timer(sym.asmblStat);
         const int64_t* pChainRowsTillEnd =
             sym.devChainRowsTillEnd + srcColDataOffset;
         const int64_t* pToSpan = sym.devChainRowSpan + srcColDataOffset;

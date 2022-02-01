@@ -17,6 +17,8 @@ struct Solver {
                                          permutation.data());
     }
 
+    void printStats() const;
+
     void solveL(const double* matData, double* vecData, int64_t stride,
                 int nRHS) const;
 
@@ -55,9 +57,16 @@ struct Solver {
 
 using SolverPtr = std::unique_ptr<Solver>;
 
+enum BackendType {
+    BackendRef,
+    BackendBlas,
+    BackendCuda,
+};
+
 struct Settings {
     bool findSparseEliminationRanges = true;
     int numThreads = 16;
+    BackendType backend = BackendBlas;
 };
 
 SolverPtr createSolver(const Settings& settings,

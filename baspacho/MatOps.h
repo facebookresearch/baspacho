@@ -57,19 +57,27 @@ struct SymbolicCtx {
 
     template <typename T>
     SolveCtxPtr<T> createSolveCtx();
+
+    mutable OpStat potrfStat;
+    mutable int64_t potrfBiggestN = 0;
+    mutable OpStat trsmStat;
+    mutable OpStat sygeStat;
+    mutable int64_t gemmCalls = 0;
+    mutable int64_t syrkCalls = 0;
+    mutable OpStat asmblStat;
 };
 
 // (symbolic) context for sparse elimination of a range of parameters
 struct SymElimCtx {
     virtual ~SymElimCtx() {}
+
+    mutable OpStat elimStat;
 };
 
 // ops and contexts depending on the float/double type
 template <typename T>
 struct NumericCtx : NumericCtxBase {
     virtual ~NumericCtx() {}
-
-    virtual void printStats() const = 0;
 
     // does (possibly parallel) elimination on a lump of aggregs
     virtual void doElimination(const SymElimCtx& elimData, T* data,

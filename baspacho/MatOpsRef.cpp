@@ -53,11 +53,11 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
 
     virtual void doElimination(const SymElimCtx& elimData, T* data,
                                int64_t lumpsBegin, int64_t lumpsEnd) override {
-        OpInstance timer(elimStat);
         const CpuBaseSymElimCtx* pElim =
             dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
         BASPACHO_CHECK_NOTNULL(pElim);
         const CpuBaseSymElimCtx& elim = *pElim;
+        OpInstance timer(elim.elimStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
 
         for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
@@ -75,16 +75,16 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
     }
 
     virtual void potrf(int64_t n, T* A) override {
-        OpInstance timer(potrfStat);
+        OpInstance timer(sym.potrfStat);
 
         Eigen::Map<MatRMaj<T>> matA(A, n, n);
         Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(matA);
 
-        potrfBiggestN = std::max(potrfBiggestN, n);
+        sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
     }
 
     virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
-        OpInstance timer(trsmStat);
+        OpInstance timer(sym.trsmStat);
 
         using MatCMajD =
             Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
@@ -98,7 +98,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override {
-        OpInstance timer(sygeStat);
+        OpInstance timer(sym.sygeStat);
         BASPACHO_CHECK_LE(m * n, tempBuffer.size());
 
         const T* AB = data + offset;
@@ -107,6 +107,8 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
         Eigen::Map<const MatRMaj<T>> matB(AB, n, k);
         Eigen::Map<MatRMaj<T>> matC(C, n, m);
         matC.noalias() = matB * matA.transpose();
+
+        sym.gemmCalls++;
     }
 
     virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
@@ -131,7 +133,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
                           int64_t numBlockRows, int64_t numBlockCols,
                           int numBatch = -1) override {
         BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
-        OpInstance timer(asmblStat);
+        OpInstance timer(sym.asmblStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + srcColDataOffset;
@@ -167,15 +169,6 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
 
     using CpuBaseNumericCtx<T>::tempBuffer;
     using CpuBaseNumericCtx<T>::spanToChainOffset;
-
-    using CpuBaseNumericCtx<T>::elimStat;
-    using CpuBaseNumericCtx<T>::potrfStat;
-    using CpuBaseNumericCtx<T>::potrfBiggestN;
-    using CpuBaseNumericCtx<T>::trsmStat;
-    using CpuBaseNumericCtx<T>::sygeStat;
-    using CpuBaseNumericCtx<T>::gemmCalls;
-    using CpuBaseNumericCtx<T>::syrkCalls;
-    using CpuBaseNumericCtx<T>::asmblStat;
 
     const SimpleSymbolicCtx& sym;
 };

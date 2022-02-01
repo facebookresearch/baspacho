@@ -418,6 +418,22 @@ void Solver::solveLt(const double* matData, double* vecData, int64_t stride,
     }
 }
 
+void Solver::printStats() const {
+    std::cout << "Data size: " << factorSkel.dataSize() << endl;
+    std::cout << "Temp block: " << maxElimTempSize << endl;
+    for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+        std::cout << "Elim set [" << elimLumpRanges[l] << ".."
+                  << elimLumpRanges[l + 1]
+                  << "]: " << elimCtxs[l]->elimStat.toString() << std::endl;
+    }
+    std::cout << "Biggest dense block: " << symCtx->potrfBiggestN
+              << "\npotrf: " << symCtx->potrfStat.toString()
+              << "\ntrsm: " << symCtx->trsmStat.toString()  //
+              << "\nsyrk/gemm(" << symCtx->syrkCalls << "+" << symCtx->gemmCalls
+              << "): " << symCtx->sygeStat.toString()
+              << "\nasmbl: " << symCtx->asmblStat.toString() << std::endl;
+}
+
 pair<int64_t, bool> findLargestIndependentLumpSet(
     const CoalescedBlockMatrixSkel& factorSkel, int64_t startLump,
     int64_t maxSize = 8) {
@@ -439,6 +455,19 @@ pair<int64_t, bool> findLargestIndependentLumpSet(
         }
     }
     return make_pair(min(limit, (int64_t)factorSkel.lumpToSpan.size()), false);
+}
+
+OpsPtr getBackend(const Settings& settings) {
+    if (settings.backend == BackendRef) {
+        cout << "BACK: simple" << endl;
+        return simpleOps();
+    } else if (settings.backend == BackendBlas) {
+        cout << "BACK: blas" << endl;
+        return blasOps();
+    } else if (settings.backend == BackendCuda) {
+        cout << "BACK: cuda" << endl;
+        return cudaOps();
+    }
 }
 
 SolverPtr createSolver(const Settings& settings,
@@ -488,9 +517,7 @@ SolverPtr createSolver(const Settings& settings,
     vector<int64_t> etTotalInvPerm =
         composePermutations(et.permInverse, invPerm);
     return SolverPtr(new Solver(move(factorSkel), move(elimLumpRanges),
-                                move(etTotalInvPerm),
-                                blasOps()  // simpleOps()
-                                ));
+                                move(etTotalInvPerm), getBackend(settings)));
 }
 
 SolverPtr createSolverSchur(const Settings& settings,
@@ -518,7 +545,7 @@ SolverPtr createSolverSchur(const Settings& settings,
     // apply permutation to param size of right-bottom corner
     std::vector<int64_t> sortedBottomParamSize(paramSize.size() - elimEnd);
     for (size_t i = elimEnd; i < paramSize.size(); i++) {
-        sortedBottomParamSize[invPerm[i - elimEnd]] = paramSize[i - elimEnd];
+        sortedBottomParamSize[invPerm[i - elimEnd]] = paramSize[i];
     }
 
     // compute as ordinary elimination tree on br-corner
@@ -527,24 +554,24 @@ SolverPtr createSolverSchur(const Settings& settings,
     et.computeMerges();
     et.computeAggregateStruct();
 
-    // full sorted param size
-    std::vector<int64_t> sortedFullParamSize;
-    sortedFullParamSize.reserve(paramSize.size());
-    sortedFullParamSize.insert(sortedFullParamSize.begin(), paramSize.begin(),
-                               paramSize.begin() + elimEnd);
-    sortedFullParamSize.insert(sortedFullParamSize.begin(),
-                               sortedBottomParamSize.begin(),
-                               sortedBottomParamSize.end());
-
     BASPACHO_CHECK_EQ(et.spanStart.size() - 1,
                       et.lumpToSpan[et.lumpToSpan.size() - 1]);
 
-    // compute span start as cumSum of `sortedFullParamSize`
-    vector<int64_t> fullSpanStart;
-    fullSpanStart.reserve(sortedFullParamSize.size() + 1);
-    fullSpanStart.insert(fullSpanStart.begin(), sortedFullParamSize.begin(),
-                         sortedFullParamSize.end());
-    fullSpanStart.push_back(0);
+    // ss last rows are to be permuted according to etTotalInvPerm
+    vector<int64_t> etTotalInvPerm =
+        composePermutations(et.permInverse, invPerm);
+    vector<int64_t> fullInvPerm(elimEnd + etTotalInvPerm.size());
+    iota(fullInvPerm.begin(), fullInvPerm.begin() + elimEnd, 0);
+    for (size_t i = 0; i < etTotalInvPerm.size(); i++) {
+        fullInvPerm[i + elimEnd] = elimEnd + etTotalInvPerm[i];
+    }
+
+    // compute span start as cumSum of sorted paramSize
+    vector<int64_t> fullSpanStart(paramSize.size() + 1);
+    for (size_t i = 0; i < paramSize.size(); i++) {
+        fullSpanStart[fullInvPerm[i]] = paramSize[i];
+    }
+    fullSpanStart[paramSize.size()] = 0;
     cumSumVec(fullSpanStart);
 
     // compute lump to span, knowing up to elimEnd it's the identity
@@ -556,19 +583,11 @@ SolverPtr createSolverSchur(const Settings& settings,
     BASPACHO_CHECK_EQ(fullSpanStart.size() - 1,
                       fullLumpToSpan[fullLumpToSpan.size() - 1]);
 
-    // colStart are aggregate lump columns
-    // ss last rows are to be permuted according to etTotalInvPerm
-    vector<int64_t> etTotalInvPerm =
-        composePermutations(et.permInverse, invPerm);
-    vector<int64_t> fullInvPerm(elimEnd + etTotalInvPerm.size());
-    iota(fullInvPerm.begin(), fullInvPerm.begin() + elimEnd, 0);
-    for (size_t i = 0; i < etTotalInvPerm.size(); i++) {
-        fullInvPerm[i + elimEnd] = elimEnd + etTotalInvPerm[i];
-    }
+    // matrix with blocks not joined, we will need the first columns
     SparseStructure sortedSsT =
         ss.symmetricPermutation(fullInvPerm, false).transpose(false);
 
-    // fullColStart joining sortedSsT.ptrs + elimEndDataPtr (shifted)
+    // fullColStart joining sortedSsT.ptrs + shifted elimEndDataPtr
     vector<int64_t> fullColStart;
     fullColStart.reserve(elimEnd + et.colStart.size());
     fullColStart.insert(fullColStart.begin(), sortedSsT.ptrs.begin(),
@@ -618,9 +637,7 @@ SolverPtr createSolverSchur(const Settings& settings,
     }
 
     return SolverPtr(new Solver(move(factorSkel), move(elimLumpRangesArg),
-                                move(fullInvPerm),
-                                blasOps()  // simpleOps()
-                                ));
+                                move(fullInvPerm), getBackend(settings)));
 }
 
 }  // end namespace BaSpaCho

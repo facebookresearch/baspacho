@@ -106,17 +106,6 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
     CpuBaseNumericCtx(int64_t bufSize, int64_t numSpans)
         : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
 
-    virtual void printStats() const override {
-        std::cout << "matOp stats:"
-                  << "\nelim: " << elimStat.toString()
-                  << "\nBiggest dense block: " << potrfBiggestN
-                  << "\npotrf: " << potrfStat.toString()
-                  << "\ntrsm: " << trsmStat.toString()  //
-                  << "\nsyrk/gemm(" << syrkCalls << "+" << gemmCalls
-                  << "): " << sygeStat.toString()
-                  << "\nasmbl: " << asmblStat.toString() << std::endl;
-    }
-
     // helper for elimination
     static inline void factorLump(const CoalescedBlockMatrixSkel& skel, T* data,
                                   int64_t lump) {
@@ -296,15 +285,6 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
     // temporary data
     std::vector<T> tempBuffer;
     std::vector<int64_t> spanToChainOffset;
-
-    OpStat elimStat;
-    OpStat potrfStat;
-    int64_t potrfBiggestN = 0;
-    OpStat trsmStat;
-    OpStat sygeStat;
-    int64_t gemmCalls = 0;
-    int64_t syrkCalls = 0;
-    OpStat asmblStat;
 };
 
 }  // end namespace BaSpaCho
