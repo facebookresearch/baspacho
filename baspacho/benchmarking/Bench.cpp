@@ -6,6 +6,7 @@
 #include <random>
 #include <regex>
 
+#include "baspacho/CudaDefs.h"
 #include "baspacho/DebugMacros.h"
 #include "baspacho/Solver.h"
 #include "baspacho/testing/TestingMatGen.h"
@@ -26,10 +27,11 @@ struct SparseProblem {
     vector<int64_t> paramSize;
 };
 
-pair<double, double> benchmarkSolver(const SparseProblem& prob, bool verbose) {
+pair<double, double> benchmarkSolver(const SparseProblem& prob,
+                                     const Settings& settings, bool verbose) {
     auto startAnalysis = hrc::now();
     SolverPtr solver =
-        createSolver({}, prob.paramSize, prob.sparseStruct, verbose);
+        createSolver(settings, prob.paramSize, prob.sparseStruct, verbose);
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     // generate mock data, make positive def
@@ -37,9 +39,23 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob, bool verbose) {
         randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
     solver->factorSkel.damp(data, 0, solver->factorSkel.order() * 1.2);
 
-    auto startFactor = hrc::now();
-    solver->factor(data.data(), verbose);
-    double factorTime = tdelta(hrc::now() - startFactor).count();
+    double factorTime;
+    if (settings.backend == BackendCuda) {
+        double* dataGPU;
+        cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
+        cuCHECK(cudaMemcpy(dataGPU, data.data(), data.size() * sizeof(double),
+                           cudaMemcpyHostToDevice));
+        auto startFactor = hrc::now();
+        solver->factor(dataGPU);
+        factorTime = tdelta(hrc::now() - startFactor).count();
+        cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
+                           cudaMemcpyDeviceToHost));
+        cuCHECK(cudaFree(dataGPU));
+    } else {
+        auto startFactor = hrc::now();
+        solver->factor(data.data(), verbose);
+        factorTime = tdelta(hrc::now() - startFactor).count();
+    }
 
     if (verbose) {
         // solver->ops->printStats(); // FIXME
@@ -138,7 +154,17 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
 
 map<string, function<pair<double, double>(const SparseProblem&, bool)>>
     solvers = {
-        {"BaSpaCho_BLAS_nth=16", benchmarkSolver},  //
+        {"BaSpaCho_BLAS_nth=16",
+         [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
+             return benchmarkSolver(prob, {}, verbose);
+         }},  //
+        {"BaSpaCho_CUDA",
+         [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
+             return benchmarkSolver(
+                 prob,
+                 {.findSparseEliminationRanges = false, .backend = BackendCuda},
+                 verbose);
+         }},  //
 #ifdef BASPACHO_HAVE_CHOLMOD
         {"CHOLMOD",
          [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
