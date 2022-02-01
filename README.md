@@ -59,6 +59,12 @@ Show tests:
 ctest --test-dir build --show-only
 ```
 
+### Cuda
+Cuda is enabled by default with BASPACHO_USE_CUBLAS option (on by default), add
+`-DBASPACHO_USE_CUBLAS=0` to disable in build.
+May have to add `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` to allow build
+to find the cuda compiler.
+
 ### Blas
 
 The library used is specified in the CMake variable BLA_VENDOR,
@@ -71,11 +77,11 @@ a few possibilities are:
 For the full list check CMake docs at:
 https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors
 
-## Reordering algorithms Approximate Minimum Degree (AMD)
+### Reordering algorithms Approximate Minimum Degree (AMD)
 
-BaSpaCho can use either the implementation in Eigen of AMD (by default), or
-the version in library AMD as part of SuiteSparse. Add `-DUSE_SUITESPARSE_AMD=1`
-to the build step to use the implementation in SuiteSparse instead of Eigen.
+BaSpaCho can use either the implementation in Eigen of AMD (by default), or the version in library
+AMD as part of SuiteSparse. Add `-DBASPACHO_USE_SUITESPARSE_AMD=1` to the build step to use the
+implementation in SuiteSparse instead of Eigen.
 
 ## Caveats
 

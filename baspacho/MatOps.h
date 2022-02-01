@@ -147,4 +147,6 @@ OpsPtr simpleOps();
 
 OpsPtr blasOps();
 
+OpsPtr cudaOps();
+
 }  // end namespace BaSpaCho

@@ -1,10 +1,25 @@
 cmake_minimum_required(VERSION 3.20)
 
 # set the project name
-project(BaSpaCho)
+project(BaSpaCho CXX)
 set(CMAKE_CXX_STANDARD 17)
 
 message("* Build type: " ${CMAKE_BUILD_TYPE})
+
+# CUDA
+message("==============================[ CUDA ]==================================")
+set(BASPACHO_USE_CUBLAS ON CACHE BOOL "If on, CUDA support is enabled")
+if(BASPACHO_USE_CUBLAS)
+  enable_language(CUDA)
+  include(CheckLanguage)
+  check_language(CUDA)
+  find_package(CUDAToolkit REQUIRED)
+
+  LIST(APPEND CUDA_NVCC_FLAGS --expt-relaxed-constexpr)
+  message("* CUDA Includes : " ${CUDAToolkit_INCLUDE_DIRS})
+  message("* CUDA Libraries: " ${CUDAToolkit_LIBRARY_DIR})
+  include_directories(${CUDAToolkit_INCLUDE_DIRS})
+endif()
 
 # BLAS. a few possibilities are:
 # * ATLAS
@@ -27,8 +42,8 @@ endif()
 
 # amd, if using amd from SuiteSparse
 message("===============[ minimum degree reordering algorithm ]==================")
-set(USE_SUITESPARSE_AMD OFF CACHE BOOL "If on, will use AMD algorithm in SuiteSparse (must be installed)")
-if(USE_SUITESPARSE_AMD)
+set(BASPACHO_USE_SUITESPARSE_AMD OFF CACHE BOOL "If on, will use AMD algorithm in SuiteSparse (must be installed)")
+if(BASPACHO_USE_SUITESPARSE_AMD)
   set(HAVE_AMD 1)
   find_path(AMD_INCLUDE_DIR NAMES amd.h
             PATHS $ENV{AMDDIR} ${INCLUDE_INSTALL_DIR}
@@ -137,13 +152,22 @@ include_directories ("${PROJECT_SOURCE_DIR}")
 
 add_library(BaSpaCho
             baspacho/CoalescedBlockMatrix.cpp
+            baspacho/CublasError.cpp
             baspacho/EliminationTree.cpp
             baspacho/MatOpsBlas.cpp
+            baspacho/MatOpsCuda.cu
             baspacho/MatOpsRef.cpp
             baspacho/Solver.cpp
             baspacho/SparseStructure.cpp
             baspacho/Utils.cpp)
 target_link_libraries (BaSpaCho dispenso ${BLAS_LIBRARIES})
+
+if(BASPACHO_USE_CUBLAS)
+  target_link_libraries (BaSpaCho CUDA::cublas CUDA::cusolver)
+  target_compile_options(BaSpaCho PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                        ${CUDA_NVCC_FLAGS}
+                        >)
+endif()
 
 if(HAVE_AMD)
   target_link_libraries (BaSpaCho ${AMD_LIBRARIES})
@@ -217,3 +241,10 @@ add_baspacho_test(
   SolveTest
   baspacho/tests/SolveTest.cpp
 )
+
+if(BASPACHO_USE_CUBLAS)
+  add_baspacho_test(
+    CudaFactorTest
+    baspacho/tests/CudaFactorTest.cpp
+  )
+endif()
