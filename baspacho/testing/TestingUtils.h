@@ -8,6 +8,8 @@
 
 #include "baspacho/SparseStructure.h"
 
+namespace BaSpaCho::testing {
+
 std::vector<int64_t> randomPermutation(size_t size, int64_t seed);
 
 std::vector<int64_t> randomVec(size_t size, int64_t low, int64_t high,
@@ -62,3 +64,5 @@ void naiveAddEliminationEntries(std::vector<std::set<int64_t>>& columns,
 
 std::vector<std::set<int64_t>> makeIndependentElimSet(
     std::vector<std::set<int64_t>>& columns, int64_t start, int64_t end);
+
+}  // end namespace BaSpaCho::testing

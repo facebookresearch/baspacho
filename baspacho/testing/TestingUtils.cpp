@@ -6,6 +6,7 @@
 
 #include "baspacho/DebugMacros.h"
 
+namespace BaSpaCho::testing {
 using namespace std;
 
 vector<int64_t> randomPermutation(size_t size, int64_t seed) {
@@ -223,3 +224,5 @@ vector<set<int64_t>> makeIndependentElimSet(vector<set<int64_t>>& columns,
     }
     return retvCols;
 }
+
+}  // end namespace BaSpaCho::testing

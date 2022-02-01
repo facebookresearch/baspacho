@@ -2,6 +2,8 @@
 
 #include "baspacho/SparseStructure.h"
 
+namespace BaSpaCho {
+
 struct EliminationTree {
     EliminationTree(const std::vector<int64_t>& paramSize,
                     const SparseStructure& ss);
@@ -36,3 +38,5 @@ struct EliminationTree {
     std::vector<int64_t> colStart;
     std::vector<int64_t> rowParam;
 };
+
+}  // end namespace BaSpaCho

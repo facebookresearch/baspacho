@@ -11,6 +11,8 @@
 #include "baspacho/experiments/Factor.h"
 #include "baspacho/testing/TestingUtils.h"
 
+using namespace BaSpaCho;
+using namespace ::BaSpaCho::testing;
 using namespace std;
 
 TEST(XperFactor, FactorAggreg) {

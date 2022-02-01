@@ -12,6 +12,8 @@
 #include "baspacho/DebugMacros.h"
 #include "baspacho/Utils.h"
 
+namespace BaSpaCho {
+
 using namespace std;
 
 void SparseStructure::sortIndices() {
@@ -374,3 +376,5 @@ SparseStructure SparseStructure::extractRightBottom(int64_t startRow) {
     rewindVec(retv.ptrs);
     return retv;
 }
+
+}  // end namespace BaSpaCho

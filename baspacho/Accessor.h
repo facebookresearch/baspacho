@@ -5,6 +5,8 @@
 #include "baspacho/DebugMacros.h"
 #include "baspacho/Utils.h"
 
+namespace BaSpaCho {
+
 struct CoalescedAccessor {
     CoalescedAccessor(const int64_t* spanStart, const int64_t* spanToLump,
                       const int64_t* lumpStart, const int64_t* spanOffsetInLump,
@@ -152,3 +154,5 @@ struct PermutedCoalescedAccessor {
     CoalescedAccessor plainAcc;
     const int64_t* permutation;
 };
+
+}  // end namespace BaSpaCho

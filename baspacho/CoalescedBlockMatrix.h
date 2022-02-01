@@ -7,7 +7,9 @@
 
 #include "baspacho/Accessor.h"
 
-constexpr int64_t kInvalid = std::numeric_limits<int64_t>::max();
+namespace BaSpaCho {
+
+constexpr int64_t kInvalid = -1;
 
 template <typename T>
 using MatRMaj =
@@ -80,3 +82,5 @@ CoalescedBlockMatrixSkel initCoalescedBlockMatrixSkel(
     const std::vector<int64_t>& spanStart,
     const std::vector<int64_t>& lumpToSpan, const std::vector<int64_t>& colPtr,
     const std::vector<int64_t>& rowInd);
+
+}  // end namespace BaSpaCho

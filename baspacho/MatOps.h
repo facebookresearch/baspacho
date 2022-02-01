@@ -2,6 +2,8 @@
 
 #include "baspacho/CoalescedBlockMatrix.h"
 
+namespace BaSpaCho {
+
 struct Ops;
 struct SymbolicCtx;
 struct SymElimCtx;
@@ -108,3 +110,5 @@ using OpsPtr = std::unique_ptr<Ops>;
 OpsPtr simpleOps();
 
 OpsPtr blasOps();
+
+}  // end namespace BaSpaCho

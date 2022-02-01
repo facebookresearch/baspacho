@@ -14,6 +14,8 @@
 #include "BenchCholmod.h"
 #endif
 
+using namespace BaSpaCho;
+using namespace testing;
 using namespace ba_at_large;
 using namespace std;
 using hrc = chrono::high_resolution_clock;

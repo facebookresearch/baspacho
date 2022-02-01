@@ -4,6 +4,8 @@
 
 #include "baspacho/DebugMacros.h"
 
+namespace BaSpaCho {
+
 void factor(const CoalescedBlockMatrixSkel& skel, std::vector<double>& data) {
     for (size_t l = 0; l < skel.lumpToSpan.size() - 1; l++) {
         factorLump(skel, data, l);
@@ -118,3 +120,5 @@ void eliminateBoard(const CoalescedBlockMatrixSkel& skel,
         }
     }
 }
+
+}  // end namespace BaSpaCho

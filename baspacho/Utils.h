@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+namespace BaSpaCho {
+
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 struct OpStat {
@@ -63,3 +65,5 @@ std::vector<int64_t> inversePermutation(const std::vector<int64_t>& v);
 int64_t cumSumVec(std::vector<int64_t>& v);
 
 void rewindVec(std::vector<int64_t>& v, int64_t downTo = 0, int64_t value = 0);
+
+}  // end namespace BaSpaCho

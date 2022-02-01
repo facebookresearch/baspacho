@@ -13,8 +13,10 @@
 #include "baspacho/Utils.h"
 #include "baspacho/testing/TestingUtils.h"
 
+using namespace BaSpaCho;
+using namespace ::BaSpaCho::testing;
 using namespace std;
-using namespace testing;
+using namespace ::testing;
 
 TEST(EliminationTree, Build) {
     for (int h = 0; h < 200; h++) {

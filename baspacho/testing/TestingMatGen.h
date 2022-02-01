@@ -4,6 +4,8 @@
 #include <set>
 #include <vector>
 
+namespace BaSpaCho::testing {
+
 //
 struct SparseMatGenerator {
     SparseMatGenerator(int64_t size, int64_t seed = 37);
@@ -38,3 +40,5 @@ struct SparseMatGenerator {
     std::mt19937 gen;
     std::vector<std::set<int64_t>> columns;
 };
+
+}  // end namespace BaSpaCho::testing

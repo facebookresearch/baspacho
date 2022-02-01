@@ -35,8 +35,10 @@ EXPECT_THAT(foo, testing::UnorderedElementsAreArray(result, 3));
 EXPECT_THAT(foo, testing::ContainerEq(result));
 #endif
 
+using namespace BaSpaCho;
+using namespace ::BaSpaCho::testing;
 using namespace std;
-using namespace testing;
+using namespace ::testing;
 
 TEST(CoalescedBlockMatrix, BasicAssertions) {
     // sizes:                     1  1  2  1  2  2  3   2   2

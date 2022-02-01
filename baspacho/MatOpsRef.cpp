@@ -6,6 +6,8 @@
 #include "baspacho/MatOpsCpuBase.h"
 #include "baspacho/Utils.h"
 
+namespace BaSpaCho {
+
 using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
@@ -272,3 +274,5 @@ SolveCtxPtr<double> SimpleSymbolicCtx::createDoubleSolveContext() {
 }
 
 OpsPtr simpleOps() { return OpsPtr(new SimpleOps); }
+
+}  // end namespace BaSpaCho

@@ -6,6 +6,8 @@
 #include "baspacho/DebugMacros.h"
 #include "baspacho/Utils.h"
 
+namespace BaSpaCho {
+
 using namespace std;
 
 EliminationTree::EliminationTree(const std::vector<int64_t>& paramSize,
@@ -197,3 +199,5 @@ void EliminationTree::computeAggregateStruct() {
     spanStart.push_back(0);
     cumSumVec(spanStart);
 }
+
+}  // end namespace BaSpaCho

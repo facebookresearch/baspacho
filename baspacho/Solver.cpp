@@ -11,6 +11,8 @@
 #include "baspacho/EliminationTree.h"
 #include "baspacho/Utils.h"
 
+namespace BaSpaCho {
+
 using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
@@ -419,7 +421,7 @@ void Solver::solveLt(const double* matData, double* vecData, int64_t stride,
 pair<int64_t, bool> findLargestIndependentLumpSet(
     const CoalescedBlockMatrixSkel& factorSkel, int64_t startLump,
     int64_t maxSize = 8) {
-    int64_t limit = kInvalid;
+    int64_t limit = numeric_limits<int64_t>::max();
     for (int64_t a = startLump; a < factorSkel.lumpToSpan.size() - 1; a++) {
         if (a >= limit) {
             break;
@@ -431,7 +433,10 @@ pair<int64_t, bool> findLargestIndependentLumpSet(
         int64_t aPtrEnd = factorSkel.boardColPtr[a + 1];
         BASPACHO_CHECK_EQ(factorSkel.boardRowLump[aPtrStart], a);
         BASPACHO_CHECK_LE(2, aPtrEnd - aPtrStart);
-        limit = min(factorSkel.boardRowLump[aPtrStart + 1], limit);
+        int64_t next = factorSkel.boardRowLump[aPtrStart + 1];
+        if (next != kInvalid) {
+            limit = min(next, limit);
+        }
     }
     return make_pair(min(limit, (int64_t)factorSkel.lumpToSpan.size()), false);
 }
@@ -617,3 +622,5 @@ SolverPtr createSolverSchur(const Settings& settings,
                                 blasOps()  // simpleOps()
                                 ));
 }
+
+}  // end namespace BaSpaCho

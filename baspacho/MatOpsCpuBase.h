@@ -5,6 +5,8 @@
 #include "baspacho/MatOps.h"
 #include "baspacho/Utils.h"
 
+namespace BaSpaCho {
+
 struct CpuBaseSymElimCtx : SymElimCtx {
     CpuBaseSymElimCtx() {}
     virtual ~CpuBaseSymElimCtx() override {}
@@ -304,3 +306,5 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
     int64_t syrkCalls = 0;
     OpStat asmblStat;
 };
+
+}  // end namespace BaSpaCho

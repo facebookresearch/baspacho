@@ -14,7 +14,10 @@
 #include "baspacho/Utils.h"
 #include "baspacho/testing/TestingUtils.h"
 
+using namespace BaSpaCho;
+using namespace ::BaSpaCho::testing;
 using namespace std;
+using namespace ::testing;
 
 void testCoalescedFactor(OpsPtr&& ops) {
     vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
@@ -94,9 +97,11 @@ TEST(Factor, CoalescedFactor_Many_Ref) {
     testCoalescedFactor_Many([] { return simpleOps(); });
 }
 
+namespace BaSpaCho {
 pair<int64_t, bool> findLargestIndependentLumpSet(
     const CoalescedBlockMatrixSkel& factorSkel, int64_t startLump,
     int64_t maxSize = 8);
+}
 
 void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {

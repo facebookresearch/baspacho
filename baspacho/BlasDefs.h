@@ -67,6 +67,8 @@ void ssyrk_(const char* uplo, const char* transa, const BLAS_INT* n,
 #define LAPACK_COL_MAJOR 0
 // #define LAPACK_ROW_MAJOR ... (not supported)
 
+namespace BaSpaCho {
+
 inline void cblas_dgemm(const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE TransA,
                         const CBLAS_TRANSPOSE TransB, const BLAS_INT M,
                         const BLAS_INT N, const BLAS_INT K, const double alpha,
@@ -132,3 +134,5 @@ BLAS_INT LAPACKE_spotrf(int matrix_layout, char uplo, BLAS_INT n, float* a,
     spotrf_(&uplo, &n, a, &lda, &info);
     return info;
 }
+
+}  // end namespace BaSpaCho

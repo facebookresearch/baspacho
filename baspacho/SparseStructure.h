@@ -4,6 +4,8 @@
 #include <set>
 #include <vector>
 
+namespace BaSpaCho {
+
 // assumed square matrix
 struct SparseStructure {
     std::vector<int64_t> ptrs;
@@ -43,3 +45,5 @@ struct SparseStructure {
 
     SparseStructure extractRightBottom(int64_t start);
 };
+
+}  // end namespace BaSpaCho

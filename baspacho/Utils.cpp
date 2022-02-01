@@ -5,6 +5,8 @@
 
 #include "baspacho/DebugMacros.h"
 
+namespace BaSpaCho {
+
 using namespace std;
 
 using hrc = chrono::high_resolution_clock;
@@ -62,3 +64,5 @@ void rewindVec(std::vector<int64_t>& v, int64_t downTo, int64_t value) {
     }
     v[downTo] = value;
 }
+
+}  // end namespace BaSpaCho

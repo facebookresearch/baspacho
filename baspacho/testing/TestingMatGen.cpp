@@ -3,6 +3,7 @@
 
 #include "baspacho/DebugMacros.h"
 
+namespace BaSpaCho::testing {
 using namespace std;
 
 SparseMatGenerator::SparseMatGenerator(int64_t size, int64_t seed)
@@ -199,3 +200,5 @@ SparseMatGenerator SparseMatGenerator::genGrid(int64_t width, int64_t height,
 
     return retv;
 }
+
+}  // end namespace BaSpaCho::testing

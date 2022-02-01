@@ -5,6 +5,8 @@
 #include "baspacho/DebugMacros.h"
 #include "baspacho/Utils.h"
 
+namespace BaSpaCho {
+
 using namespace std;
 
 CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
@@ -159,3 +161,5 @@ void CoalescedBlockMatrixSkel::damp(std::vector<double>& data, double alpha,
         block.diagonal().array() += beta;
     }
 }
+
+}  // end namespace BaSpaCho

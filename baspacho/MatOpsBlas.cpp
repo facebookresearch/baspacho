@@ -21,6 +21,8 @@
 
 #endif
 
+namespace BaSpaCho {
+
 using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
@@ -482,3 +484,5 @@ SolveCtxPtr<double> BlasSymbolicCtx::createDoubleSolveContext() {
 }
 
 OpsPtr blasOps() { return OpsPtr(new BlasOps); }
+
+}  // end namespace BaSpaCho

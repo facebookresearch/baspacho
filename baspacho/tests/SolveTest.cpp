@@ -14,7 +14,10 @@
 #include "baspacho/Utils.h"
 #include "baspacho/testing/TestingUtils.h"
 
+using namespace BaSpaCho;
+using namespace ::BaSpaCho::testing;
 using namespace std;
+using namespace ::testing;
 
 void testSolveL(OpsPtr&& ops, int nRHS = 1) {
     vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};

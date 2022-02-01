@@ -5,6 +5,8 @@
 #include "baspacho/MatOps.h"
 #include "baspacho/SparseStructure.h"
 
+namespace BaSpaCho {
+
 struct Solver {
     Solver(CoalescedBlockMatrixSkel&& factorSkel,
            std::vector<int64_t>&& elimLumpRanges,
@@ -67,3 +69,5 @@ SolverPtr createSolverSchur(const Settings& settings,
                             const SparseStructure& ss,
                             const std::vector<int64_t>& elimLumpRanges,
                             bool verbose = false);
+
+}  // end namespace BaSpaCho
