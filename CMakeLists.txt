@@ -53,7 +53,7 @@ message("============================[ CHOLMOD ]================================
 find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
           PATHS ${INCLUDE_INSTALL_DIR}
           PATH_SUFFIXES suitesparse ufsparse)
-find_library(CHOLMOD_LIBRARIES qcholmod
+find_library(CHOLMOD_LIBRARIES cholmod
              PATHS ${LIB_INSTALL_DIR})
 if((CHOLMOD_INCLUDE_DIR STREQUAL "CHOLMOD_INCLUDE_DIR-NOTFOUND")
   OR (CHOLMOD_LIBRARIES STREQUAL "CHOLMOD_LIBRARIES-NOTFOUND"))
