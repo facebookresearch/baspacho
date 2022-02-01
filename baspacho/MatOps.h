@@ -1,4 +1,5 @@
 #include <memory>
+#include <typeindex>
 
 #include "baspacho/CoalescedBlockMatrix.h"
 
@@ -19,14 +20,24 @@ using NumericCtxPtr = std::unique_ptr<NumericCtx<T>>;
 template <typename T>
 using SolveCtxPtr = std::unique_ptr<SolveCtx<T>>;
 
+// generator class for operation contexts
 struct Ops {
     virtual ~Ops() {}
 
-    // (optionally) allows creation of op-specific global data (eg GPU copies)
-    virtual SymbolicCtxPtr initSymbolicInfo(
+    // creates a symbolic context from a matrix structure
+    virtual SymbolicCtxPtr createSymbolicCtx(
         const CoalescedBlockMatrixSkel& skel) = 0;
 };
 
+struct NumericCtxBase {
+    virtual ~NumericCtxBase() {}
+};
+
+struct SolveCtxBase {
+    virtual ~SolveCtxBase() {}
+};
+
+// (symbolic) context for factorization, constant indices (and GPU copies)
 struct SymbolicCtx {
     virtual ~SymbolicCtx() {}
 
@@ -34,22 +45,28 @@ struct SymbolicCtx {
     virtual SymElimCtxPtr prepareElimination(int64_t lumpsBegin,
                                              int64_t lumpsEnd) = 0;
 
-    /*virtual NumericCtxPtr<float> createFloatContext(int64_t tempBufSize,
-                                                    int maxBatchSize = 1) = 0;*/
+    virtual NumericCtxBase* createNumericCtxForType(std::type_index tIdx,
+                                                    int64_t tempBufSize,
+                                                    int maxBatchSize = 1) = 0;
 
-    virtual NumericCtxPtr<double> createDoubleContext(int64_t tempBufSize,
-                                                      int maxBatchSize = 1) = 0;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx) = 0;
 
-    virtual SolveCtxPtr<double> createDoubleSolveContext() = 0;
+    template <typename T>
+    NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize,
+                                      int maxBatchSize = 1);
+
+    template <typename T>
+    SolveCtxPtr<T> createSolveCtx();
 };
 
+// (symbolic) context for sparse elimination of a range of parameters
 struct SymElimCtx {
     virtual ~SymElimCtx() {}
 };
 
 // ops and contexts depending on the float/double type
 template <typename T>
-struct NumericCtx {
+struct NumericCtx : NumericCtxBase {
     virtual ~NumericCtx() {}
 
     virtual void printStats() const = 0;
@@ -80,8 +97,9 @@ struct NumericCtx {
                           int numBatch = -1) = 0;
 };
 
+// methods (and possibly context) for solve operations
 template <typename T>
-struct SolveCtx {
+struct SolveCtx : SolveCtxBase {
     virtual ~SolveCtx() {}
     virtual void solveL(const T* data, int64_t offset, int64_t n, T* C,
                         int64_t offC, int64_t ldc, int64_t nRHS) = 0;
@@ -105,7 +123,25 @@ struct SolveCtx {
                               int64_t chainColPtr, int64_t numColItems) = 0;
 };
 
-using OpsPtr = std::unique_ptr<Ops>;
+template <typename T>
+NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize,
+                                               int maxBatchSize) {
+    static const std::type_index T_tIdx(typeid(T));
+    NumericCtxBase* ctx =
+        createNumericCtxForType(T_tIdx, tempBufSize, maxBatchSize);
+    NumericCtx<T>* typedCtx = dynamic_cast<NumericCtx<T>*>(ctx);
+    BASPACHO_CHECK_NOTNULL(typedCtx);
+    return NumericCtxPtr<T>(typedCtx);
+}
+
+template <typename T>
+SolveCtxPtr<T> SymbolicCtx::createSolveCtx() {
+    static const std::type_index T_tIdx(typeid(T));
+    SolveCtxBase* ctx = createSolveCtxForType(T_tIdx);
+    SolveCtx<T>* typedCtx = dynamic_cast<SolveCtx<T>*>(ctx);
+    BASPACHO_CHECK_NOTNULL(typedCtx);
+    return SolveCtxPtr<T>(typedCtx);
+}
 
 OpsPtr simpleOps();
 

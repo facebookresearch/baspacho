@@ -33,10 +33,11 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
           useThreads(numThreads > 1),
           threadPool(useThreads ? numThreads : 0) {}
 
-    virtual NumericCtxPtr<double> createDoubleContext(
-        int64_t tempBufSize, int maxBatchSize = 1) override;
+    virtual NumericCtxBase* createNumericCtxForType(
+        std::type_index tIdx, int64_t tempBufSize,
+        int maxBatchSize = 1) override;
 
-    virtual SolveCtxPtr<double> createDoubleSolveContext() override;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx) override;
 
     bool useThreads;
     mutable dispenso::ThreadPool threadPool;
@@ -44,7 +45,7 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
 
 // Blas ops aiming at high performance using BLAS/LAPACK
 struct BlasOps : Ops {
-    virtual SymbolicCtxPtr initSymbolicInfo(
+    virtual SymbolicCtxPtr createSymbolicCtx(
         const CoalescedBlockMatrixSkel& skel) override {
         // todo: use settings
         return SymbolicCtxPtr(new BlasSymbolicCtx(skel, 16));
@@ -473,14 +474,28 @@ struct BlasSolveCtx : SolveCtx<T> {
     const BlasSymbolicCtx& sym;
 };
 
-NumericCtxPtr<double> BlasSymbolicCtx::createDoubleContext(int64_t tempBufSize,
-                                                           int maxBatchSize) {
-    return NumericCtxPtr<double>(new BlasNumericCtx<double>(
-        *this, tempBufSize, skel.spanStart.size() - 1, maxBatchSize));
+NumericCtxBase* BlasSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
+                                                         int64_t tempBufSize,
+                                                         int maxBatchSize) {
+    if (tIdx == std::type_index(typeid(double))) {
+        return new BlasNumericCtx<double>(
+            *this, tempBufSize, skel.spanStart.size() - 1, maxBatchSize);
+        /*} else if (tIdx == std::type_index(typeid(float))) {
+            return new SimpleNumericCtx<float>(*this, tempBufSize,
+                                               skel.spanStart.size() - 1);*/
+    } else {
+        return nullptr;
+    }
 }
 
-SolveCtxPtr<double> BlasSymbolicCtx::createDoubleSolveContext() {
-    return SolveCtxPtr<double>(new BlasSolveCtx<double>(*this));
+SolveCtxBase* BlasSymbolicCtx::createSolveCtxForType(std::type_index tIdx) {
+    if (tIdx == std::type_index(typeid(double))) {
+        return new BlasSolveCtx<double>(*this);
+        /*} else if (tIdx == std::type_index(typeid(float))) {
+            return new SimpleSolveCtx<float>(*this);*/
+    } else {
+        return nullptr;
+    }
 }
 
 OpsPtr blasOps() { return OpsPtr(new BlasOps); }

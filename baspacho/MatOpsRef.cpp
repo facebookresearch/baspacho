@@ -30,15 +30,16 @@ struct SimpleSymbolicCtx : CpuBaseSymbolicCtx {
     SimpleSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
         : CpuBaseSymbolicCtx(skel) {}
 
-    virtual NumericCtxPtr<double> createDoubleContext(
-        int64_t tempBufSize, int maxBatchSize = 1) override;
+    virtual NumericCtxBase* createNumericCtxForType(
+        std::type_index tIdx, int64_t tempBufSize,
+        int maxBatchSize = 1) override;
 
-    virtual SolveCtxPtr<double> createDoubleSolveContext() override;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx) override;
 };
 
 // simple ops implemented using Eigen (therefore single thread)
 struct SimpleOps : Ops {
-    virtual SymbolicCtxPtr initSymbolicInfo(
+    virtual SymbolicCtxPtr createSymbolicCtx(
         const CoalescedBlockMatrixSkel& skel) override {
         return SymbolicCtxPtr(new SimpleSymbolicCtx(skel));
     }
@@ -263,14 +264,28 @@ struct SimpleSolveCtx : SolveCtx<T> {
     const SimpleSymbolicCtx& sym;
 };
 
-NumericCtxPtr<double> SimpleSymbolicCtx::createDoubleContext(
-    int64_t tempBufSize, int maxBatchSize) {
-    return NumericCtxPtr<double>(new SimpleNumericCtx<double>(
-        *this, tempBufSize, skel.spanStart.size() - 1));
+NumericCtxBase* SimpleSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
+                                                           int64_t tempBufSize,
+                                                           int maxBatchSize) {
+    if (tIdx == std::type_index(typeid(double))) {
+        return new SimpleNumericCtx<double>(*this, tempBufSize,
+                                            skel.spanStart.size() - 1);
+    } else if (tIdx == std::type_index(typeid(float))) {
+        return new SimpleNumericCtx<float>(*this, tempBufSize,
+                                           skel.spanStart.size() - 1);
+    } else {
+        return nullptr;
+    }
 }
 
-SolveCtxPtr<double> SimpleSymbolicCtx::createDoubleSolveContext() {
-    return SolveCtxPtr<double>(new SimpleSolveCtx<double>(*this));
+SolveCtxBase* SimpleSymbolicCtx::createSolveCtxForType(std::type_index tIdx) {
+    if (tIdx == std::type_index(typeid(double))) {
+        return new SimpleSolveCtx<double>(*this);
+    } else if (tIdx == std::type_index(typeid(float))) {
+        return new SimpleSolveCtx<float>(*this);
+    } else {
+        return nullptr;
+    }
 }
 
 OpsPtr simpleOps() { return OpsPtr(new SimpleOps); }

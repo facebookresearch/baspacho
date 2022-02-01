@@ -24,7 +24,7 @@ Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_,
       elimLumpRanges(std::move(elimLumpRanges_)),
       permutation(std::move(permutation_)),
       ops(std::move(ops_)) {
-    symCtx = ops->initSymbolicInfo(factorSkel);
+    symCtx = ops->createSymbolicCtx(factorSkel);
     for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
         elimCtxs.push_back(symCtx->prepareElimination(elimLumpRanges[l],
                                                       elimLumpRanges[l + 1]));
@@ -270,7 +270,7 @@ void Solver::factor(double* data, bool verbose) const {
 void Solver::factorXp2(double* data, bool verbose) const {
     int maxBatchSize = max(min(4, 1000000 / (int)(maxElimTempSize + 1)), 1);
     NumericCtxPtr<double> numCtx =
-        symCtx->createDoubleContext(maxElimTempSize, maxBatchSize);
+        symCtx->createNumericCtx<double>(maxElimTempSize, maxBatchSize);
 
     for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
         if (verbose) {
@@ -305,8 +305,8 @@ void Solver::factorXp2(double* data, bool verbose) const {
 }
 
 void Solver::factorXp(double* data, bool verbose) const {
-    int maxBatchSize = max(min(4, 1000000 / (int)(maxElimTempSize + 1)), 1);
-    NumericCtxPtr<double> numCtx = symCtx->createDoubleContext(maxElimTempSize);
+    NumericCtxPtr<double> numCtx =
+        symCtx->createNumericCtx<double>(maxElimTempSize);
 
     for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
         if (verbose) {
@@ -344,7 +344,7 @@ void Solver::solveL(const double* matData, double* vecData, int64_t stride,
     int order = factorSkel.spanStart[factorSkel.spanStart.size() - 1];
     vector<double> tmpData(order * nRHS);
 
-    SolveCtxPtr<double> slvCtx = symCtx->createDoubleSolveContext();
+    SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>();
     for (int64_t l = 0; l < factorSkel.chainColPtr.size() - 1; l++) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
@@ -384,7 +384,7 @@ void Solver::solveLt(const double* matData, double* vecData, int64_t stride,
     int order = factorSkel.spanStart[factorSkel.spanStart.size() - 1];
     vector<double> tmpData(order * nRHS);
 
-    SolveCtxPtr<double> slvCtx = symCtx->createDoubleSolveContext();
+    SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>();
     for (int64_t l = factorSkel.chainColPtr.size() - 2; (int64_t)l >= 0; l--) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
