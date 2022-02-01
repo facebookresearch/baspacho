@@ -29,7 +29,7 @@ struct SimpleSymbolicCtx : CpuBaseSymbolicCtx {
         : CpuBaseSymbolicCtx(skel) {}
 
     virtual NumericCtxPtr<double> createDoubleContext(
-        uint64_t tempBufSize, int maxBatchSize = 1) override;
+        int64_t tempBufSize, int maxBatchSize = 1) override;
 
     virtual SolveCtxPtr<double> createDoubleSolveContext() override;
 };
@@ -44,13 +44,12 @@ struct SimpleOps : Ops {
 
 template <typename T>
 struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
-    SimpleNumericCtx(const SimpleSymbolicCtx& sym, uint64_t bufSize,
-                     uint64_t numSpans)
+    SimpleNumericCtx(const SimpleSymbolicCtx& sym, int64_t bufSize,
+                     int64_t numSpans)
         : CpuBaseNumericCtx<T>(bufSize, numSpans), sym(sym) {}
 
     virtual void doElimination(const SymElimCtx& elimData, T* data,
-                               uint64_t lumpsBegin,
-                               uint64_t lumpsEnd) override {
+                               int64_t lumpsBegin, int64_t lumpsEnd) override {
         OpInstance timer(elimStat);
         const CpuBaseSymElimCtx* pElim =
             dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
@@ -62,17 +61,17 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
             factorLump(skel, data, l);
         }
 
-        uint64_t numElimRows = elim.rowPtr.size() - 1;
-        uint64_t numSpans = skel.spanStart.size() - 1;
+        int64_t numElimRows = elim.rowPtr.size() - 1;
+        int64_t numSpans = skel.spanStart.size() - 1;
         std::vector<T> tempBuffer(elim.maxBufferSize);
-        std::vector<uint64_t> spanToChainOffset(numSpans);
-        for (uint64_t sRel = 0UL; sRel < numElimRows; sRel++) {
+        std::vector<int64_t> spanToChainOffset(numSpans);
+        for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
             eliminateRowChain(elim, skel, data, sRel, spanToChainOffset,
                               tempBuffer);
         }
     }
 
-    virtual void potrf(uint64_t n, T* A) override {
+    virtual void potrf(int64_t n, T* A) override {
         OpInstance timer(potrfStat);
 
         Eigen::Map<MatRMaj<T>> matA(A, n, n);
@@ -81,7 +80,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
         potrfBiggestN = std::max(potrfBiggestN, n);
     }
 
-    virtual void trsm(uint64_t n, uint64_t k, const T* A, T* B) override {
+    virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
         OpInstance timer(trsmStat);
 
         using MatCMajD =
@@ -94,8 +93,8 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
             .template solveInPlace<Eigen::OnTheRight>(matB);
     }
 
-    virtual void saveSyrkGemm(uint64_t m, uint64_t n, uint64_t k, const T* data,
-                              uint64_t offset) override {
+    virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
+                              int64_t offset) override {
         OpInstance timer(sygeStat);
         BASPACHO_CHECK_LE(m * n, tempBuffer.size());
 
@@ -107,50 +106,50 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
         matC.noalias() = matB * matA.transpose();
     }
 
-    virtual void saveSyrkGemmBatched(uint64_t* ms, uint64_t* ns, uint64_t* ks,
-                                     const T* data, uint64_t* offsets,
+    virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
+                                     const T* data, int64_t* offsets,
                                      int batchSize) {
         BASPACHO_CHECK(!"Batching not supported");
     }
 
-    virtual void prepareAssemble(uint64_t targetLump) override {
+    virtual void prepareAssemble(int64_t targetLump) override {
         const CoalescedBlockMatrixSkel& skel = sym.skel;
 
-        for (uint64_t i = skel.chainColPtr[targetLump],
-                      iEnd = skel.chainColPtr[targetLump + 1];
+        for (int64_t i = skel.chainColPtr[targetLump],
+                     iEnd = skel.chainColPtr[targetLump + 1];
              i < iEnd; i++) {
             spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
         }
     }
 
-    virtual void assemble(T* data, uint64_t rectRowBegin,
-                          uint64_t dstStride,  //
-                          uint64_t srcColDataOffset, uint64_t srcRectWidth,
-                          uint64_t numBlockRows, uint64_t numBlockCols,
+    virtual void assemble(T* data, int64_t rectRowBegin,
+                          int64_t dstStride,  //
+                          int64_t srcColDataOffset, int64_t srcRectWidth,
+                          int64_t numBlockRows, int64_t numBlockCols,
                           int numBatch = -1) override {
         BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
         OpInstance timer(asmblStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
-        const uint64_t* chainRowsTillEnd =
+        const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + srcColDataOffset;
-        const uint64_t* pToSpan = skel.chainRowSpan.data() + srcColDataOffset;
-        const uint64_t* pSpanToChainOffset = spanToChainOffset.data();
-        const uint64_t* pSpanOffsetInLump = skel.spanOffsetInLump.data();
+        const int64_t* pToSpan = skel.chainRowSpan.data() + srcColDataOffset;
+        const int64_t* pSpanToChainOffset = spanToChainOffset.data();
+        const int64_t* pSpanOffsetInLump = skel.spanOffsetInLump.data();
 
         const T* matRectPtr = tempBuffer.data();
 
-        for (uint64_t r = 0; r < numBlockRows; r++) {
-            uint64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
-            uint64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
-            uint64_t rParam = pToSpan[r];
-            uint64_t rOffset = pSpanToChainOffset[rParam];
+        for (int64_t r = 0; r < numBlockRows; r++) {
+            int64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
+            int64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
+            int64_t rParam = pToSpan[r];
+            int64_t rOffset = pSpanToChainOffset[rParam];
             const T* matRowPtr = matRectPtr + rBegin * srcRectWidth;
 
-            uint64_t cEnd = std::min(numBlockCols, r + 1);
-            for (uint64_t c = 0; c < cEnd; c++) {
-                uint64_t cStart = chainRowsTillEnd[c - 1] - rectRowBegin;
-                uint64_t cSize = chainRowsTillEnd[c] - cStart - rectRowBegin;
-                uint64_t offset = rOffset + pSpanOffsetInLump[pToSpan[c]];
+            int64_t cEnd = std::min(numBlockCols, r + 1);
+            for (int64_t c = 0; c < cEnd; c++) {
+                int64_t cStart = chainRowsTillEnd[c - 1] - rectRowBegin;
+                int64_t cSize = chainRowsTillEnd[c] - cStart - rectRowBegin;
+                int64_t offset = rOffset + pSpanOffsetInLump[pToSpan[c]];
 
                 T* dst = data + offset;
                 const T* src = matRowPtr + cStart;
@@ -183,35 +182,35 @@ struct SimpleSolveCtx : SolveCtx<T> {
     SimpleSolveCtx(const SimpleSymbolicCtx& sym) : sym(sym) {}
     virtual ~SimpleSolveCtx() override {}
 
-    virtual void solveL(const T* data, uint64_t offM, uint64_t n, T* C,
-                        uint64_t offC, uint64_t ldc, uint64_t nRHS) override {
+    virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
+                        int64_t offC, int64_t ldc, int64_t nRHS) override {
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
         OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
         matA.template triangularView<Eigen::Lower>().solveInPlace(matC);
     }
 
-    virtual void gemv(const T* data, uint64_t offM, uint64_t nRows,
-                      uint64_t nCols, const T* A, uint64_t offA, uint64_t lda,
-                      T* C, uint64_t nRHS) override {
+    virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
+                      const T* A, int64_t offA, int64_t lda, T* C,
+                      int64_t nRHS) override {
         Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatK<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
         Eigen::Map<MatRMaj<T>> matC(C, nRows, nRHS);
         matC.noalias() = matM * matA;
     }
 
-    virtual void assembleVec(const T* A, uint64_t chainColPtr,
-                             uint64_t numColItems, T* C, uint64_t ldc,
-                             uint64_t nRHS) override {
+    virtual void assembleVec(const T* A, int64_t chainColPtr,
+                             int64_t numColItems, T* C, int64_t ldc,
+                             int64_t nRHS) override {
         const CoalescedBlockMatrixSkel& skel = sym.skel;
-        const uint64_t* chainRowsTillEnd =
+        const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
-        const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
-        uint64_t startRow = chainRowsTillEnd[-1];
-        for (uint64_t i = 0; i < numColItems; i++) {
-            uint64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
-            uint64_t span = toSpan[i];
-            uint64_t spanStart = skel.spanStart[span];
-            uint64_t spanSize = skel.spanStart[span + 1] - spanStart;
+        const int64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
+        int64_t startRow = chainRowsTillEnd[-1];
+        for (int64_t i = 0; i < numColItems; i++) {
+            int64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
+            int64_t span = toSpan[i];
+            int64_t spanStart = skel.spanStart[span];
+            int64_t spanSize = skel.spanStart[span + 1] - spanStart;
 
             Eigen::Map<const MatRMaj<T>> matA(A + rowOffset * nRHS, spanSize,
                                               nRHS);
@@ -221,36 +220,36 @@ struct SimpleSolveCtx : SolveCtx<T> {
         }
     }
 
-    virtual void solveLt(const T* data, uint64_t offM, uint64_t n, T* C,
-                         uint64_t offC, uint64_t ldc, uint64_t nRHS) override {
+    virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
+                         int64_t offC, int64_t ldc, int64_t nRHS) override {
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
         OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
         matA.template triangularView<Eigen::Lower>().adjoint().solveInPlace(
             matC);
     }
 
-    virtual void gemvT(const T* data, uint64_t offM, uint64_t nRows,
-                       uint64_t nCols, const T* C, uint64_t nRHS, T* A,
-                       uint64_t offA, uint64_t lda) override {
+    virtual void gemvT(const T* data, int64_t offM, int64_t nRows,
+                       int64_t nCols, const T* C, int64_t nRHS, T* A,
+                       int64_t offA, int64_t lda) override {
         Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatM<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
         Eigen::Map<const MatRMaj<T>> matC(C, nRows, nRHS);
         matA.noalias() -= matM.transpose() * matC;
     }
 
-    virtual void assembleVecT(const T* C, uint64_t ldc, uint64_t nRHS, T* A,
-                              uint64_t chainColPtr,
-                              uint64_t numColItems) override {
+    virtual void assembleVecT(const T* C, int64_t ldc, int64_t nRHS, T* A,
+                              int64_t chainColPtr,
+                              int64_t numColItems) override {
         const CoalescedBlockMatrixSkel& skel = sym.skel;
-        const uint64_t* chainRowsTillEnd =
+        const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
-        const uint64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
-        uint64_t startRow = chainRowsTillEnd[-1];
-        for (uint64_t i = 0; i < numColItems; i++) {
-            uint64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
-            uint64_t span = toSpan[i];
-            uint64_t spanStart = skel.spanStart[span];
-            uint64_t spanSize = skel.spanStart[span + 1] - spanStart;
+        const int64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
+        int64_t startRow = chainRowsTillEnd[-1];
+        for (int64_t i = 0; i < numColItems; i++) {
+            int64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
+            int64_t span = toSpan[i];
+            int64_t spanStart = skel.spanStart[span];
+            int64_t spanSize = skel.spanStart[span + 1] - spanStart;
 
             Eigen::Map<MatRMaj<T>> matA(A + rowOffset * nRHS, spanSize, nRHS);
             OuterStridedCMajMatK<T> matC(C + spanStart, spanSize, nRHS,
@@ -263,7 +262,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
 };
 
 NumericCtxPtr<double> SimpleSymbolicCtx::createDoubleContext(
-    uint64_t tempBufSize, int maxBatchSize) {
+    int64_t tempBufSize, int maxBatchSize) {
     return NumericCtxPtr<double>(new SimpleNumericCtx<double>(
         *this, tempBufSize, skel.spanStart.size() - 1));
 }

@@ -21,14 +21,14 @@ TEST(EliminationTree, Build) {
         auto colsOrig = randomCols(70, 0.1, h + 37);
         auto ssOrig = columnsToCscStruct(colsOrig).transpose();
 
-        vector<uint64_t> permutation = ssOrig.fillReducingPermutation();
-        vector<uint64_t> invPerm = inversePermutation(permutation);
+        vector<int64_t> permutation = ssOrig.fillReducingPermutation();
+        vector<int64_t> invPerm = inversePermutation(permutation);
 
         SparseStructure ss = ssOrig.symmetricPermutation(invPerm, false);
 
         std::cout << "perm:\n" << printPattern(ss, false) << std::endl;
 
-        vector<uint64_t> paramSize(ssOrig.ptrs.size() - 1, 1);
+        vector<int64_t> paramSize(ssOrig.ptrs.size() - 1, 1);
         EliminationTree et(paramSize, ss);
 
         et.buildTree();
@@ -39,22 +39,22 @@ TEST(EliminationTree, Build) {
 
         CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
                                       et.rowParam);
-        uint64_t totData = skel.chainData[skel.chainData.size() - 1];
+        int64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData, 1);
         Eigen::MatrixXd mat = skel.densify(data);
         std::cout << "densified:\n" << mat << std::endl;
 
         // original must be contained via idMap
-        vector<uint64_t> idMap = composePermutations(et.permInverse, invPerm);
-        for (uint64_t i = 0; i < ssOrig.ptrs.size() - 1; i++) {
-            uint64_t start = ssOrig.ptrs[i];
-            uint64_t end = ssOrig.ptrs[i + 1];
-            uint64_t newI = idMap[i];
-            for (uint64_t q = start; q < end; q++) {
-                uint64_t j = ssOrig.inds[q];
-                uint64_t newJ = idMap[j];
-                uint64_t r = std::max(newI, newJ);
-                uint64_t c = std::min(newI, newJ);
+        vector<int64_t> idMap = composePermutations(et.permInverse, invPerm);
+        for (int64_t i = 0; i < ssOrig.ptrs.size() - 1; i++) {
+            int64_t start = ssOrig.ptrs[i];
+            int64_t end = ssOrig.ptrs[i + 1];
+            int64_t newI = idMap[i];
+            for (int64_t q = start; q < end; q++) {
+                int64_t j = ssOrig.inds[q];
+                int64_t newJ = idMap[j];
+                int64_t r = std::max(newI, newJ);
+                int64_t c = std::min(newI, newJ);
                 ASSERT_GT(mat(r, c), 0.5);
             }
         }
@@ -64,11 +64,11 @@ TEST(EliminationTree, Build) {
             ss.symmetricPermutation(et.permInverse, false, true)
                 .addFullEliminationFill();
         std::cout << "check:\n" << printPattern(checkSs, false) << std::endl;
-        for (uint64_t i = 0; i < checkSs.ptrs.size() - 1; i++) {
-            uint64_t start = checkSs.ptrs[i];
-            uint64_t end = checkSs.ptrs[i + 1];
-            for (uint64_t q = start; q < end; q++) {
-                uint64_t j = checkSs.inds[q];
+        for (int64_t i = 0; i < checkSs.ptrs.size() - 1; i++) {
+            int64_t start = checkSs.ptrs[i];
+            int64_t end = checkSs.ptrs[i + 1];
+            for (int64_t q = start; q < end; q++) {
+                int64_t j = checkSs.inds[q];
                 ASSERT_GT(mat(i, j), 0.5);
             }
         }

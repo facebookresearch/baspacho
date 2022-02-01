@@ -58,7 +58,7 @@ TEST(SparseStructure, SymPermutation) {
 }
 
 TEST(SparseStructure, IndependentEliminationFill) {
-    vector<uint64_t> sizes{10, 20, 30, 40};
+    vector<int64_t> sizes{10, 20, 30, 40};
     vector<double> fills{0.15, 0.23, 0.3};
     int seed = 37;
     for (auto size : sizes) {
@@ -68,7 +68,7 @@ TEST(SparseStructure, IndependentEliminationFill) {
 
             for (int start = 0; start < size * 2 / 3; start += 3) {
                 for (int end = start + 3; end < size; end += 3) {
-                    vector<set<uint64_t>> cols =
+                    vector<set<int64_t>> cols =
                         makeIndependentElimSet(colsOrig, start, end);
 
                     auto ss = columnsToCscStruct(cols).transpose();
@@ -89,7 +89,7 @@ TEST(SparseStructure, IndependentEliminationFill) {
 }
 
 TEST(SparseStructure, FullEliminationFill) {
-    vector<uint64_t> sizes{10, 20, 30, 40};
+    vector<int64_t> sizes{10, 20, 30, 40};
     vector<double> fills{0.15, 0.23, 0.3};
     int seed = 37;
     for (auto size : sizes) {
@@ -111,10 +111,10 @@ TEST(SparseStructure, FullEliminationFill) {
 }
 
 TEST(SparseStructure, FillReducingPermutation) {
-    vector<uint64_t> ptrs{0,   9,   15,  21,  27,  33,  39,  48,  57,
-                          61,  70,  76,  82,  88,  94,  100, 106, 110,
-                          119, 128, 137, 143, 152, 156, 160};
-    vector<uint64_t> inds{
+    vector<int64_t> ptrs{0,   9,   15,  21,  27,  33,  39,  48,  57,
+                         61,  70,  76,  82,  88,  94,  100, 106, 110,
+                         119, 128, 137, 143, 152, 156, 160};
+    vector<int64_t> inds{
         /* column  0: */ 0, 5,  6,  12, 13, 17, 18, 19, 21,
         /* column  1: */ 1, 8,  9,  13, 14, 17,
         /* column  2: */ 2, 6,  11, 20, 21, 22,
@@ -143,8 +143,8 @@ TEST(SparseStructure, FillReducingPermutation) {
     SparseStructure ssOrig =
         SparseStructure(ptrs, inds).clear();  // lower half csr
 
-    vector<uint64_t> permutation = ssOrig.fillReducingPermutation();
-    vector<uint64_t> invPerm = inversePermutation(permutation);
+    vector<int64_t> permutation = ssOrig.fillReducingPermutation();
+    vector<int64_t> invPerm = inversePermutation(permutation);
 
     SparseStructure ss =
         ssOrig.symmetricPermutation(invPerm, false).addFullEliminationFill();

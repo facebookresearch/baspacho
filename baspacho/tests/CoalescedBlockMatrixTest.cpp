@@ -40,12 +40,12 @@ using namespace testing;
 
 TEST(CoalescedBlockMatrix, BasicAssertions) {
     // sizes:                     1  1  2  1  2  2  3   2   2
-    vector<uint64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
+    vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
     // sizes:                          1  3  1  4  3  4
-    vector<uint64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
-    vector<set<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                       {3, 4, 5, 8},    {4, 5, 7},
-                                       {6, 8},          {7, 8}};
+    vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
+    vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                      {3, 4, 5, 8},    {4, 5, 7},
+                                      {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
                                   sStruct.inds);
@@ -109,16 +109,16 @@ TEST(CoalescedBlockMatrix, BasicAssertions) {
 }
 
 TEST(CoalescedBlockMatrix, Densify) {
-    vector<uint64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
-    vector<uint64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
-    vector<set<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                       {3, 4, 5, 8},    {4, 5, 7},
-                                       {6, 8},          {7, 8}};
+    vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
+    vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
+    vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                      {3, 4, 5, 8},    {4, 5, 7},
+                                      {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
                                   sStruct.inds);
 
-    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
+    int64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
     Eigen::MatrixXd mat = skel.densify(data);
@@ -147,16 +147,16 @@ TEST(CoalescedBlockMatrix, Densify) {
 }
 
 TEST(CoalescedBlockMatrix, Damp) {
-    vector<uint64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
-    vector<uint64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
-    vector<set<uint64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                       {3, 4, 5, 8},    {4, 5, 7},
-                                       {6, 8},          {7, 8}};
+    vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
+    vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
+    vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                      {3, 4, 5, 8},    {4, 5, 7},
+                                      {6, 8},          {7, 8}};
     SparseStructure sStruct = columnsToCscStruct(columnParams);
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
                                   sStruct.inds);
 
-    uint64_t totData = skel.chainData[skel.chainData.size() - 1];
+    int64_t totData = skel.chainData[skel.chainData.size() - 1];
     vector<double> data(totData);
     iota(data.begin(), data.end(), 13);
 

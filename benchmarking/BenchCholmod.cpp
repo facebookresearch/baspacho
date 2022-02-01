@@ -15,14 +15,13 @@ using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
 std::pair<double, double> benchmarkCholmodSolve(
-    const vector<uint64_t>& paramSize, const SparseStructure& ss,
-    bool verbose) {
+    const vector<int64_t>& paramSize, const SparseStructure& ss, bool verbose) {
     BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
     vector<int64_t> rowPtr, colInd;
     vector<double> val;
-    vector<uint64_t> spanStart = paramSize;
+    vector<int64_t> spanStart = paramSize;
     spanStart.push_back(0);
-    uint64_t totSize = cumSumVec(spanStart);
+    int64_t totSize = cumSumVec(spanStart);
     rowPtr.push_back(0);
 
     mt19937 gen(37);
@@ -32,13 +31,12 @@ std::pair<double, double> benchmarkCholmodSolve(
     if (verbose) {
         std::cout << "to csr... (order=" << totSize << ")" << std::endl;
     }
-    for (uint64_t rb = 0; rb < paramSize.size(); rb++) {
-        for (uint64_t ri = spanStart[rb]; ri < spanStart[rb + 1]; ri++) {
+    for (int64_t rb = 0; rb < paramSize.size(); rb++) {
+        for (int64_t ri = spanStart[rb]; ri < spanStart[rb + 1]; ri++) {
             // ri = row index
-            for (uint64_t q = ss.ptrs[rb]; q < ss.ptrs[rb + 1]; q++) {
-                uint64_t cb = ss.inds[q];
-                for (uint64_t ci = spanStart[cb]; ci < spanStart[cb + 1];
-                     ci++) {
+            for (int64_t q = ss.ptrs[rb]; q < ss.ptrs[rb + 1]; q++) {
+                int64_t cb = ss.inds[q];
+                for (int64_t ci = spanStart[cb]; ci < spanStart[cb + 1]; ci++) {
                     // ci = col index
                     if (ci > ri) {
                         continue;

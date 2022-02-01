@@ -17,11 +17,11 @@
 using namespace std;
 
 void testCoalescedFactor(OpsPtr&& ops) {
-    vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
+    vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
+    vector<int64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<int64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel factorSkel(spanStart, lumpToSpan, groupedSs.ptrs,
@@ -53,11 +53,11 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
         auto colBlocks = randomCols(115, 0.037, 57 + i);
         SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
 
-        vector<uint64_t> permutation = ss.fillReducingPermutation();
-        vector<uint64_t> invPerm = inversePermutation(permutation);
+        vector<int64_t> permutation = ss.fillReducingPermutation();
+        vector<int64_t> invPerm = inversePermutation(permutation);
         SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
 
-        vector<uint64_t> paramSize =
+        vector<int64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
@@ -94,9 +94,9 @@ TEST(Factor, CoalescedFactor_Many_Ref) {
     testCoalescedFactor_Many([] { return simpleOps(); });
 }
 
-pair<uint64_t, bool> findLargestIndependentLumpSet(
-    const CoalescedBlockMatrixSkel& factorSkel, uint64_t startLump,
-    uint64_t maxSize = 8);
+pair<int64_t, bool> findLargestIndependentLumpSet(
+    const CoalescedBlockMatrixSkel& factorSkel, int64_t startLump,
+    int64_t maxSize = 8);
 
 void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
@@ -104,11 +104,11 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
         SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
 
-        vector<uint64_t> permutation = ss.fillReducingPermutation();
-        vector<uint64_t> invPerm = inversePermutation(permutation);
+        vector<int64_t> permutation = ss.fillReducingPermutation();
+        vector<int64_t> invPerm = inversePermutation(permutation);
         SparseStructure sortedSs = ss;
 
-        vector<uint64_t> paramSize =
+        vector<int64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
@@ -125,7 +125,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-        uint64_t largestIndep =
+        int64_t largestIndep =
             findLargestIndependentLumpSet(factorSkel, 0).first;
         Solver solver(std::move(factorSkel), {0, largestIndep}, {}, genOps());
         NumericCtxPtr<double> numCtx = solver.symCtx->createDoubleContext(0);
@@ -156,11 +156,11 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
         SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
 
-        vector<uint64_t> permutation = ss.fillReducingPermutation();
-        vector<uint64_t> invPerm = inversePermutation(permutation);
+        vector<int64_t> permutation = ss.fillReducingPermutation();
+        vector<int64_t> invPerm = inversePermutation(permutation);
         SparseStructure sortedSs = ss;
 
-        vector<uint64_t> paramSize =
+        vector<int64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
@@ -177,7 +177,7 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-        uint64_t largestIndep =
+        int64_t largestIndep =
             findLargestIndependentLumpSet(factorSkel, 0).first;
         Solver solver(std::move(factorSkel), {0, largestIndep}, {}, genOps());
         solver.factor(data.data());

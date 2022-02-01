@@ -8,22 +8,22 @@
 
 #include "../baspacho/SparseStructure.h"
 
-std::vector<uint64_t> randomPermutation(size_t size, uint64_t seed);
+std::vector<int64_t> randomPermutation(size_t size, int64_t seed);
 
-std::vector<uint64_t> randomVec(size_t size, uint64_t low, uint64_t high,
-                                uint64_t seed);
+std::vector<int64_t> randomVec(size_t size, int64_t low, int64_t high,
+                               int64_t seed);
 
-std::vector<uint64_t> randomVec(size_t size, uint64_t low, uint64_t high,
-                                std::mt19937& gen);
+std::vector<int64_t> randomVec(size_t size, int64_t low, int64_t high,
+                               std::mt19937& gen);
 
 std::vector<double> randomData(size_t size, double low, double high,
-                               uint64_t seed);
+                               int64_t seed);
 
 std::vector<double> randomData(size_t size, double low, double high,
                                std::mt19937& gen);
 
-std::vector<uint64_t> randomPartition(size_t weight, uint64_t low,
-                                      uint64_t high, uint64_t seed);
+std::vector<int64_t> randomPartition(int64_t weight, int64_t low, int64_t high,
+                                     int64_t seed);
 
 template <typename T>
 std::string printVec(const std::vector<T>& ints) {
@@ -38,27 +38,27 @@ std::string printVec(const std::vector<T>& ints) {
     return ss.str();
 }
 
-std::string printCols(const std::vector<std::set<uint64_t>>& columns);
+std::string printCols(const std::vector<std::set<int64_t>>& columns);
 
 std::string printPattern(const SparseStructure& mat, bool sym);
 
-std::string printAggreg(std::vector<uint64_t> ptrs, std::vector<uint64_t> inds,
-                        std::vector<uint64_t> lumpStart);
+std::string printAggreg(std::vector<int64_t> ptrs, std::vector<int64_t> inds,
+                        std::vector<int64_t> lumpStart);
 
-std::vector<std::set<uint64_t>> randomCols(uint64_t size, double fill,
-                                           uint64_t seed);
+std::vector<std::set<int64_t>> randomCols(int64_t size, double fill,
+                                          int64_t seed);
 
-std::vector<std::set<uint64_t>> joinColums(
-    const std::vector<std::set<uint64_t>>& columns,
-    std::vector<uint64_t> lumpStart);
+std::vector<std::set<int64_t>> joinColums(
+    const std::vector<std::set<int64_t>>& columns,
+    std::vector<int64_t> lumpStart);
 
-std::vector<std::set<uint64_t>> csrStructToColumns(const SparseStructure& mat);
+std::vector<std::set<int64_t>> csrStructToColumns(const SparseStructure& mat);
 
 SparseStructure columnsToCscStruct(
-    const std::vector<std::set<uint64_t>>& columns);
+    const std::vector<std::set<int64_t>>& columns);
 
-void naiveAddEliminationEntries(std::vector<std::set<uint64_t>>& columns,
-                                uint64_t start, uint64_t end);
+void naiveAddEliminationEntries(std::vector<std::set<int64_t>>& columns,
+                                int64_t start, int64_t end);
 
-std::vector<std::set<uint64_t>> makeIndependentElimSet(
-    std::vector<std::set<uint64_t>>& columns, uint64_t start, uint64_t end);
+std::vector<std::set<int64_t>> makeIndependentElimSet(
+    std::vector<std::set<int64_t>>& columns, int64_t start, int64_t end);

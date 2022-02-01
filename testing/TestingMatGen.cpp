@@ -46,7 +46,7 @@ void SparseMatGenerator::addSparseConnections(double fill) {
 }
 
 void SparseMatGenerator::addSchurSet(int64_t size, double fill) {
-    vector<set<uint64_t>> newCols(size + columns.size());
+    vector<set<int64_t>> newCols(size + columns.size());
     uniform_real_distribution<> dis(0.0, 1.0);
     for (int64_t i = 0; i < size; i++) {
         newCols[i].insert(i);
@@ -57,8 +57,8 @@ void SparseMatGenerator::addSchurSet(int64_t size, double fill) {
         }
     }
     // shift
-    for (uint64_t i = 0; i < columns.size(); i++) {
-        for (uint64_t j : columns[i]) {
+    for (int64_t i = 0; i < columns.size(); i++) {
+        for (int64_t j : columns[i]) {
             newCols[i + size].insert(j + size);
         }
     }
@@ -106,7 +106,7 @@ SparseMatGenerator SparseMatGenerator::genMeridians(
     // connect meridians meeting at pole (begin = north, end = south)
     for (int64_t i = 0; i < num; i++) {
         int64_t iBegin = lineLen * i;
-        for (uint64_t j = 0; j < i; j++) {
+        for (int64_t j = 0; j < i; j++) {
             int64_t jBegin = lineLen * j;
             // conenct north pole ends
             retv.connectRanges(iBegin, iBegin + bandSize,  //

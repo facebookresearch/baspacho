@@ -32,18 +32,18 @@ void computeCost(Data& data) {
 }
 
 void experiment2(Data& data) {
-    uint64_t numPts = data.points.size();
-    uint64_t numCams = data.cameras.size();
-    uint64_t totNumParams = numPts + numCams;
+    int64_t numPts = data.points.size();
+    int64_t numCams = data.cameras.size();
+    int64_t totNumParams = numPts + numCams;
 
     std::cout << "Build struct..." << std::endl;
-    vector<uint64_t> paramSize(totNumParams);
-    vector<set<uint64_t>> colBlocks(totNumParams);
-    for (uint64_t i = 0; i < numPts; i++) {  // points go first
+    vector<int64_t> paramSize(totNumParams);
+    vector<set<int64_t>> colBlocks(totNumParams);
+    for (int64_t i = 0; i < numPts; i++) {  // points go first
         paramSize[i] = 3;
         colBlocks[i].insert(i);
     }
-    for (uint64_t i = numPts; i < totNumParams; i++) {  // then cams
+    for (int64_t i = numPts; i < totNumParams; i++) {  // then cams
         paramSize[i] = 6;
         colBlocks[i].insert(i);
     }
@@ -56,7 +56,7 @@ void experiment2(Data& data) {
 
     bool verbose = 1;
     auto solver = createSolverSchur({}, paramSize, origSs,
-                                    vector<uint64_t>{0, numPts}, verbose);
+                                    vector<int64_t>{0, numPts}, verbose);
 
     // generate mock data, make positive def
     vector<double> matData =
@@ -76,18 +76,18 @@ void experiment2(Data& data) {
 }
 
 void experiment(Data& data) {
-    uint64_t numPts = data.points.size();
-    uint64_t numCams = data.cameras.size();
-    uint64_t totNumParams = numPts + numCams;
+    int64_t numPts = data.points.size();
+    int64_t numCams = data.cameras.size();
+    int64_t totNumParams = numPts + numCams;
 
     std::cout << "Build struct..." << std::endl;
-    vector<uint64_t> paramSize(totNumParams);
-    vector<set<uint64_t>> colBlocks(totNumParams);
-    for (uint64_t i = 0; i < numPts; i++) {  // points go first
+    vector<int64_t> paramSize(totNumParams);
+    vector<set<int64_t>> colBlocks(totNumParams);
+    for (int64_t i = 0; i < numPts; i++) {  // points go first
         paramSize[i] = 3;
         colBlocks[i].insert(i);
     }
-    for (uint64_t i = numPts; i < totNumParams; i++) {  // then cams
+    for (int64_t i = numPts; i < totNumParams; i++) {  // then cams
         paramSize[i] = 6;
         colBlocks[i].insert(i);
     }
@@ -103,8 +103,8 @@ void experiment(Data& data) {
     std::cout << "done!" << std::endl;
 
     SparseStructure elimPtSsT = elimPtSs.transpose();
-    uint64_t totPossible = numCams * (numCams + 1) / 2;
-    uint64_t camCamBlocks =
+    int64_t totPossible = numCams * (numCams + 1) / 2;
+    int64_t camCamBlocks =
         elimPtSsT.ptrs[totNumParams] - elimPtSsT.ptrs[numPts];
     std::cout << "cam-cam blocks (from pts): " << camCamBlocks << " ("
               << (100.0 * camCamBlocks / totPossible) << "%)" << std::endl;
@@ -113,8 +113,8 @@ void experiment(Data& data) {
 
 #if 1
     std::cout << "Applying permutation..." << std::endl;
-    vector<uint64_t> permutation = camCamSs.fillReducingPermutation();
-    vector<uint64_t> invPerm = inversePermutation(permutation);
+    vector<int64_t> permutation = camCamSs.fillReducingPermutation();
+    vector<int64_t> invPerm = inversePermutation(permutation);
     SparseStructure sortedCamCamSs =
         camCamSs.symmetricPermutation(invPerm, false).addFullEliminationFill();
 #else
@@ -126,13 +126,13 @@ void experiment(Data& data) {
     std::cout << "done!" << std::endl;
 
     SparseStructure filledSsT = filledSs.transpose();
-    uint64_t camCamBlocks2 = filledSsT.ptrs[numCams];
+    int64_t camCamBlocks2 = filledSsT.ptrs[numCams];
     std::cout << "cam-cam blocks (with fill): " << camCamBlocks2 << " ("
               << (100.0 * camCamBlocks2 / totPossible) << "%)" << std::endl;
 
     std::cout << "Computing elim tree" << std::endl;
 
-    vector<uint64_t> paramSz(sortedCamCamSs.ptrs.size() - 1, 6);
+    vector<int64_t> paramSz(sortedCamCamSs.ptrs.size() - 1, 6);
     EliminationTree et(paramSz, sortedCamCamSs);
 
     std::cout << "Build tree" << std::endl;
@@ -147,7 +147,7 @@ void experiment(Data& data) {
     std::cout << "Block mat" << std::endl;
     CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
                                         et.colStart, et.rowParam);
-    uint64_t totData = factorSkel.dataSize();
+    int64_t totData = factorSkel.dataSize();
     std::cout << "cam-cam blocky (with fill): " << totData << " ("
               << (100.0 * totData / (numCams * numCams)) << "%)" << std::endl;
 

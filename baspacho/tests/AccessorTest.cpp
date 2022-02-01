@@ -23,11 +23,11 @@ using OuterStridedCMajMatM = Eigen::Map<
     OuterStride>;
 
 TEST(Accessor, CoalescedAccessor) {
-    vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
+    vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
+    vector<int64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<int64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
@@ -39,12 +39,12 @@ TEST(Accessor, CoalescedAccessor) {
 
     int seed = 0;
     auto acc = skel.accessor();
-    for (uint64_t c = 0; c < colBlocks.size(); c++) {
-        uint64_t cSize = acc.paramSize(c);
-        uint64_t cStart = acc.paramStart(c);
-        for (uint64_t r : colBlocks[c]) {
-            uint64_t rSize = acc.paramSize(r);
-            uint64_t rStart = acc.paramStart(r);
+    for (int64_t c = 0; c < colBlocks.size(); c++) {
+        int64_t cSize = acc.paramSize(c);
+        int64_t cStart = acc.paramStart(c);
+        for (int64_t r : colBlocks[c]) {
+            int64_t rSize = acc.paramSize(r);
+            int64_t rStart = acc.paramStart(r);
 
             std::vector<double> randomBlockData =
                 randomData(rSize * cSize, -1.0, 1.0, seed++);
@@ -82,21 +82,21 @@ TEST(Accessor, CoalescedAccessor) {
 }
 
 TEST(Accessor, PermutedCoalescedAccessor) {
-    vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
+    vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
+    vector<int64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<int64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
                                   groupedSs.inds);
 
-    vector<uint64_t> permutation(colBlocks.size());
+    vector<int64_t> permutation(colBlocks.size());
     iota(permutation.begin(), permutation.end(), 0);
     mt19937 g(37);
     shuffle(permutation.begin(), permutation.end(), g);
-    vector<uint64_t> invP = inversePermutation(permutation);
+    vector<int64_t> invP = inversePermutation(permutation);
 
     vector<double> data(skel.dataSize(), 0);
     Eigen::MatrixXd denseMat(skel.order(), skel.order());
@@ -104,14 +104,14 @@ TEST(Accessor, PermutedCoalescedAccessor) {
 
     int seed = 0;
     PermutedCoalescedAccessor acc(skel.accessor(), permutation.data());
-    for (uint64_t pc = 0; pc < colBlocks.size(); pc++) {
-        uint64_t c = invP[pc];
-        uint64_t cSize = acc.paramSize(c);
-        uint64_t cStart = acc.paramStart(c);
-        for (uint64_t pr : colBlocks[pc]) {
-            uint64_t r = invP[pr];
-            uint64_t rSize = acc.paramSize(r);
-            uint64_t rStart = acc.paramStart(r);
+    for (int64_t pc = 0; pc < colBlocks.size(); pc++) {
+        int64_t c = invP[pc];
+        int64_t cSize = acc.paramSize(c);
+        int64_t cStart = acc.paramStart(c);
+        for (int64_t pr : colBlocks[pc]) {
+            int64_t r = invP[pr];
+            int64_t rSize = acc.paramSize(r);
+            int64_t rStart = acc.paramStart(r);
             auto [off, stride, flip] = acc.blockOffset(r, c);
             ASSERT_EQ(flip, pr < pc);
 
@@ -163,11 +163,11 @@ TEST(Accessor, PermutedCoalescedAccessor) {
 }
 
 TEST(Accessor, BlockCoalescedAccessor) {
-    vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
+    vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
+    vector<int64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<int64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
@@ -180,12 +180,12 @@ TEST(Accessor, BlockCoalescedAccessor) {
     auto acc = skel.accessor();
 
     int seed = 0;
-    for (uint64_t c = 0; c < colBlocks.size(); c++) {
-        uint64_t cSize = acc.paramSize(c);
-        uint64_t cStart = acc.paramStart(c);
-        for (uint64_t r : colBlocks[c]) {
-            uint64_t rSize = acc.paramSize(r);
-            uint64_t rStart = acc.paramStart(r);
+    for (int64_t c = 0; c < colBlocks.size(); c++) {
+        int64_t cSize = acc.paramSize(c);
+        int64_t cStart = acc.paramStart(c);
+        for (int64_t r : colBlocks[c]) {
+            int64_t rSize = acc.paramSize(r);
+            int64_t rStart = acc.paramStart(r);
 
             std::vector<double> randomBlockData =
                 randomData(rSize * cSize, -1.0, 1.0, seed++);
@@ -223,21 +223,21 @@ TEST(Accessor, BlockCoalescedAccessor) {
 }
 
 TEST(Accessor, BlockPermutedCoalescedAccessor) {
-    vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
+    vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
+    vector<int64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<int64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
                                   groupedSs.inds);
 
-    vector<uint64_t> permutation(colBlocks.size());
+    vector<int64_t> permutation(colBlocks.size());
     iota(permutation.begin(), permutation.end(), 0);
     mt19937 g(37);
     shuffle(permutation.begin(), permutation.end(), g);
-    vector<uint64_t> invP = inversePermutation(permutation);
+    vector<int64_t> invP = inversePermutation(permutation);
 
     vector<double> data(skel.dataSize(), 0);
     Eigen::MatrixXd denseMat(skel.order(), skel.order());
@@ -245,14 +245,14 @@ TEST(Accessor, BlockPermutedCoalescedAccessor) {
 
     int seed = 0;
     PermutedCoalescedAccessor acc(skel.accessor(), permutation.data());
-    for (uint64_t pc = 0; pc < colBlocks.size(); pc++) {
-        uint64_t c = invP[pc];
-        uint64_t cSize = acc.paramSize(c);
-        uint64_t cStart = acc.paramStart(c);
-        for (uint64_t pr : colBlocks[pc]) {
-            uint64_t r = invP[pr];
-            uint64_t rSize = acc.paramSize(r);
-            uint64_t rStart = acc.paramStart(r);
+    for (int64_t pc = 0; pc < colBlocks.size(); pc++) {
+        int64_t c = invP[pc];
+        int64_t cSize = acc.paramSize(c);
+        int64_t cStart = acc.paramStart(c);
+        for (int64_t pr : colBlocks[pc]) {
+            int64_t r = invP[pr];
+            int64_t rSize = acc.paramSize(r);
+            int64_t rStart = acc.paramStart(r);
             std::vector<double> randomBlockData =
                 randomData(rSize * cSize, -1.0, 1.0, seed++);
             Eigen::Map<Eigen::MatrixXd> randomBlock(randomBlockData.data(),

@@ -36,5 +36,5 @@ struct SparseMatGenerator {
                                       int64_t seed = 37);
 
     std::mt19937 gen;
-    std::vector<std::set<uint64_t>> columns;
+    std::vector<std::set<int64_t>> columns;
 };

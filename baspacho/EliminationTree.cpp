@@ -1,22 +1,21 @@
 
 #include "EliminationTree.h"
 
-#include "DebugMacros.h"
-
 #include <algorithm>
 
+#include "DebugMacros.h"
 #include "Utils.h"
 
 using namespace std;
 
-EliminationTree::EliminationTree(const std::vector<uint64_t>& paramSize,
+EliminationTree::EliminationTree(const std::vector<int64_t>& paramSize,
                                  const SparseStructure& ss)
     : paramSize(paramSize), ss(ss) {
     BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
 }
 
 void EliminationTree::buildTree() {
-    uint64_t ord = ss.order();
+    int64_t ord = ss.order();
     parent.assign(ord, -1);
 
     nodeSize = paramSize;
@@ -26,16 +25,16 @@ void EliminationTree::buildTree() {
     // skeleton of the algo to iterate on fillup's nodes is from Eigen's
     // `SimplicialCholesky_impl.h` (by Gael Guennebaud),
     // in turn from LDL by Timothy A. Davis.
-    for (uint64_t k = 0; k < ord; ++k) {
+    for (int64_t k = 0; k < ord; ++k) {
         /* L(k,:) pattern: all nodes reachable in etree from nz in A(0:k-1,k) */
         parent[k] = -1; /* parent of k is not yet known */
         tags[k] = k;    /* mark node k as visited */
         /* L(k,k) is nonzero */
 
-        uint64_t start = ss.ptrs[k];
-        uint64_t end = ss.ptrs[k + 1];
-        for (uint64_t q = start; q < end; q++) {
-            uint64_t i = ss.inds[q];
+        int64_t start = ss.ptrs[k];
+        int64_t end = ss.ptrs[k + 1];
+        for (int64_t q = start; q < end; q++) {
+            int64_t i = ss.inds[q];
             if (i >= k) {
                 continue;
             }
@@ -55,7 +54,7 @@ void EliminationTree::buildTree() {
 
     // compute node-fill (just entries below diagonal)
     nodeFill.resize(ord);
-    for (uint64_t k = 0; k < ord; ++k) {
+    for (int64_t k = 0; k < ord; ++k) {
         nodeFill[k] =
             nodeRows[k] * nodeSize[k] + nodeRows[k] * (nodeRows[k] + 1) / 2;
     }
@@ -63,7 +62,7 @@ void EliminationTree::buildTree() {
     // compute next child
     firstChild.assign(ord, -1);
     nextSibling.assign(ord, -1);
-    for (uint64_t k = 0; k < ord; ++k) {
+    for (int64_t k = 0; k < ord; ++k) {
         int64_t p = parent[k];
         if (p != -1) {
             nextSibling[k] = firstChild[p];
@@ -76,7 +75,7 @@ void EliminationTree::buildTree() {
 static constexpr double kPropRows = 0.6;
 
 void EliminationTree::computeMerges() {
-    uint64_t ord = ss.order();
+    int64_t ord = ss.order();
     mergeWith.assign(ord, -1);
     numMerges = 0;
     for (int64_t k = ord - 1; k >= 0; k--) {
@@ -103,10 +102,10 @@ void EliminationTree::computeMerges() {
 
 void EliminationTree::computeAggregateStruct() {
     // compute childern list
-    uint64_t ord = ss.order();
+    int64_t ord = ss.order();
     vector<int64_t> firstMergeChild(ord, -1);
     vector<int64_t> nextMergeSibling(ord, -1);
-    for (uint64_t k = 0; k < ord; k++) {
+    for (int64_t k = 0; k < ord; k++) {
         int64_t p = mergeWith[k];
         if (p != -1) {
             nextMergeSibling[k] = firstMergeChild[p];
@@ -118,7 +117,7 @@ void EliminationTree::computeAggregateStruct() {
     vector<int64_t> height(ord, 0);
     vector<tuple<int64_t, int64_t, int64_t>> heightNode;
     heightNode.reserve(ord - numMerges);
-    for (uint64_t k = 0; k < ord; k++) {
+    for (int64_t k = 0; k < ord; k++) {
         if (mergeWith[k] != -1) {
             continue;
         }
@@ -135,13 +134,13 @@ void EliminationTree::computeAggregateStruct() {
     sort(heightNode.begin(), heightNode.end());
 
     // straightening permutation, make merged nodes consecutive
-    uint64_t numLumps = ord - numMerges;
-    vector<uint64_t> spanToLump(ord);
+    int64_t numLumps = ord - numMerges;
+    vector<int64_t> spanToLump(ord);
     permutation.resize(ord);
     lumpStart.resize(numLumps + 1);
     lumpToSpan.assign(numLumps + 1, 0);
-    uint64_t pIdx = ord;
-    uint64_t agIdx = numLumps;
+    int64_t pIdx = ord;
+    int64_t agIdx = numLumps;
     for (int64_t idx = heightNode.size() - 1; idx >= 0; idx--) {
         auto [_1, _2, k] = heightNode[idx];
 
@@ -164,7 +163,7 @@ void EliminationTree::computeAggregateStruct() {
 
     // cum-sum lumpStart
     cumSumVec(lumpToSpan);
-    uint64_t tot = cumSumVec(lumpStart);
+    int64_t tot = cumSumVec(lumpStart);
     permInverse = inversePermutation(permutation);
 
     SparseStructure tperm =  // lower-half csc
@@ -175,13 +174,13 @@ void EliminationTree::computeAggregateStruct() {
 
     vector<int64_t> tags(ord, -1);  // check if row el was added already
     colStart.push_back(0);
-    for (uint64_t a = 0; a < numLumps; a++) {
-        uint64_t aStart = lumpToSpan[a];
-        uint64_t aEnd = lumpToSpan[a + 1];
-        uint64_t pStart = tperm.ptrs[aStart];
-        uint64_t pEnd = tperm.ptrs[aEnd];
-        for (uint64_t i = pStart; i < pEnd; i++) {
-            uint64_t p = tperm.inds[i];
+    for (int64_t a = 0; a < numLumps; a++) {
+        int64_t aStart = lumpToSpan[a];
+        int64_t aEnd = lumpToSpan[a + 1];
+        int64_t pStart = tperm.ptrs[aStart];
+        int64_t pEnd = tperm.ptrs[aEnd];
+        for (int64_t i = pStart; i < pEnd; i++) {
+            int64_t p = tperm.inds[i];
             if (tags[p] < (int64_t)a) {
                 rowParam.push_back(p);  // L(p,a) is set
                 tags[p] = a;

@@ -17,11 +17,11 @@
 using namespace std;
 
 void testSolveL(OpsPtr&& ops, int nRHS = 1) {
-    vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
+    vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
+    vector<int64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<int64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
@@ -52,11 +52,11 @@ TEST(Solve, SolveL_Blas) { testSolveL(blasOps(), 5); }
 TEST(Solve, SolveL_Ref) { testSolveL(simpleOps(), 5); }
 
 void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
-    vector<set<uint64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
+    vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
         columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
-    vector<uint64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
-    vector<uint64_t> lumpToSpan{0, 2, 4, 6};
+    vector<int64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
+    vector<int64_t> lumpToSpan{0, 2, 4, 6};
     SparseStructure groupedSs =
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,

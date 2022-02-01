@@ -21,7 +21,7 @@ using tdelta = chrono::duration<double>;
 
 struct SparseProblem {
     SparseStructure sparseStruct;
-    vector<uint64_t> paramSize;
+    vector<int64_t> paramSize;
 };
 
 pair<double, double> benchmarkSolver(const SparseProblem& prob, bool verbose) {
@@ -49,8 +49,8 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob, bool verbose) {
     return std::make_pair(analysisTime, factorTime);
 }
 
-SparseProblem matGenToSparseProblem(SparseMatGenerator& gen, uint64_t pSizeMin,
-                                    uint64_t pSizeMax) {
+SparseProblem matGenToSparseProblem(SparseMatGenerator& gen, int64_t pSizeMin,
+                                    int64_t pSizeMax) {
     SparseProblem retv;
     retv.sparseStruct = columnsToCscStruct(gen.columns).transpose();
     if (pSizeMin == pSizeMax) {

@@ -6,11 +6,10 @@
 #include "Utils.h"
 
 struct CoalescedAccessor {
-    CoalescedAccessor(const uint64_t* spanStart, const uint64_t* spanToLump,
-                      const uint64_t* lumpStart,
-                      const uint64_t* spanOffsetInLump,
-                      const uint64_t* chainColPtr, const uint64_t* chainRowSpan,
-                      const uint64_t* chainData)
+    CoalescedAccessor(const int64_t* spanStart, const int64_t* spanToLump,
+                      const int64_t* lumpStart, const int64_t* spanOffsetInLump,
+                      const int64_t* chainColPtr, const int64_t* chainRowSpan,
+                      const int64_t* chainData)
         : spanStart(spanStart),
           spanToLump(spanToLump),
           lumpStart(lumpStart),
@@ -19,42 +18,42 @@ struct CoalescedAccessor {
           chainRowSpan(chainRowSpan),
           chainData(chainData) {}
 
-    uint64_t paramSize(uint64_t blockIndex) const {
+    int64_t paramSize(int64_t blockIndex) const {
         return spanStart[blockIndex + 1] - spanStart[blockIndex];
     }
 
-    uint64_t paramStart(uint64_t blockIndex) const {
+    int64_t paramStart(int64_t blockIndex) const {
         return spanStart[blockIndex];
     }
 
     // returns: pair (offset, stride)
-    std::pair<uint64_t, uint64_t> blockOffset(uint64_t rowBlockIndex,
-                                              uint64_t colBlockIndex) const {
+    std::pair<int64_t, int64_t> blockOffset(int64_t rowBlockIndex,
+                                            int64_t colBlockIndex) const {
         // BASPACHO_CHECK_GE(rowBlockIndex, colBlockIndex);
-        uint64_t lump = spanToLump[colBlockIndex];
-        uint64_t lumpSize = lumpStart[lump + 1] - lumpStart[lump];
-        uint64_t offsetInLump = spanOffsetInLump[colBlockIndex];
-        uint64_t start = chainColPtr[lump];
-        uint64_t end = chainColPtr[lump + 1];
+        int64_t lump = spanToLump[colBlockIndex];
+        int64_t lumpSize = lumpStart[lump + 1] - lumpStart[lump];
+        int64_t offsetInLump = spanOffsetInLump[colBlockIndex];
+        int64_t start = chainColPtr[lump];
+        int64_t end = chainColPtr[lump + 1];
         // bisect to find `rowBlockIndex` in chainRowSpan[start:end]
-        uint64_t pos = bisect(chainRowSpan + start, end - start, rowBlockIndex);
+        int64_t pos = bisect(chainRowSpan + start, end - start, rowBlockIndex);
         // BASPACHO_CHECK_EQ(chainRowSpan[start + pos], rowBlockIndex);
         return std::make_pair(chainData[start + pos] + offsetInLump, lumpSize);
     }
 
     // returns: pair (offset, stride)
-    std::pair<uint64_t, uint64_t> diagBlockOffset(uint64_t blockIndex) const {
-        uint64_t lump = spanToLump[blockIndex];
-        uint64_t lumpSize = lumpStart[lump + 1] - lumpStart[lump];
-        uint64_t offsetInLump = spanOffsetInLump[blockIndex];
-        uint64_t start = chainColPtr[lump];
+    std::pair<int64_t, int64_t> diagBlockOffset(int64_t blockIndex) const {
+        int64_t lump = spanToLump[blockIndex];
+        int64_t lumpSize = lumpStart[lump + 1] - lumpStart[lump];
+        int64_t offsetInLump = spanOffsetInLump[blockIndex];
+        int64_t start = chainColPtr[lump];
         return std::make_pair(chainData[start] + offsetInLump * (1 + lumpSize),
                               lumpSize);
     }
 
     template <int rowSize = Eigen::Dynamic, int64_t colSize = Eigen::Dynamic,
               typename T>
-    auto block(T* data, uint64_t rowBlockIndex, uint64_t colBlockIndex) const {
+    auto block(T* data, int64_t rowBlockIndex, int64_t colBlockIndex) const {
         using namespace Eigen;
         auto [offset, stride] = blockOffset(rowBlockIndex, colBlockIndex);
         if (rowSize != Dynamic) {
@@ -71,7 +70,7 @@ struct CoalescedAccessor {
     }
 
     template <int size = Eigen::Dynamic, typename T>
-    auto diagBlock(T* data, uint64_t blockIndex) const {
+    auto diagBlock(T* data, int64_t blockIndex) const {
         using namespace Eigen;
         auto [offset, stride] = diagBlockOffset(blockIndex);
         if (size != Dynamic) {
@@ -82,32 +81,32 @@ struct CoalescedAccessor {
             data + offset, pSize, pSize, OuterStride<>(stride));
     }
 
-    const uint64_t* spanStart;
-    const uint64_t* spanToLump;
-    const uint64_t* lumpStart;
-    const uint64_t* spanOffsetInLump;
-    const uint64_t* chainColPtr;
-    const uint64_t* chainRowSpan;
-    const uint64_t* chainData;
+    const int64_t* spanStart;
+    const int64_t* spanToLump;
+    const int64_t* lumpStart;
+    const int64_t* spanOffsetInLump;
+    const int64_t* chainColPtr;
+    const int64_t* chainRowSpan;
+    const int64_t* chainData;
 };
 
 struct PermutedCoalescedAccessor {
     PermutedCoalescedAccessor(const CoalescedAccessor& plainAcc,
-                              const uint64_t* permutation)
+                              const int64_t* permutation)
         : plainAcc(plainAcc), permutation(permutation) {}
 
-    uint64_t paramSize(uint64_t blockIndex) const {
+    int64_t paramSize(int64_t blockIndex) const {
         return plainAcc.paramSize(permutation[blockIndex]);
     }
 
-    uint64_t paramStart(uint64_t blockIndex) const {
+    int64_t paramStart(int64_t blockIndex) const {
         return plainAcc.paramStart(permutation[blockIndex]);
     }
 
-    std::tuple<uint64_t, uint64_t, bool> blockOffset(
-        uint64_t rowBlockIndex, uint64_t colBlockIndex) const {
-        uint64_t permRowBlockIndex = permutation[rowBlockIndex];
-        uint64_t permColBlockIndex = permutation[colBlockIndex];
+    std::tuple<int64_t, int64_t, bool> blockOffset(
+        int64_t rowBlockIndex, int64_t colBlockIndex) const {
+        int64_t permRowBlockIndex = permutation[rowBlockIndex];
+        int64_t permColBlockIndex = permutation[colBlockIndex];
         auto [off, stride] = plainAcc.blockOffset(
             std::max(permRowBlockIndex, permColBlockIndex),
             std::min(permRowBlockIndex, permColBlockIndex));
@@ -115,13 +114,13 @@ struct PermutedCoalescedAccessor {
         return std::make_tuple(off, stride, flipped);
     }
 
-    std::pair<uint64_t, uint64_t> diagBlockOffset(uint64_t blockIndex) const {
+    std::pair<int64_t, int64_t> diagBlockOffset(int64_t blockIndex) const {
         return plainAcc.diagBlockOffset(permutation[blockIndex]);
     }
 
     template <int rowSize = Eigen::Dynamic, int64_t colSize = Eigen::Dynamic,
               typename T>
-    auto block(T* data, uint64_t rowBlockIndex, uint64_t colBlockIndex) const {
+    auto block(T* data, int64_t rowBlockIndex, int64_t colBlockIndex) const {
         using namespace Eigen;
         if (rowSize != Dynamic) {
             BASPACHO_CHECK_EQ(rowSize, paramSize(rowBlockIndex));
@@ -139,7 +138,7 @@ struct PermutedCoalescedAccessor {
     }
 
     template <int size = Eigen::Dynamic, typename T>
-    auto diagBlock(T* data, uint64_t blockIndex) const {
+    auto diagBlock(T* data, int64_t blockIndex) const {
         using namespace Eigen;
         auto [offset, stride] = diagBlockOffset(blockIndex);
         if (size != Dynamic) {
@@ -151,5 +150,5 @@ struct PermutedCoalescedAccessor {
     }
 
     CoalescedAccessor plainAcc;
-    const uint64_t* permutation;
+    const int64_t* permutation;
 };
