@@ -11,6 +11,7 @@
 
 #include "mkl.h"
 #define BLAS_INT MKL_INT
+#define BASPACHO_HAVE_GEMM_BATCH
 
 #else
 
@@ -103,13 +104,13 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                    uint64_t numSpans, int maxBatchSize)
         : CpuBaseNumericCtx<T>(bufSize * maxBatchSize, numSpans),
           sym(sym)
-#ifdef BASPACHO_USE_MKL
+#ifdef BASPACHO_HAVE_GEMM_BATCH
           ,
           tempCtxSize(bufSize),
           maxBatchSize(maxBatchSize)
 #endif
     {
-#ifndef BASPACHO_USE_MKL
+#ifndef BASPACHO_HAVE_GEMM_BATCH
         BASPACHO_CHECK_EQ(maxBatchSize, 1);
 #endif
     }
@@ -308,7 +309,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
     virtual void saveSyrkGemmBatched(uint64_t* ms, uint64_t* ns, uint64_t* ks,
                                      const T* data, uint64_t* offsets,
                                      int batchSize) {
-#ifndef BASPACHO_USE_MKL
+#ifndef BASPACHO_HAVE_GEMM_BATCH
         BASPACHO_CHECK(!"Batching not supported");
 #else
         OpInstance timer(sygeStat);
@@ -392,7 +393,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         const uint64_t* pSpanToChainOffset = spanToChainOffset.data();
         const uint64_t* pSpanOffsetInLump = skel.spanOffsetInLump.data();
 
-#ifdef BASPACHO_USE_MKL
+#ifdef BASPACHO_HAVE_GEMM_BATCH
+        BASPACHO_CHECK_LT(numBatch, tempBuffer.size());
         const double* matRectPtr =
             numBatch == -1 ? tempBuffer.data() : tempBufPtrs[numBatch];
 #else
@@ -475,7 +477,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
     using CpuBaseNumericCtx<T>::asmblStat;
 
     const BlasSymbolicCtx& sym;
-#ifdef BASPACHO_USE_MKL
+#ifdef BASPACHO_HAVE_GEMM_BATCH
     std::vector<double*> tempBufPtrs;
     uint64_t tempCtxSize;
     int maxBatchSize;

@@ -307,8 +307,7 @@ void Solver::factorXp2(double* data, bool verbose) const {
 
 void Solver::factorXp(double* data, bool verbose) const {
     int maxBatchSize = max(min(4, 1000000 / (int)(maxElimTempSize + 1)), 1);
-    NumericCtxPtr<double> numCtx =
-        symCtx->createDoubleContext(maxElimTempSize, maxBatchSize);
+    NumericCtxPtr<double> numCtx = symCtx->createDoubleContext(maxElimTempSize);
 
     for (uint64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
         if (verbose) {
