@@ -128,7 +128,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         uint64_t largestIndep =
             findLargestIndependentLumpSet(factorSkel, 0).first;
         Solver solver(std::move(factorSkel), {0, largestIndep}, {}, genOps());
-        NumericCtxPtr<double> numCtx = solver.symCtx->createDoubleContext(0, 0);
+        NumericCtxPtr<double> numCtx = solver.symCtx->createDoubleContext(0);
         numCtx->doElimination(*solver.elimCtxs[0], data.data(), 0,
                               largestIndep);
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);

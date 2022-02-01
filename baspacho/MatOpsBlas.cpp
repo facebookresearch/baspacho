@@ -15,64 +15,13 @@
 
 #else
 
-// BLAS/LAPACK famously go without headers.
-extern "C" {
-
-// TODO: detect in build if blas type is long or int
-#if 0
-#define BLAS_INT long
-#else
-#define BLAS_INT int
-#endif
-
-void dpotrf_(const char* uplo, BLAS_INT* n, double* A, BLAS_INT* lda,
-             BLAS_INT* info);
-
-void dtrsm_(const char* side, const char* uplo, const char* transa, char* diag,
-            BLAS_INT* m, BLAS_INT* n, const double* alpha, const double* A,
-            BLAS_INT* lda, double* B, BLAS_INT* ldb);
-
-void dgemm_(const char* transa, const char* transb, BLAS_INT* m, BLAS_INT* n,
-            BLAS_INT* k, const double* alpha, const double* A, BLAS_INT* lda,
-            const double* B, BLAS_INT* ldb, const double* beta, double* C,
-            BLAS_INT* ldc);
-
-void dsyrk_(const char* uplo, const char* transa, const BLAS_INT* n,
-            const BLAS_INT* k, const double* alpha, const double* A,
-            const BLAS_INT* lda, const double* beta, double* C,
-            const BLAS_INT* ldc);
-}
+#include "BlasDefs.h"
 
 #endif
 
 using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
-
-#include <chrono>
-#include <iostream>
-
-#include "DebugMacros.h"
-#include "MatOpsCpuBase.h"
-#include "Utils.h"
-
-using namespace std;
-using hrc = chrono::high_resolution_clock;
-using tdelta = chrono::duration<double>;
-
-using OuterStride = Eigen::OuterStride<>;
-template <typename T>
-using OuterStridedMatM = Eigen::Map<
-    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
-    OuterStride>;
-template <typename T>
-using OuterStridedCMajMatM = Eigen::Map<
-    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
-    OuterStride>;
-template <typename T>
-using OuterStridedCMajMatK = Eigen::Map<
-    const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
-    OuterStride>;
 
 struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
     BlasSymbolicCtx(const CoalescedBlockMatrixSkel& skel, int numThreads)
@@ -196,7 +145,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         char argUpLo = 'U';
         BLAS_INT argN = n;
         BLAS_INT argLdA = n;
-#ifdef BASPACHO_USE_MKL
+#if 1  // def BASPACHO_USE_MKL
         LAPACKE_dpotrf(LAPACK_COL_MAJOR, argUpLo, argN, A, argLdA);
 #else
         BLAS_INT info;
@@ -232,7 +181,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         double argAlpha = 1.0;
         BLAS_INT argLdA = n;
         BLAS_INT argLdB = n;
-#ifdef BASPACHO_USE_MKL
+#if 1  // def BASPACHO_USE_MKL
         cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
                     CblasNonUnit, argM, argN, argAlpha, (double*)A, argLdA, B,
                     argLdB);
@@ -257,23 +206,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         bool doGemm = !(doSyrk && m == n);
 
         if (doSyrk) {
-            BLAS_INT argN = m;
-            BLAS_INT argK = k;
-            double argAlpha = 1.0;
-            double* argA = (double*)data + offset;
-            BLAS_INT argLdA = k;
-            double argBeta = 0.0;
-            double* argC = tempBuffer.data();
-            BLAS_INT argLdC = m;
-#ifdef BASPACHO_USE_MKL
-            cblas_dsyrk(CblasColMajor, CblasUpper, CblasTrans, argN, argK,
-                        argAlpha, argA, argLdA, argBeta, argC, argLdC);
-#else
-            char argUpLo = 'U';
-            char argTransA = 'C';
-            dsyrk_(&argUpLo, &argTransA, &argN, &argK, &argAlpha, argA, &argLdA,
-                   &argBeta, argC, &argLdC);
-#endif
+            cblas_dsyrk(CblasColMajor, CblasUpper, CblasConjTrans, m, k, 1.0,
+                        data + offset, k, 0.0, tempBuffer.data(), m);
             syrkCalls++;
         }
 
@@ -281,27 +215,10 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
             uint64_t gemmStart = doSyrk ? m : 0;
             uint64_t gemmInOffset = doSyrk ? m * k : 0;
             uint64_t gemmOutOffset = doSyrk ? m * m : 0;
-            BLAS_INT argM = m;
-            BLAS_INT argN = n - gemmStart;
-            BLAS_INT argK = k;
-            double argAlpha = 1.0;
-            double* argA = (double*)data + offset;
-            BLAS_INT argLdA = k;
-            double* argB = (double*)data + offset + gemmInOffset;
-            BLAS_INT argLdB = k;
-            double argBeta = 0.0;
-            double* argC = tempBuffer.data() + gemmOutOffset;
-            BLAS_INT argLdC = m;
-#ifdef BASPACHO_USE_MKL
-            cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, argM, argN,
-                        argK, argAlpha, argA, argLdA, argB, argLdB, argBeta,
-                        argC, argLdC);
-#else
-            char argTransA = 'C';
-            char argTransB = 'N';
-            dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha, argA,
-                   &argLdA, argB, &argLdB, &argBeta, argC, &argLdC);
-#endif
+            cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, m,
+                        n - gemmStart, k, 1.0, data + offset, k,
+                        data + offset + gemmInOffset, k, 0.0,
+                        tempBuffer.data() + gemmOutOffset, m);
             gemmCalls++;
         }
     }
@@ -491,51 +408,16 @@ struct BlasSolveCtx : SolveCtx<T> {
 
     virtual void solveL(const T* data, uint64_t offM, uint64_t n, T* C,
                         uint64_t offC, uint64_t ldc, uint64_t nRHS) override {
-        BLAS_INT argM = n;
-        BLAS_INT argN = nRHS;
-        double argAlpha = 1.0;
-        const double* argA = data + offM;
-        BLAS_INT argLdA = n;
-        double* argB = C + offC;
-        BLAS_INT argLdB = ldc;
-#ifdef BASPACHO_USE_MKL
         cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
-                    CblasNonUnit, argM, argN, argAlpha, argA, argLdA, argB,
-                    argLdB);
-#else
-        char argSide = 'L';
-        char argUpLo = 'U';
-        char argTransA = 'C';
-        char argDiag = 'N';
-        dtrsm_(&argSide, &argUpLo, &argTransA, &argDiag, &argM, &argN,
-               &argAlpha, argA, &argLdA, argB, &argLdB);
-#endif
+                    CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
     }
 
     virtual void gemv(const T* data, uint64_t offM, uint64_t nRows,
                       uint64_t nCols, const T* A, uint64_t offA, uint64_t lda,
                       T* C, uint64_t nRHS) override {
-        BLAS_INT argM = nRHS;
-        BLAS_INT argN = nRows;
-        BLAS_INT argK = nCols;
-        double argAlpha = 1.0;
-        const double* argA = A + offA;
-        BLAS_INT argLdA = lda;
-        const double* argB = data + offM;
-        BLAS_INT argLdB = nCols;
-        double argBeta = 0.0;
-        double* argC = C;
-        BLAS_INT argLdC = nRHS;
-#ifdef BASPACHO_USE_MKL
-        cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, argM, argN,
-                    argK, argAlpha, argA, argLdA, argB, argLdB, argBeta, argC,
-                    argLdC);
-#else
-        char argTransA = 'C';
-        char argTransB = 'N';
-        dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha, argA,
-               &argLdA, argB, &argLdB, &argBeta, argC, &argLdC);
-#endif
+        cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, nRHS, nRows,
+                    nCols, 1.0, A + offA, lda, data + offM, nCols, 0.0, C,
+                    nRHS);
     }
 
     static inline void stridedTransSub(double* dst, uint64_t dstStride,
@@ -572,51 +454,16 @@ struct BlasSolveCtx : SolveCtx<T> {
 
     virtual void solveLt(const T* data, uint64_t offM, uint64_t n, T* C,
                          uint64_t offC, uint64_t ldc, uint64_t nRHS) override {
-        BLAS_INT argM = n;
-        BLAS_INT argN = nRHS;
-        double argAlpha = 1.0;
-        const double* argA = data + offM;
-        BLAS_INT argLdA = n;
-        double* argB = C + offC;
-        BLAS_INT argLdB = ldc;
-#ifdef BASPACHO_USE_MKL
         cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans,
-                    CblasNonUnit, argM, argN, argAlpha, argA, argLdA, argB,
-                    argLdB);
-#else
-        char argSide = 'L';
-        char argUpLo = 'U';
-        char argTransA = 'N';
-        char argDiag = 'N';
-        dtrsm_(&argSide, &argUpLo, &argTransA, &argDiag, &argM, &argN,
-               &argAlpha, argA, &argLdA, argB, &argLdB);
-#endif
+                    CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
     }
 
     virtual void gemvT(const T* data, uint64_t offM, uint64_t nRows,
                        uint64_t nCols, const T* C, uint64_t nRHS, T* A,
                        uint64_t offA, uint64_t lda) override {
-        BLAS_INT argM = nCols;
-        BLAS_INT argN = nRHS;
-        BLAS_INT argK = nRows;
-        double argAlpha = -1.0;
-        const double* argA = data + offM;
-        BLAS_INT argLdA = nCols;
-        const double* argB = C;
-        BLAS_INT argLdB = nRHS;
-        double argBeta = 1.0;
-        double* argC = A + offA;
-        BLAS_INT argLdC = lda;
-#ifdef BASPACHO_USE_MKL
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, argM, argN,
-                    argK, argAlpha, argA, argLdA, argB, argLdB, argBeta, argC,
-                    argLdC);
-#else
-        char argTransA = 'N';
-        char argTransB = 'C';
-        dgemm_(&argTransA, &argTransB, &argM, &argN, &argK, &argAlpha, argA,
-               &argLdA, argB, &argLdB, &argBeta, argC, &argLdC);
-#endif
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, nCols, nRHS,
+                    nRows, -1.0, data + offM, nCols, C, nRHS, 1.0, A + offA,
+                    lda);
     }
 
     static inline void stridedTransSet(double* dst, uint64_t dstStride,
