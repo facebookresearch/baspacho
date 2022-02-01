@@ -202,11 +202,6 @@ add_baspacho_test(
   baspacho/tests/CoalescedBlockMatrixTest.cpp
 )
 add_baspacho_test(
-  ExperimentalFactorTest
-  baspacho/experiments/Factor.cpp
-  baspacho/experiments/FactorTest.cpp
-)
-add_baspacho_test(
   SparseStructureTest
   baspacho/tests/SparseStructureTest.cpp
 )
