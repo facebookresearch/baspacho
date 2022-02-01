@@ -36,6 +36,22 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         // cublasCHECK(cublasSetStream(cublasH, stream));
         cusolverCHECK(cusolverDnCreate(&cusolverDnH));
         // cusolverCHECK(cusolverDnSetStream(cusolverDnH, stream));
+
+        cuCHECK(cudaMalloc((void**)&devChainRowsTillEnd,
+                           skel.chainRowsTillEnd.size() * sizeof(int64_t)));
+        cuCHECK(cudaMemcpy(devChainRowsTillEnd, skel.chainRowsTillEnd.data(),
+                           skel.chainRowsTillEnd.size() * sizeof(int64_t),
+                           cudaMemcpyHostToDevice));
+        cuCHECK(cudaMalloc((void**)&devChainRowSpan,
+                           skel.chainRowSpan.size() * sizeof(int64_t)));
+        cuCHECK(cudaMemcpy(devChainRowSpan, skel.chainRowSpan.data(),
+                           skel.chainRowSpan.size() * sizeof(int64_t),
+                           cudaMemcpyHostToDevice));
+        cuCHECK(cudaMalloc((void**)&devSpanOffsetInLump,
+                           skel.spanOffsetInLump.size() * sizeof(int64_t)));
+        cuCHECK(cudaMemcpy(devSpanOffsetInLump, skel.spanOffsetInLump.data(),
+                           skel.spanOffsetInLump.size() * sizeof(int64_t),
+                           cudaMemcpyHostToDevice));
     }
 
     virtual ~CudaSymbolicCtx() override {
@@ -44,6 +60,15 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         }
         if (cusolverDnH) {
             cusolverCHECK(cusolverDnDestroy(cusolverDnH));
+        }
+        if (devChainRowsTillEnd) {
+            cuCHECK(cudaFree(devChainRowsTillEnd));
+        }
+        if (devChainRowSpan) {
+            cuCHECK(cudaFree(devChainRowSpan));
+        }
+        if (devSpanOffsetInLump) {
+            cuCHECK(cudaFree(devSpanOffsetInLump));
         }
     }
 
@@ -61,6 +86,10 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
 
     cublasHandle_t cublasH = nullptr;
     cusolverDnHandle_t cusolverDnH = nullptr;
+
+    int64_t* devChainRowsTillEnd = nullptr;
+    int64_t* devChainRowSpan = nullptr;
+    int64_t* devSpanOffsetInLump = nullptr;
 };
 
 // cuda ops implemented using CUBLAS and custom kernels
@@ -72,10 +101,67 @@ struct CudaOps : Ops {
 };
 
 template <typename T>
+__device__ static inline void stridedMatSubDev(T* dst, int64_t dstStride,
+                                               const T* src, int64_t srcStride,
+                                               int64_t rSize, int64_t cSize) {
+    for (uint j = 0; j < rSize; j++) {
+        for (uint i = 0; i < cSize; i++) {
+            dst[i] -= src[i];
+        }
+        dst += dstStride;
+        src += srcStride;
+    }
+}
+
+template <typename T>
+__global__ void assemble_kernel(
+    int64_t numBlockRows, int64_t numBlockCols, int64_t rectRowBegin,
+    int64_t srcRectWidth, int64_t dstStride, const int64_t* pChainRowsTillEnd,
+    const int64_t* pToSpan, const int64_t* pSpanToChainOffset,
+    const int64_t* pSpanOffsetInLump, const T* matRectPtr, T* data) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i > numBlockRows + numBlockCols) {
+        return;
+    }
+    int64_t r = i % numBlockRows;
+    int64_t c = i / numBlockRows;
+    if (c > r) {
+        return;
+    }
+
+    int64_t rBegin = pChainRowsTillEnd[r - 1] - rectRowBegin;
+    int64_t rSize = pChainRowsTillEnd[r] - rBegin - rectRowBegin;
+    int64_t rParam = pToSpan[r];
+    int64_t rOffset = pSpanToChainOffset[rParam];
+    const T* matRowPtr = matRectPtr + rBegin * srcRectWidth;
+
+    int64_t cStart = pChainRowsTillEnd[c - 1] - rectRowBegin;
+    int64_t cSize = pChainRowsTillEnd[c] - cStart - rectRowBegin;
+    int64_t offset = rOffset + pSpanOffsetInLump[pToSpan[c]];
+
+    T* dst = data + offset;
+    const T* src = matRowPtr + cStart;
+    stridedMatSubDev(dst, dstStride, src, srcRectWidth, rSize, cSize);
+}
+
+template <typename T>
 struct CudaNumericCtx : NumericCtx<T> {
     CudaNumericCtx(const CudaSymbolicCtx& sym, int64_t bufSize,
                    int64_t numSpans)
-        : sym(sym) {}
+        : spanToChainOffset(numSpans), sym(sym) {
+        cuCHECK(cudaMalloc((void**)&devTempBuffer, bufSize * sizeof(T)));
+        cuCHECK(cudaMalloc((void**)&devSpanToChainOffset,
+                           spanToChainOffset.size() * sizeof(int64_t)));
+    }
+
+    virtual ~CudaNumericCtx() override {
+        if (devTempBuffer) {
+            cuCHECK(cudaFree(devTempBuffer));
+        }
+        if (devSpanToChainOffset) {
+            cuCHECK(cudaFree(devSpanToChainOffset));
+        }
+    }
 
     virtual void printStats() const override {
         std::cout << "matOp stats:"
@@ -144,26 +230,14 @@ struct CudaNumericCtx : NumericCtx<T> {
         cublasCHECK(cublasDtrsm(
             sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
             CUBLAS_DIAG_NON_UNIT, n, k, &alpha, A, n, B, n));
-#if 0
-        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
-                    CblasNonUnit, n, k, 1.0, A, n, B, n);
-#endif
     }
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override {
-        // BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
-        OpInstance timer(sygeStat);
-        BASPACHO_CHECK_LE(m * n, tempBuffer.size());
-
-        const T* AB = data + offset;
-        T* C = tempBuffer.data();
-        Eigen::Map<const MatRMaj<T>> matA(AB, m, k);
-        Eigen::Map<const MatRMaj<T>> matB(AB, n, k);
-        Eigen::Map<MatRMaj<T>> matC(C, n, m);
-        matC.noalias() = matB * matA.transpose();
-#endif
+        T alpha(1.0), beta(0.0);
+        cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k,
+                                &alpha, data + offset, k, data + offset, k,
+                                &beta, devTempBuffer, m));
     }
 
     virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
@@ -173,16 +247,17 @@ struct CudaNumericCtx : NumericCtx<T> {
     }
 
     virtual void prepareAssemble(int64_t targetLump) override {
-        // BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
         const CoalescedBlockMatrixSkel& skel = sym.skel;
 
+        // FIXME: compute on CPU and copy, not ideal
         for (int64_t i = skel.chainColPtr[targetLump],
                      iEnd = skel.chainColPtr[targetLump + 1];
              i < iEnd; i++) {
             spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
         }
-#endif
+        cuCHECK(cudaMemcpy(devSpanToChainOffset, spanToChainOffset.data(),
+                           spanToChainOffset.size() * sizeof(int64_t),
+                           cudaMemcpyHostToDevice));
     }
 
     virtual void assemble(T* data, int64_t rectRowBegin,
@@ -191,11 +266,29 @@ struct CudaNumericCtx : NumericCtx<T> {
                           int64_t numBlockRows, int64_t numBlockCols,
                           int numBatch = -1) override {
         // BASPACHO_CHECK(!"Not implemented yet!");
+
+        BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
+        OpInstance timer(asmblStat);
+        const int64_t* pChainRowsTillEnd =
+            sym.devChainRowsTillEnd + srcColDataOffset;
+        const int64_t* pToSpan = sym.devChainRowSpan + srcColDataOffset;
+        const int64_t* pSpanToChainOffset = devSpanToChainOffset;
+        const int64_t* pSpanOffsetInLump = sym.devSpanOffsetInLump;
+
+        const T* matRectPtr = devTempBuffer;
+
+        int wgs = 32;
+        int numGroups = (numBlockRows * numBlockCols + wgs - 1) / wgs;
+        assemble_kernel<double><<<numGroups, wgs>>>(
+            numBlockRows, numBlockCols, rectRowBegin, srcRectWidth, dstStride,
+            pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
+            matRectPtr, data);
+
 #if 0
         BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
         OpInstance timer(asmblStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
-        const int64_t* chainRowsTillEnd =
+        const int64_t* pChainRowsTillEnd =
             skel.chainRowsTillEnd.data() + srcColDataOffset;
         const int64_t* pToSpan = skel.chainRowSpan.data() + srcColDataOffset;
         const int64_t* pSpanToChainOffset = spanToChainOffset.data();
@@ -204,16 +297,16 @@ struct CudaNumericCtx : NumericCtx<T> {
         const T* matRectPtr = tempBuffer.data();
 
         for (int64_t r = 0; r < numBlockRows; r++) {
-            int64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
-            int64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
+            int64_t rBegin = pChainRowsTillEnd[r - 1] - rectRowBegin;
+            int64_t rSize = pChainRowsTillEnd[r] - rBegin - rectRowBegin;
             int64_t rParam = pToSpan[r];
             int64_t rOffset = pSpanToChainOffset[rParam];
             const T* matRowPtr = matRectPtr + rBegin * srcRectWidth;
 
             int64_t cEnd = std::min(numBlockCols, r + 1);
             for (int64_t c = 0; c < cEnd; c++) {
-                int64_t cStart = chainRowsTillEnd[c - 1] - rectRowBegin;
-                int64_t cSize = chainRowsTillEnd[c] - cStart - rectRowBegin;
+                int64_t cStart = pChainRowsTillEnd[c - 1] - rectRowBegin;
+                int64_t cSize = pChainRowsTillEnd[c] - cStart - rectRowBegin;
                 int64_t offset = rOffset + pSpanOffsetInLump[pToSpan[c]];
 
                 T* dst = data + offset;
@@ -224,13 +317,6 @@ struct CudaNumericCtx : NumericCtx<T> {
 #endif
     }
 
-    /*using CpuBaseNumericCtx<T>::factorLump;
-    using CpuBaseNumericCtx<T>::eliminateRowChain;
-    using CpuBaseNumericCtx<T>::stridedMatSub;
-
-    using CpuBaseNumericCtx<T>::tempBuffer;
-    using CpuBaseNumericCtx<T>::spanToChainOffset;*/
-
     OpStat elimStat;
     OpStat potrfStat;
     int64_t potrfBiggestN = 0;
@@ -239,6 +325,10 @@ struct CudaNumericCtx : NumericCtx<T> {
     int64_t gemmCalls = 0;
     int64_t syrkCalls = 0;
     OpStat asmblStat;
+
+    T* devTempBuffer;
+    int64_t* devSpanToChainOffset;
+    std::vector<int64_t> spanToChainOffset;
 
     const CudaSymbolicCtx& sym;
 };
