@@ -12,10 +12,12 @@
 #include "mkl.h"
 #define BLAS_INT MKL_INT
 #define BASPACHO_HAVE_GEMM_BATCH
+#define BASPACHO_USE_TRSM_WORAROUND 0
 
 #else
 
 #include "baspacho/BlasDefs.h"
+#define BASPACHO_USE_TRSM_WORAROUND 1
 
 #endif
 
@@ -78,9 +80,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                 factorLump(skel, data, l);
             }
         } else {
-            dispenso::TaskSet taskSet(sym.threadPool);
             dispenso::parallel_for(
-                taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
+                dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
                 [&](int64_t lBegin, int64_t lEnd) {
                     for (int64_t l = lBegin; l < lEnd; l++) {
                         factorLump(skel, data, l);
@@ -106,9 +107,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                         : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
                 };
                 vector<ElimContext> contexts;
-                dispenso::TaskSet taskSet(sym.threadPool);
                 dispenso::parallel_for(
-                    taskSet, contexts,
+                    contexts,
                     [=]() -> ElimContext {
                         return ElimContext(elim.maxBufferSize, numSpans);
                     },
@@ -127,9 +127,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                     eliminateVerySparseRowChain(elim, skel, data, sRel);
                 }
             } else {
-                dispenso::TaskSet taskSet(sym.threadPool);
                 dispenso::parallel_for(
-                    taskSet, dispenso::makeChunkedRange(0UL, numElimRows, 5UL),
+                    dispenso::makeChunkedRange(0UL, numElimRows, 5UL),
                     [&, this](size_t sBegin, size_t sEnd) {
                         for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
                             eliminateVerySparseRowChain(elim, skel, data, sRel);
@@ -141,31 +140,21 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
     virtual void potrf(int64_t n, T* A) override {
         OpInstance timer(potrfStat);
-        char argUpLo = 'U';
-        BLAS_INT argN = n;
-        BLAS_INT argLdA = n;
-#if 1  // def BASPACHO_USE_MKL
-        LAPACKE_dpotrf(LAPACK_COL_MAJOR, argUpLo, argN, A, argLdA);
-#else
-        BLAS_INT info;
-        dpotrf_(&argUpLo, &argN, A, &argLdA, &info);
-#endif
+        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', n, A, n);
     }
 
     virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
         OpInstance timer(trsmStat);
 
         // TSRM should be fast but appears very slow in OpenBLAS
-        static constexpr bool slowTrsmWorkaround = true;
+        static constexpr bool slowTrsmWorkaround = BASPACHO_USE_TRSM_WORAROUND;
         if (slowTrsmWorkaround) {
             using MatCMajD = Eigen::Matrix<double, Eigen::Dynamic,
                                            Eigen::Dynamic, Eigen::ColMajor>;
 
             // col-major's upper = (row-major's lower).transpose()
             Eigen::Map<const MatCMajD> matA(A, n, n);
-            dispenso::TaskSet taskSet(dispenso::globalThreadPool());
-            dispenso::parallel_for(
-                taskSet,                                 //
+            dispenso::parallel_for(                      //
                 dispenso::makeChunkedRange(0, k, 16UL),  //
                 [&](int64_t k1, int64_t k2) {
                     Eigen::Map<MatRMaj<double>> matB(B + n * k1, k2 - k1, n);
@@ -175,23 +164,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
             return;
         }
 
-        BLAS_INT argM = n;
-        BLAS_INT argN = k;
-        double argAlpha = 1.0;
-        BLAS_INT argLdA = n;
-        BLAS_INT argLdB = n;
-#if 1  // def BASPACHO_USE_MKL
         cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
-                    CblasNonUnit, argM, argN, argAlpha, (double*)A, argLdA, B,
-                    argLdB);
-#else
-        char argSide = 'L';
-        char argUpLo = 'U';
-        char argTransA = 'C';
-        char argDiag = 'N';
-        dtrsm_(&argSide, &argUpLo, &argTransA, &argDiag, &argM, &argN,
-               &argAlpha, (double*)A, &argLdA, B, &argLdB);
-#endif
+                    CblasNonUnit, n, k, 1.0, A, n, B, n);
     }
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
@@ -340,9 +314,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                 }
             }
         } else {
-            dispenso::TaskSet taskSet(sym.threadPool);
             dispenso::parallel_for(
-                taskSet, dispenso::makeChunkedRange(0, numBlockRows, 3UL),
+                dispenso::makeChunkedRange(0, numBlockRows, 3UL),
                 [&](int64_t rFrom, int64_t rTo) {
                     for (int64_t r = rFrom; r < rTo; r++) {
                         int64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
