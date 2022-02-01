@@ -28,8 +28,10 @@ struct SimpleSymbolicCtx : CpuBaseSymbolicCtx {
     SimpleSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
         : CpuBaseSymbolicCtx(skel) {}
 
-    virtual NumericCtxPtr<double> createDoubleContext(uint64_t tempBufSize,
-                                                      int maxBatchSize = 1);
+    virtual NumericCtxPtr<double> createDoubleContext(
+        uint64_t tempBufSize, int maxBatchSize = 1) override;
+
+    virtual SolveCtxPtr<double> createDoubleSolveContext() override;
 };
 
 // simple ops implemented using Eigen (therefore single thread)
@@ -242,6 +244,30 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
         }
     }
 
+    using CpuBaseNumericCtx<T>::factorLump;
+    using CpuBaseNumericCtx<T>::eliminateRowChain;
+    using CpuBaseNumericCtx<T>::stridedMatSub;
+
+    using CpuBaseNumericCtx<T>::tempBuffer;
+    using CpuBaseNumericCtx<T>::spanToChainOffset;
+
+    using CpuBaseNumericCtx<T>::elimStat;
+    using CpuBaseNumericCtx<T>::potrfStat;
+    using CpuBaseNumericCtx<T>::potrfBiggestN;
+    using CpuBaseNumericCtx<T>::trsmStat;
+    using CpuBaseNumericCtx<T>::sygeStat;
+    using CpuBaseNumericCtx<T>::gemmCalls;
+    using CpuBaseNumericCtx<T>::syrkCalls;
+    using CpuBaseNumericCtx<T>::asmblStat;
+
+    const SimpleSymbolicCtx& sym;
+};
+
+template <typename T>
+struct SimpleSolveCtx : SolveCtx<T> {
+    SimpleSolveCtx(const SimpleSymbolicCtx& sym) : sym(sym) {}
+    virtual ~SimpleSolveCtx() override {}
+
     virtual void solveL(const T* data, uint64_t offM, uint64_t n, T* C,
                         uint64_t offC, uint64_t ldc, uint64_t nRHS) override {
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
@@ -318,19 +344,6 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
         }
     }
 
-    using CpuBaseNumericCtx<T>::factorLump;
-    using CpuBaseNumericCtx<T>::eliminateRowChain;
-    using CpuBaseNumericCtx<T>::stridedMatSub;
-    using CpuBaseNumericCtx<T>::tempBuffer;
-    using CpuBaseNumericCtx<T>::spanToChainOffset;
-    using CpuBaseNumericCtx<T>::elimStat;
-    using CpuBaseNumericCtx<T>::potrfStat;
-    using CpuBaseNumericCtx<T>::potrfBiggestN;
-    using CpuBaseNumericCtx<T>::trsmStat;
-    using CpuBaseNumericCtx<T>::sygeStat;
-    using CpuBaseNumericCtx<T>::gemmCalls;
-    using CpuBaseNumericCtx<T>::syrkCalls;
-    using CpuBaseNumericCtx<T>::asmblStat;
     const SimpleSymbolicCtx& sym;
 };
 
@@ -338,6 +351,10 @@ NumericCtxPtr<double> SimpleSymbolicCtx::createDoubleContext(
     uint64_t tempBufSize, int maxBatchSize) {
     return NumericCtxPtr<double>(new SimpleNumericCtx<double>(
         *this, tempBufSize, skel.spanStart.size() - 1));
+}
+
+SolveCtxPtr<double> SimpleSymbolicCtx::createDoubleSolveContext() {
+    return SolveCtxPtr<double>(new SimpleSolveCtx<double>(*this));
 }
 
 OpsPtr simpleOps() { return OpsPtr(new SimpleOps); }

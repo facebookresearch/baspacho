@@ -7,11 +7,15 @@ struct SymbolicCtx;
 struct SymElimCtx;
 template <typename T>
 struct NumericCtx;
+template <typename T>
+struct SolveCtx;
 using OpsPtr = std::unique_ptr<Ops>;
 using SymbolicCtxPtr = std::unique_ptr<SymbolicCtx>;
 using SymElimCtxPtr = std::unique_ptr<SymElimCtx>;
 template <typename T>
 using NumericCtxPtr = std::unique_ptr<NumericCtx<T>>;
+template <typename T>
+using SolveCtxPtr = std::unique_ptr<SolveCtx<T>>;
 
 struct Ops {
     virtual ~Ops() {}
@@ -33,6 +37,8 @@ struct SymbolicCtx {
 
     virtual NumericCtxPtr<double> createDoubleContext(uint64_t tempBufSize,
                                                       int maxBatchSize = 1) = 0;
+
+    virtual SolveCtxPtr<double> createDoubleSolveContext() = 0;
 };
 
 struct SymElimCtx {
@@ -70,7 +76,11 @@ struct NumericCtx {
                           uint64_t srcColDataOffset, uint64_t srcRectWidth,
                           uint64_t numBlockRows, uint64_t numBlockCols,
                           int numBatch = -1) = 0;
+};
 
+template <typename T>
+struct SolveCtx {
+    virtual ~SolveCtx() {}
     virtual void solveL(const T* data, uint64_t offset, uint64_t n, T* C,
                         uint64_t offC, uint64_t ldc, uint64_t nRHS) = 0;
 
