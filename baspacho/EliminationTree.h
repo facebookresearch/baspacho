@@ -12,6 +12,8 @@ struct EliminationTree {
 
     void computeMerges();
 
+    void computeMerges2();
+
     void computeAggregateStruct();
 
     std::vector<int64_t> paramSize;

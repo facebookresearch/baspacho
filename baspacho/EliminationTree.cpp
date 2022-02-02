@@ -2,6 +2,7 @@
 #include "baspacho/EliminationTree.h"
 
 #include <algorithm>
+#include <queue>
 
 #include "baspacho/DebugMacros.h"
 #include "baspacho/Utils.h"
@@ -74,9 +75,78 @@ void EliminationTree::buildTree() {
 }
 
 // TODO: expand on merge settings
-static constexpr double kPropRows = 0.7;
+static constexpr double kPropRows = 0.8;
 
 void EliminationTree::computeMerges() {
+    int64_t ord = ss.order();
+
+    std::priority_queue<std::tuple<double, int64_t, int64_t>> mergeCandidates;
+    for (int64_t k = ord - 1; k >= 0; k--) {
+        int64_t p = parent[k];
+        if (p == -1) {
+            continue;
+        }
+        double fillAfterMerge =
+            ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]);
+        mergeCandidates.emplace(fillAfterMerge, k, p);
+    }
+
+    mergeWith.assign(ord, -1);
+    numMerges = 0;
+    while (!mergeCandidates.empty()) {
+        auto [wasFillAfterMerge, k, p] = mergeCandidates.top();
+        mergeCandidates.pop();
+
+        auto oldP = p;
+        BASPACHO_CHECK_LT(p, mergeWith.size());
+        while (mergeWith[p] != -1) {
+            p = mergeWith[p];
+            BASPACHO_CHECK_LT(p, mergeWith.size());
+        }
+
+        // parent was merged? value changed, re-prioritize
+        if (oldP != p) {
+            double fillAfterMerge =
+                ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]);
+            mergeCandidates.emplace(fillAfterMerge, k, p);
+            continue;
+        }
+
+        double sk = nodeSize[k], rk = nodeRows[k], sp = nodeSize[p],
+               rp = nodeRows[p], sm = sp + sk;
+
+        // To decide if we're merging the nodes, we compute the flops of the
+        // independent eliminations, and compare it with the flops of the
+        // elimination of the merged node. If the flops of the merged node
+        // is smaller to the sum of the two nodes (plus an overhead constant)
+        // we will merge the nodes.
+        double elimFlopsK = sk * sk * sk + sk * sk * rk + sk * rk * rk;
+        double elimFlopsP = sp * sp * sp + sp * sp * rp + sp * rp * rp;
+        double elimFlopsMerg = sm * sm * sm + sm * sm * rp + sm * rp * rp;
+
+        bool willMerge = elimFlopsMerg < elimFlopsK + elimFlopsP + 5000000;
+
+        if (willMerge) {
+            mergeWith[k] = p;
+            nodeSize[p] += nodeSize[k];
+            numMerges++;
+        }
+    }
+
+    int64_t numMergesAlt = 0;
+    for (int64_t k = ord - 1; k >= 0; k--) {
+        int64_t p = mergeWith[k];
+        if (p == -1) {
+            continue;
+        }
+        int64_t a = mergeWith[p];
+        if (a != -1) {
+            mergeWith[k] = a;
+        }
+    }
+}
+
+void EliminationTree::computeMerges2() {
     int64_t ord = ss.order();
     vector<int64_t> height(ord, 0);
     vector<tuple<int64_t, int64_t, int64_t>> unmergedHeightNode;

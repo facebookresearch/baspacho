@@ -160,12 +160,19 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
 
 map<string, function<pair<double, double>(const SparseProblem&, bool)>>
     solvers = {
-        {"BaSpaCho_BLAS_nth=16",
+#ifdef BASPACHO_HAVE_CHOLMOD
+        {"1_CHOLMOD",
+         [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
+             return benchmarkCholmodSolve(prob.paramSize, prob.sparseStruct,
+                                          verbose);
+         }},
+#endif  // BASPACHO_HAVE_CHOLMOD
+        {"2_BaSpaCho_BLAS_nth=16",
          [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
              return benchmarkSolver(prob, {}, verbose);
          }},  //
 #ifdef BASPACHO_USE_CUBLAS
-        {"BaSpaCho_CUDA",
+        {"3_BaSpaCho_CUDA",
          [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
              return benchmarkSolver(
                  prob,
@@ -173,13 +180,6 @@ map<string, function<pair<double, double>(const SparseProblem&, bool)>>
                  verbose);
          }},
 #endif  // BASPACHO_USE_CUBLAS
-#ifdef BASPACHO_HAVE_CHOLMOD
-        {"CHOLMOD",
-         [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
-             return benchmarkCholmodSolve(prob.paramSize, prob.sparseStruct,
-                                          verbose);
-         }},
-#endif  // BASPACHO_HAVE_CHOLMOD
 };
 
 struct BenchmarkSettings {
