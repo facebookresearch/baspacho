@@ -72,7 +72,7 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
 
         vector<double> data =
             randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
-        factorSkel.damp(data, 0, sortedSs.ptrs.size() * 2);
+        factorSkel.damp(data, 0, factorSkel.order() * 1.5);
 
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
@@ -125,7 +125,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
 
         vector<double> data =
             randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
-        factorSkel.damp(data, 0, sortedSs.ptrs.size() * 2);
+        factorSkel.damp(data, 0, factorSkel.order() * 1.5);
 
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
@@ -178,7 +178,7 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
 
         vector<double> data =
             randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
-        factorSkel.damp(data, 0, sortedSs.ptrs.size() * 2);
+        factorSkel.damp(data, 0, factorSkel.order() * 1.5);
 
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
