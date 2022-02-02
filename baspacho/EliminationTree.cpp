@@ -74,10 +74,23 @@ void EliminationTree::buildTree() {
 }
 
 // TODO: expand on merge settings
-static constexpr double kPropRows = 0.6;
+static constexpr double kPropRows = 0.7;
 
 void EliminationTree::computeMerges() {
     int64_t ord = ss.order();
+    vector<int64_t> height(ord, 0);
+    vector<tuple<int64_t, int64_t, int64_t>> unmergedHeightNode;
+    unmergedHeightNode.reserve(ord);
+    for (int64_t k = 0; k < ord; k++) {
+        unmergedHeightNode.emplace_back(height[k], nodeSize[k], k);
+
+        int64_t par = parent[k];
+        if (par == -1) {
+            continue;
+        }
+        height[par] = max(height[par], height[k] + 1);
+    }
+
     mergeWith.assign(ord, -1);
     numMerges = 0;
     for (int64_t k = ord - 1; k >= 0; k--) {
@@ -91,6 +104,12 @@ void EliminationTree::computeMerges() {
 
         // determine if k and p should be merged
         bool willMerge = nodeRows[k] > (nodeRows[p] + nodeSize[p]) * kPropRows;
+
+        auto [height, _1, _2] = unmergedHeightNode[k];
+        if (height <= 1) {
+            willMerge = false;
+        }
+
         if (!willMerge) {
             continue;
         }
