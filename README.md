@@ -39,7 +39,7 @@ Optional libraries:
 
 Configuring with system blas (eg OpenBLAS):
 ```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 ```
 Configuring with MKL:
 ```
