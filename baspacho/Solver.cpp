@@ -458,14 +458,13 @@ pair<int64_t, bool> findLargestIndependentLumpSet(
 }
 
 OpsPtr getBackend(const Settings& settings) {
-    if (settings.backend == BackendRef) {
-        return simpleOps();
-    } else if (settings.backend == BackendBlas) {
+    if (settings.backend == BackendBlas) {
         return blasOps();
     } else if (settings.backend == BackendCuda) {
         return cudaOps();
     }
-    return Ops(nullptr);
+    BASPACHO_CHECK(settings.backend == BackendRef);
+    return simpleOps();
 }
 
 SolverPtr createSolver(const Settings& settings,

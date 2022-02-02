@@ -198,6 +198,7 @@ struct CudaNumericCtx : NumericCtx<T> {
     virtual void potrf(int64_t n, T* A) override {
         // cout << "potrf n=" << n << endl;
         OpInstance timer(sym.potrfStat);
+        sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
         int workspaceSize;
         cusolverCHECK(cusolverDnDpotrf_bufferSize(
@@ -288,15 +289,6 @@ struct CudaNumericCtx : NumericCtx<T> {
             pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
             matRectPtr, data);
     }
-
-    OpStat elimStat;
-    OpStat potrfStat;
-    int64_t potrfBiggestN = 0;
-    OpStat trsmStat;
-    OpStat sygeStat;
-    int64_t gemmCalls = 0;
-    int64_t syrkCalls = 0;
-    OpStat asmblStat;
 
     T* devTempBuffer;
     int64_t* devSpanToChainOffset;

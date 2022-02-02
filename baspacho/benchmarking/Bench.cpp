@@ -58,7 +58,7 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob,
     }
 
     if (verbose) {
-        // solver->ops->printStats(); // FIXME
+        solver->printStats();
         std::cout << "analysis: " << analysisTime << ", factor: " << factorTime
                   << std::endl
                   << std::endl;

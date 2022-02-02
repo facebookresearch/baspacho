@@ -76,11 +76,10 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
 
     virtual void potrf(int64_t n, T* A) override {
         OpInstance timer(sym.potrfStat);
+        sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
         Eigen::Map<MatRMaj<T>> matA(A, n, n);
         Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(matA);
-
-        sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
     }
 
     virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {

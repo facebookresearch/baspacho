@@ -143,10 +143,9 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
     virtual void potrf(int64_t n, T* A) override {
         OpInstance timer(sym.potrfStat);
+        sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
         LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', n, A, n);
-
-        sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
     }
 
     virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
