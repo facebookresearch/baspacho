@@ -7,9 +7,9 @@ set(CMAKE_CXX_STANDARD 17)
 message("* Build type: " ${CMAKE_BUILD_TYPE})
 
 # CUDA
-message("==============================[ CUDA ]==================================")
 set(BASPACHO_USE_CUBLAS ON CACHE BOOL "If on, CUDA support is enabled")
 if(BASPACHO_USE_CUBLAS)
+  message("==============================[ CUDA ]==================================")
   enable_language(CUDA)
   include(CheckLanguage)
   check_language(CUDA)
@@ -19,6 +19,7 @@ if(BASPACHO_USE_CUBLAS)
   message("* CUDA Includes : " ${CUDAToolkit_INCLUDE_DIRS})
   message("* CUDA Libraries: " ${CUDAToolkit_LIBRARY_DIR})
   include_directories(${CUDAToolkit_INCLUDE_DIRS})
+  add_compile_definitions(BASPACHO_USE_CUBLAS=1)
 endif()
 
 # BLAS. a few possibilities are:
@@ -150,16 +151,20 @@ add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 include_directories ("${PROJECT_SOURCE_DIR}")
 
-add_library(BaSpaCho
-            baspacho/CoalescedBlockMatrix.cpp
-            baspacho/CublasError.cpp
-            baspacho/EliminationTree.cpp
-            baspacho/MatOpsBlas.cpp
-            baspacho/MatOpsCuda.cu
-            baspacho/MatOpsRef.cpp
-            baspacho/Solver.cpp
-            baspacho/SparseStructure.cpp
-            baspacho/Utils.cpp)
+set(BaSpaCho_sources
+    baspacho/CoalescedBlockMatrix.cpp
+    baspacho/EliminationTree.cpp
+    baspacho/MatOpsBlas.cpp
+    baspacho/MatOpsRef.cpp
+    baspacho/Solver.cpp
+    baspacho/SparseStructure.cpp
+    baspacho/Utils.cpp)
+if(BASPACHO_USE_CUBLAS)
+  list(APPEND BaSpaCho_sources
+       baspacho/CublasError.cpp
+       baspacho/MatOpsCuda.cu)
+endif()
+add_library(BaSpaCho ${BaSpaCho_sources})
 target_link_libraries (BaSpaCho dispenso ${BLAS_LIBRARIES})
 
 if(BASPACHO_USE_CUBLAS)

@@ -2,7 +2,6 @@
 #include <chrono>
 
 #include "baspacho/CoalescedBlockMatrix.h"
-#include "baspacho/CudaDefs.h"
 #include "baspacho/DebugMacros.h"
 #include "baspacho/EliminationTree.h"
 #include "baspacho/Solver.h"
@@ -10,6 +9,10 @@
 #include "baspacho/Utils.h"
 #include "baspacho/benchmarking/BaAtLarge.h"
 #include "baspacho/testing/TestingUtils.h"
+
+#ifdef BASPACHO_USE_CUBLAS
+#include "baspacho/CudaDefs.h"
+#endif
 
 #ifdef BASPACHO_HAVE_CHOLMOD
 #include "BenchCholmod.h"
@@ -75,12 +78,15 @@ void testSolvers(Data& data) {
         std::cout << "Total Factor: " << factorTime << endl << std::endl;
     }
 
+#if defined(BASPACHO_USE_CUBLAS) || defined(BASPACHO_HAVE_CHOLMOD)
     // create cam-cam system
     vector<int64_t> camSz(numCams, 6);
     SparseStructure elimPtSs = origSs.addIndependentEliminationFill(0, numPts);
     SparseStructure camCamSs = elimPtSs.extractRightBottom(numPts);
+#endif  // defined(BASPACHO_USE_CUBLAS) || defined(BASPACHO_HAVE_CHOLMOD)
 
     // test Cuda
+#ifdef BASPACHO_USE_CUBLAS
     std::cout << "===========================================" << std::endl;
     std::cout << "Testing CUDA..." << std::endl;
     {
@@ -109,6 +115,7 @@ void testSolvers(Data& data) {
         solver->printStats();
         std::cout << "Total Factor: " << factorTime << endl << std::endl;
     }
+#endif  // BASPACHO_USE_CUBLAS
 
     // test Cholmod
 #ifdef BASPACHO_HAVE_CHOLMOD
@@ -117,7 +124,7 @@ void testSolvers(Data& data) {
     auto [aTime, fTime] = benchmarkCholmodSolve(camSz, camCamSs, true);
     std::cout << "Cholmod Analysis Time: " << aTime << "s" << std::endl;
     std::cout << "Cholmod Factor Time: " << fTime << "s" << std::endl;
-#endif
+#endif  // BASPACHO_HAVE_CHOLMOD
 }
 
 int main(int argc, char* argv[]) {

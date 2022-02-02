@@ -29,6 +29,27 @@ using OuterStridedCMajMatK = Eigen::Map<
     const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
     OuterStride>;
 
+// returns all pairs (x, y) with 0 <= x <= y < n, while p varies in 0 <= p <
+// n*(n+1)/2
+__device__ inline std::pair<int64_t, int64_t> toOrderedPair(int64_t n,
+                                                            int64_t p) {
+    // the trick below converts p that varies in the range 0,1,...,n*(n+1)/2
+    // to a pair x<=y, where y varies in the range 0,1,...,(n-1) and,
+    // for each y, x varies in the range 0,1,...,y
+    // furthermore, x increases sequentially in all pairs that are generated,
+    // and this will optimize the memory accesses
+    int64_t odd = n & 1;
+    int64_t m = n + 1 - odd;
+    int64_t x = p % m;            // here: x = 0,1,...,n-1
+    int64_t y = n - 1 - (p / m);  // here: y = n-1,n-2,...,floor(n/2)
+    if (x > y) {  // flip the triangle formed by points with x>y, and move it
+                  // close to the origin
+        x = x - y - 1;
+        y = n - 1 - odd - y;
+    }
+    return std::make_pair(x, y);
+}
+
 struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     CudaSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
         : CpuBaseSymbolicCtx(skel) {

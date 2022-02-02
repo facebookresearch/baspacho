@@ -6,11 +6,14 @@
 #include <random>
 #include <regex>
 
-#include "baspacho/CudaDefs.h"
 #include "baspacho/DebugMacros.h"
 #include "baspacho/Solver.h"
 #include "baspacho/testing/TestingMatGen.h"
 #include "baspacho/testing/TestingUtils.h"
+
+#ifdef BASPACHO_USE_CUBLAS
+#include "baspacho/CudaDefs.h"
+#endif
 
 #ifdef BASPACHO_HAVE_CHOLMOD
 #include "BenchCholmod.h"
@@ -40,6 +43,7 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob,
     solver->factorSkel.damp(data, 0, solver->factorSkel.order() * 1.2);
 
     double factorTime;
+#ifdef BASPACHO_USE_CUBLAS
     if (settings.backend == BackendCuda) {
         double* dataGPU;
         cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
@@ -51,7 +55,9 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob,
         cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
                            cudaMemcpyDeviceToHost));
         cuCHECK(cudaFree(dataGPU));
-    } else {
+    } else
+#endif  // BASPACHO_USE_CUBLAS
+    {
         auto startFactor = hrc::now();
         solver->factor(data.data(), verbose);
         factorTime = tdelta(hrc::now() - startFactor).count();
@@ -158,20 +164,22 @@ map<string, function<pair<double, double>(const SparseProblem&, bool)>>
          [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
              return benchmarkSolver(prob, {}, verbose);
          }},  //
+#ifdef BASPACHO_USE_CUBLAS
         {"BaSpaCho_CUDA",
          [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
              return benchmarkSolver(
                  prob,
                  {.findSparseEliminationRanges = false, .backend = BackendCuda},
                  verbose);
-         }},  //
+         }},
+#endif  // BASPACHO_USE_CUBLAS
 #ifdef BASPACHO_HAVE_CHOLMOD
         {"CHOLMOD",
          [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
              return benchmarkCholmodSolve(prob.paramSize, prob.sparseStruct,
                                           verbose);
-         }},  //
-#endif
+         }},
+#endif  // BASPACHO_HAVE_CHOLMOD
 };
 
 struct BenchmarkSettings {

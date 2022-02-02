@@ -461,7 +461,12 @@ OpsPtr getBackend(const Settings& settings) {
     if (settings.backend == BackendBlas) {
         return blasOps();
     } else if (settings.backend == BackendCuda) {
+#ifdef BASPACHO_USE_CUBLAS
         return cudaOps();
+#else
+        std::cerr << "Baspacho: CUDA not enabled at compile time" << std::endl;
+        abort();
+#endif
     }
     BASPACHO_CHECK(settings.backend == BackendRef);
     return simpleOps();
