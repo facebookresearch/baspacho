@@ -83,8 +83,9 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                 factorLump(skel, data, l);
             }
         } else {
+            dispenso::TaskSet taskSet(sym.threadPool);
             dispenso::parallel_for(
-                dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
+                taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
                 [&](int64_t lBegin, int64_t lEnd) {
                     for (int64_t l = lBegin; l < lEnd; l++) {
                         factorLump(skel, data, l);
@@ -110,8 +111,9 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                         : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
                 };
                 vector<ElimContext> contexts;
+                dispenso::TaskSet taskSet(sym.threadPool);
                 dispenso::parallel_for(
-                    contexts,
+                    taskSet, contexts,
                     [=]() -> ElimContext {
                         return ElimContext(elim.maxBufferSize, numSpans);
                     },
@@ -130,8 +132,9 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                     eliminateVerySparseRowChain(elim, skel, data, sRel);
                 }
             } else {
+                dispenso::TaskSet taskSet(sym.threadPool);
                 dispenso::parallel_for(
-                    dispenso::makeChunkedRange(0UL, numElimRows, 5UL),
+                    taskSet, dispenso::makeChunkedRange(0UL, numElimRows, 5UL),
                     [&, this](size_t sBegin, size_t sEnd) {
                         for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
                             eliminateVerySparseRowChain(elim, skel, data, sRel);
@@ -159,8 +162,9 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
             // col-major's upper = (row-major's lower).transpose()
             Eigen::Map<const MatCMajD> matA(A, n, n);
-            dispenso::parallel_for(                      //
-                dispenso::makeChunkedRange(0, k, 16UL),  //
+            dispenso::TaskSet taskSet(sym.threadPool);
+            dispenso::parallel_for(
+                taskSet, dispenso::makeChunkedRange(0, k, 16UL),
                 [&](int64_t k1, int64_t k2) {
                     Eigen::Map<MatRMaj<double>> matB(B + n * k1, k2 - k1, n);
                     matA.triangularView<Eigen::Upper>()
@@ -319,8 +323,9 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                 }
             }
         } else {
+            dispenso::TaskSet taskSet(sym.threadPool);
             dispenso::parallel_for(
-                dispenso::makeChunkedRange(0, numBlockRows, 3UL),
+                taskSet, dispenso::makeChunkedRange(0, numBlockRows, 3UL),
                 [&](int64_t rFrom, int64_t rTo) {
                     for (int64_t r = rFrom; r < rTo; r++) {
                         int64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
