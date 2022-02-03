@@ -56,6 +56,10 @@ void EliminationTree::buildTree() {
     }
 }
 
+static constexpr int64_t maxSparseElimNodeSize = 12;
+static constexpr int64_t minNumSparseElimNodes = 50;
+static constexpr double flopsColOverhead = 2e7;
+
 void EliminationTree::computeMerges(bool computeSparseElimRanges) {
     int64_t ord = ss.order();
 
@@ -86,8 +90,6 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
     vector<bool> forbidMerge(ord, false);
     if (computeSparseElimRanges) {
         int64_t mergeHeight = 0;
-        static constexpr int64_t maxSparseElimNodeSize = 8;
-        static constexpr int64_t minNumSparseElimNodes = 30;
         sparseElimRanges.push_back(0);
         for (int64_t k0 = 0; k0 < ord; /* */) {
             int64_t k1 = k0;
@@ -158,7 +160,8 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
         double elimFlopsP = sp * sp * sp + sp * sp * rp + sp * rp * rp;
         double elimFlopsMerg = sm * sm * sm + sm * sm * rp + sm * rp * rp;
 
-        bool willMerge = elimFlopsMerg < elimFlopsK + elimFlopsP + 5000000;
+        bool willMerge =
+            elimFlopsMerg < elimFlopsK + elimFlopsP + flopsColOverhead;
 
         if (willMerge) {
             mergeWith[k] = p;

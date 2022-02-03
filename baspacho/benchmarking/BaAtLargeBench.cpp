@@ -34,7 +34,7 @@ void computeCost(Data& data) {
             Cost::compute_residual(obs.imgPos, pt, cam.T_W_C, cam.f_k1_k2);
         totCost += 0.5 * err.squaredNorm();
     }
-    std::cout << "tot cost: " << totCost << std::endl;
+    cout << "tot cost: " << totCost << endl;
 }
 
 void testSolvers(Data& data) {
@@ -42,7 +42,7 @@ void testSolvers(Data& data) {
     int64_t numCams = data.cameras.size();
     int64_t totNumParams = numPts + numCams;
 
-    std::cout << "Build struct..." << std::endl;
+    // cout << "Build struct..." << endl;
     vector<int64_t> paramSize(totNumParams);
     vector<set<int64_t>> colBlocks(totNumParams);
     for (int64_t i = 0; i < numPts; i++) {  // points go first
@@ -57,13 +57,15 @@ void testSolvers(Data& data) {
         colBlocks[obs.ptIdx].insert(numPts + obs.camIdx);
     }
 
-    std::cout << "Building ss..." << std::endl;
+    // cout << "Building ss..." << endl;
     SparseStructure origSs = columnsToCscStruct(colBlocks).transpose();
 
-    std::cout << "===========================================" << std::endl;
-    std::cout << "Testing BLAS..." << std::endl;
+    cout << "===========================================" << endl;
+    cout << "Testing Baspacho/BLAS (on full Points+Cameras system)" << endl;
     {
+        auto startAnalysis = hrc::now();
         auto solver = createSolverSchur({}, paramSize, origSs, {0, numPts});
+        double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
         // generate mock data, make positive def
         vector<double> matData =
@@ -75,7 +77,13 @@ void testSolvers(Data& data) {
         double factorTime = tdelta(hrc::now() - startFactor).count();
 
         solver->printStats();
-        std::cout << "Total Factor: " << factorTime << endl << std::endl;
+        double elimTime = solver->elimCtxs[0]->elimStat.totTime;
+        cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
+        cout << "Total Factor Time....: " << factorTime << "s" << endl;
+        cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
+        cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s"
+             << endl
+             << endl;
     }
 
 #if defined(BASPACHO_USE_CUBLAS) || defined(BASPACHO_HAVE_CHOLMOD)
@@ -87,12 +95,14 @@ void testSolvers(Data& data) {
 
     // test Cuda
 #ifdef BASPACHO_USE_CUBLAS
-    std::cout << "===========================================" << std::endl;
-    std::cout << "Testing CUDA..." << std::endl;
+    cout << "===========================================" << endl;
+    cout << "Testing CUDA (on reduced Camera-Camera matrix)" << endl;
     {
+        auto startAnalysis = hrc::now();
         auto solver = createSolver(
             {.findSparseEliminationRanges = false, .backend = BackendCuda},
             camSz, camCamSs);
+        double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
         // generate mock data, make positive def
         vector<double> matData =
@@ -113,28 +123,30 @@ void testSolvers(Data& data) {
         cuCHECK(cudaFree(dataGPU));
 
         solver->printStats();
-        std::cout << "Total Factor: " << factorTime << endl << std::endl;
+        cout << "Cam-Cam Analysis Time: " << analysisTime << "s" << endl;
+        cout << "Cam-Cam Factor Time..: " << factorTime << "s" << endl << endl;
     }
 #endif  // BASPACHO_USE_CUBLAS
 
     // test Cholmod
 #ifdef BASPACHO_HAVE_CHOLMOD
-    std::cout << "===========================================" << std::endl;
-    std::cout << "Testing CHOLMOD..." << std::endl;
+    cout << "===========================================" << endl;
+    cout << "Testing CHOLMOD (on reduced Camera-Camera matrix)" << endl;
     auto [aTime, fTime] = benchmarkCholmodSolve(camSz, camCamSs, true);
-    std::cout << "Cholmod Analysis Time: " << aTime << "s" << std::endl;
-    std::cout << "Cholmod Factor Time: " << fTime << "s" << std::endl;
+    cout << "Cam-Cam Analysis Time: " << aTime << "s" << endl;
+    cout << "Cam-Cam Factor Time..: " << fTime << "s" << endl;
 #endif  // BASPACHO_HAVE_CHOLMOD
 }
 
 int main(int argc, char* argv[]) {
     if (argc <= 1) {
-        std::cout << "Usage: prog bal_file.txt" << std::endl;
+        cout << "Usage: prog bal_file.txt" << endl;
         return 1;
     }
 
+    cout << "Loading data..." << endl;
     Data data;
-    data.load(argv[1], true);
+    data.load(argv[1], false);
 
     testSolvers(data);
 

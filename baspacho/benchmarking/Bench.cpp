@@ -163,8 +163,14 @@ map<string, function<pair<double, double>(const SparseProblem&, bool)>>
 #ifdef BASPACHO_HAVE_CHOLMOD
         {"1_CHOLMOD",
          [](const SparseProblem& prob, bool verbose) -> pair<double, double> {
-             return benchmarkCholmodSolve(prob.paramSize, prob.sparseStruct,
-                                          verbose);
+             auto [analysisTime, factorTime] = benchmarkCholmodSolve(
+                 prob.paramSize, prob.sparseStruct, verbose);
+             if (verbose) {
+                 std::cout << "analysis: " << analysisTime
+                           << ", factor: " << factorTime << std::endl
+                           << std::endl;
+             }
+             return std::make_pair(analysisTime, factorTime);
          }},
 #endif  // BASPACHO_HAVE_CHOLMOD
         {"2_BaSpaCho_BLAS_nth=16",

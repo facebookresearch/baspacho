@@ -419,19 +419,24 @@ void Solver::solveLt(const double* matData, double* vecData, int64_t stride,
 }
 
 void Solver::printStats() const {
-    std::cout << "Data size: " << factorSkel.dataSize() << endl;
-    std::cout << "Temp block: " << maxElimTempSize << endl;
-    for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
-        std::cout << "Elim set [" << elimLumpRanges[l] << ".."
-                  << elimLumpRanges[l + 1]
-                  << "]: " << elimCtxs[l]->elimStat.toString() << std::endl;
+    cout << "Matrix stats:" << endl;
+    cout << "  data size......: " << factorSkel.dataSize() << endl;
+    cout << "  solve temp data: " << maxElimTempSize << endl;
+    if (elimLumpRanges.size() >= 2) {
+        cout << "Sparse elimination sets:" << endl;
     }
-    std::cout << "Biggest dense block: " << symCtx->potrfBiggestN
-              << "\npotrf: " << symCtx->potrfStat.toString()
-              << "\ntrsm: " << symCtx->trsmStat.toString()  //
-              << "\nsyrk/gemm(" << symCtx->syrkCalls << "+" << symCtx->gemmCalls
-              << "): " << symCtx->sygeStat.toString()
-              << "\nasmbl: " << symCtx->asmblStat.toString() << std::endl;
+    for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+        cout << "  elim set [" << elimLumpRanges[l] << ".."
+             << elimLumpRanges[l + 1]
+             << "]: " << elimCtxs[l]->elimStat.toString() << endl;
+    }
+    cout << "Timings and call stats:"
+         << "\n  largest node size: " << symCtx->potrfBiggestN
+         << "\n  potrf: " << symCtx->potrfStat.toString()
+         << "\n  trsm: " << symCtx->trsmStat.toString()  //
+         << "\n  syrk/gemm(" << symCtx->syrkCalls << "+" << symCtx->gemmCalls
+         << "): " << symCtx->sygeStat.toString()
+         << "\n  asmbl: " << symCtx->asmblStat.toString() << endl;
 }
 
 OpsPtr getBackend(const Settings& settings) {
