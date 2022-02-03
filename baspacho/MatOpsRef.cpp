@@ -74,6 +74,66 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
         }
     }
 
+    // This is an alternative of doElimination, which is however written in such
+    // a way to mock the sparse elimination as done on the GPU. This is in order
+    // to test the logic here, and then create a kernel doing something similar
+    void doEliminationMockSparse(const SymElimCtx& elimData, T* data,
+                                 int64_t lumpsBegin, int64_t lumpsEnd) {
+        const CpuBaseSymElimCtx* pElim =
+            dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
+        BASPACHO_CHECK_NOTNULL(pElim);
+        const CpuBaseSymElimCtx& elim = *pElim;
+        OpInstance timer(elim.elimStat);
+        const CoalescedBlockMatrixSkel& skel = sym.skel;
+
+        for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
+            factorLump(skel, data, l);
+        }
+
+        for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
+            int64_t startPtr = skel.chainColPtr[l] + 1;  // skip diag block
+            int64_t endPtr = skel.chainColPtr[l + 1];
+            int64_t lColSize = skel.lumpStart[l + 1] - skel.lumpStart[l];
+
+            for (int64_t i = startPtr; i < endPtr; i++) {
+                int64_t si = skel.chainRowSpan[i];
+                int64_t siSize = skel.spanStart[si + 1] - skel.spanStart[si];
+                int64_t siDataPtr = skel.chainData[i];
+                Eigen::Map<MatRMaj<T>> ilBlock(data + siDataPtr, siSize,
+                                               lColSize);
+
+                int64_t targetLump = skel.spanToLump[si];
+                int64_t targetSpanOffsetInLump = skel.spanOffsetInLump[si];
+                int64_t targetStartPtr =
+                    skel.chainColPtr[targetLump];  // skip diag block
+                int64_t targetEndPtr = skel.chainColPtr[targetLump + 1];
+                int64_t targetLumpSize =
+                    skel.lumpStart[targetLump + 1] - skel.lumpStart[targetLump];
+
+                for (int64_t j = i; j < endPtr; j++) {
+                    int64_t sj = skel.chainRowSpan[j];
+                    int64_t sjSize =
+                        skel.spanStart[sj + 1] - skel.spanStart[sj];
+                    int64_t sjDataPtr = skel.chainData[j];
+
+                    Eigen::Map<MatRMaj<T>> jlBlock(data + sjDataPtr, sjSize,
+                                                   lColSize);
+
+                    uint64_t pos =
+                        bisect(skel.chainRowSpan.data() + targetStartPtr,
+                               targetEndPtr - targetStartPtr, sj);
+                    BASPACHO_CHECK_EQ(skel.chainRowSpan[targetStartPtr + pos],
+                                      sj);
+                    int64_t jiDataPtr = skel.chainData[targetStartPtr + pos];
+                    OuterStridedMatM<T> jiBlock(
+                        data + jiDataPtr + targetSpanOffsetInLump, sjSize,
+                        siSize, OuterStride(targetLumpSize));
+                    jiBlock -= jlBlock * ilBlock.transpose();
+                }
+            }
+        }
+    }
+
     virtual void potrf(int64_t n, T* A) override {
         OpInstance timer(sym.potrfStat);
         sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);

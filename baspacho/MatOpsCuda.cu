@@ -187,6 +187,9 @@ __global__ static inline void factor_lumps_kernel(
 }
 
 template <typename T>
+__global__ static inline void sparse_elim_kernel() {}
+
+template <typename T>
 __device__ static inline void stridedMatSubDev(T* dst, int64_t dstStride,
                                                const T* src, int64_t srcStride,
                                                int64_t rSize, int64_t cSize) {
