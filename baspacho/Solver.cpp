@@ -457,9 +457,7 @@ SolverPtr createSolver(const Settings& settings,
     SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
 
     std::vector<int64_t> sortedParamSize(paramSize.size());
-    for (size_t i = 0; i < paramSize.size(); i++) {
-        sortedParamSize[invPerm[i]] = paramSize[i];
-    }
+    leftPermute(sortedParamSize.begin(), invPerm, paramSize);
 
     EliminationTree et(sortedParamSize, sortedSs);
     et.buildTree();
@@ -468,10 +466,7 @@ SolverPtr createSolver(const Settings& settings,
 
     // compute span start as cumSum of sorted paramSize
     vector<int64_t> finalSpanStart(paramSize.size() + 1);
-    for (size_t i = 0; i < paramSize.size(); i++) {
-        finalSpanStart[et.permInverse[i]] = sortedParamSize[i];
-    }
-    finalSpanStart[paramSize.size()] = 0;
+    leftPermute(finalSpanStart.begin(), et.permInverse, sortedParamSize);
     cumSumVec(finalSpanStart);
 
     BASPACHO_CHECK_EQ(finalSpanStart.size() - 1,
@@ -534,18 +529,17 @@ SolverPtr createSolverSchur(const Settings& settings,
 
     // compute span start as cumSum of sorted paramSize
     vector<int64_t> fullSpanStart(paramSize.size() + 1);
-    for (size_t i = 0; i < paramSize.size(); i++) {
-        fullSpanStart[fullInvPerm[i]] = paramSize[i];
-    }
+    leftPermute(fullSpanStart.begin(), fullInvPerm, paramSize);
     fullSpanStart[paramSize.size()] = 0;
     cumSumVec(fullSpanStart);
 
     // compute lump to span, knowing up to elimEnd it's the identity
-    vector<int64_t> fullLumpToSpan(elimEnd + et.lumpToSpan.size());
+    vector<int64_t> fullLumpToSpan;
+    fullLumpToSpan.reserve(elimEnd + et.lumpToSpan.size());
+    fullLumpToSpan.resize(elimEnd);
     iota(fullLumpToSpan.begin(), fullLumpToSpan.begin() + elimEnd, 0);
-    for (size_t i = 0; i < et.lumpToSpan.size(); i++) {
-        fullLumpToSpan[i + elimEnd] = elimEnd + et.lumpToSpan[i];
-    }
+    shiftConcat(fullLumpToSpan, elimEnd, et.lumpToSpan.begin(),
+                et.lumpToSpan.end());
     BASPACHO_CHECK_EQ(fullSpanStart.size() - 1,
                       fullLumpToSpan[fullLumpToSpan.size() - 1]);
 
@@ -559,9 +553,8 @@ SolverPtr createSolverSchur(const Settings& settings,
     fullColStart.insert(fullColStart.begin(), sortedSsT.ptrs.begin(),
                         sortedSsT.ptrs.begin() + elimEnd);
     int64_t elimEndDataPtr = sortedSsT.ptrs[elimEnd];
-    for (size_t i = 0; i < et.colStart.size(); i++) {
-        fullColStart.push_back(elimEndDataPtr + et.colStart[i]);
-    }
+    shiftConcat(fullColStart, elimEndDataPtr, et.colStart.begin(),
+                et.colStart.end());
     BASPACHO_CHECK_EQ(fullColStart.size(), fullLumpToSpan.size());
 
     // fullRowParam joining sortedSsT.inds and et.rowParam (moved)
@@ -569,9 +562,7 @@ SolverPtr createSolverSchur(const Settings& settings,
     fullRowParam.reserve(elimEndDataPtr + et.rowParam.size());
     fullRowParam.insert(fullRowParam.begin(), sortedSsT.inds.begin(),
                         sortedSsT.inds.begin() + elimEndDataPtr);
-    for (size_t i = 0; i < et.rowParam.size(); i++) {
-        fullRowParam.push_back(et.rowParam[i] + elimEnd);
-    }
+    shiftConcat(fullRowParam, elimEnd, et.rowParam.begin(), et.rowParam.end());
     BASPACHO_CHECK_EQ(fullRowParam.size(),
                       fullColStart[fullColStart.size() - 1]);
 
@@ -580,11 +571,10 @@ SolverPtr createSolverSchur(const Settings& settings,
 
     // include (additional) progressive Schur elimination sets, shifted
     std::vector<int64_t> fullElimLumpRanges = elimLumpRanges;
-    if (settings.findSparseEliminationRanges) {
+    if (!et.sparseElimRanges.empty()) {
         int64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
-        for (size_t i = 1; i < et.sparseElimRanges.size(); i++) {
-            fullElimLumpRanges.push_back(rangeStart + et.sparseElimRanges[i]);
-        }
+        shiftConcat(fullElimLumpRanges, rangeStart, et.sparseElimRanges.begin(),
+                    et.sparseElimRanges.end());
     }
     if (fullElimLumpRanges.size() == 1) {
         fullElimLumpRanges.pop_back();

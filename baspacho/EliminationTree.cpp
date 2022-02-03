@@ -272,7 +272,7 @@ void EliminationTree::computeAggregateStruct() {
         ss.symmetricPermutation(permInverse, /* lowerHalf = */ false,
                                 /* sortIndices = */ false)
             .addFullEliminationFill()
-            .transpose();
+            .transpose(false);
 
     vector<int64_t> tags(ord, -1);  // check if row el was added already
     colStart.push_back(0);

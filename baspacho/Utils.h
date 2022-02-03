@@ -57,8 +57,17 @@ inline int64_t bisect(const int64_t* array, int64_t size, int64_t needle) {
     return a;
 }
 
-template <typename T, typename Iterator>
-void leftPermute(Iterator& it, const std::vector<int64_t>& perm,
+// appends all elements x shifted by a given amount (x + shift)
+template <class ForwardIt>
+inline void shiftConcat(std::vector<int64_t>& target, int64_t shift,
+                        ForwardIt first, ForwardIt last) {
+    while (first != last) {
+        target.push_back(shift + *first++);
+    }
+}
+
+template <typename T, typename ForwardIt>
+void leftPermute(ForwardIt it, const std::vector<int64_t>& perm,
                  const std::vector<T>& w) {
     for (size_t i = 0; i < perm.size(); i++) {
         *(it + perm[i]) = w[i];
