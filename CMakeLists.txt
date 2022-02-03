@@ -246,6 +246,10 @@ add_baspacho_test(
   SolveTest
   baspacho/tests/SolveTest.cpp
 )
+add_baspacho_test(
+  MathUtilsTest
+  baspacho/tests/MathUtilsTest.cpp
+)
 
 if(BASPACHO_USE_CUBLAS)
   add_baspacho_test(

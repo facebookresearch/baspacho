@@ -66,6 +66,25 @@ struct CudaSymElimCtx : SymElimCtx {
 #endif
 };
 
+template <typename T>
+struct DevMirror {
+    DevMirror() {}
+    ~DevMirror() {
+        if (ptr) {
+            cuCHECK(cudaFree(ptr));
+        }
+    }
+    void load(const vector<T>& vec) {
+        if (ptr) {
+            cuCHECK(cudaFree(ptr));
+        }
+        cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T)));
+        cuCHECK(cudaMemcpy(ptr, vec.data(), vec.size() * sizeof(T),
+                           cudaMemcpyHostToDevice));
+    }
+    T* ptr = nullptr;
+};
+
 struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     CudaSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
         : CpuBaseSymbolicCtx(skel) {
@@ -76,22 +95,14 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         // cusolverCHECK(cusolverDnSetStream(cusolverDnH, stream));
 
         // cout << "sym-init..." << endl;
-        cuCHECK(cudaMalloc((void**)&devChainRowsTillEnd,
-                           skel.chainRowsTillEnd.size() * sizeof(int64_t)));
-        cuCHECK(cudaMemcpy(devChainRowsTillEnd, skel.chainRowsTillEnd.data(),
-                           skel.chainRowsTillEnd.size() * sizeof(int64_t),
-                           cudaMemcpyHostToDevice));
-        cuCHECK(cudaMalloc((void**)&devChainRowSpan,
-                           skel.chainRowSpan.size() * sizeof(int64_t)));
-        cuCHECK(cudaMemcpy(devChainRowSpan, skel.chainRowSpan.data(),
-                           skel.chainRowSpan.size() * sizeof(int64_t),
-                           cudaMemcpyHostToDevice));
-        cuCHECK(cudaMalloc((void**)&devSpanOffsetInLump,
-                           skel.spanOffsetInLump.size() * sizeof(int64_t)));
-        cuCHECK(cudaMemcpy(devSpanOffsetInLump, skel.spanOffsetInLump.data(),
-                           skel.spanOffsetInLump.size() * sizeof(int64_t),
-                           cudaMemcpyHostToDevice));
-        // cout << "sym-init done!" << endl;
+        devChainRowsTillEnd.load(skel.chainRowsTillEnd);
+        devChainRowSpan.load(skel.chainRowSpan);
+        devSpanOffsetInLump.load(skel.spanOffsetInLump);
+        devLumpStart.load(skel.lumpStart);
+        devChainColPtr.load(skel.chainColPtr);
+        devChainData.load(skel.chainData);
+        devBoardColPtr.load(skel.boardColPtr);
+        devBoardChainColOrd.load(skel.boardChainColOrd);
     }
 
     virtual ~CudaSymbolicCtx() override {
@@ -100,15 +111,6 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         }
         if (cusolverDnH) {
             cusolverCHECK(cusolverDnDestroy(cusolverDnH));
-        }
-        if (devChainRowsTillEnd) {
-            cuCHECK(cudaFree(devChainRowsTillEnd));
-        }
-        if (devChainRowSpan) {
-            cuCHECK(cudaFree(devChainRowSpan));
-        }
-        if (devSpanOffsetInLump) {
-            cuCHECK(cudaFree(devSpanOffsetInLump));
         }
     }
 
@@ -130,9 +132,14 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     cublasHandle_t cublasH = nullptr;
     cusolverDnHandle_t cusolverDnH = nullptr;
 
-    int64_t* devChainRowsTillEnd = nullptr;
-    int64_t* devChainRowSpan = nullptr;
-    int64_t* devSpanOffsetInLump = nullptr;
+    DevMirror<int64_t> devChainRowsTillEnd;
+    DevMirror<int64_t> devChainRowSpan;
+    DevMirror<int64_t> devSpanOffsetInLump;
+    DevMirror<int64_t> devLumpStart;
+    DevMirror<int64_t> devChainColPtr;
+    DevMirror<int64_t> devChainData;
+    DevMirror<int64_t> devBoardColPtr;
+    DevMirror<int64_t> devBoardChainColOrd;
 };
 
 // cuda ops implemented using CUBLAS and custom kernels
@@ -159,6 +166,7 @@ __global__ static inline void factor_lumps_kernel(
     int64_t colStart = chainColPtr[lump];
     int64_t dataPtr = chainData[colStart];
 
+#if 0
     // in-place lower diag cholesky dec on diagonal block
     Eigen::Map<MatRMaj<T>> diagBlock(data + dataPtr, lumpSize, lumpSize);
     { Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(diagBlock); }
@@ -176,6 +184,7 @@ __global__ static inline void factor_lumps_kernel(
     diagBlock.template triangularView<Eigen::Lower>()
         .transpose()
         .template solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
+#endif
 }
 
 template <typename T>
@@ -255,10 +264,10 @@ struct CudaNumericCtx : NumericCtx<T> {
 
         int wgs = 32;
         int numGroups = (lumpsEnd - lumpsBegin + wgs - 1) / wgs;
-        /*factor_lumps_kernel<double><<<numGroups, wgs>>>(
-            sym.devLumpStart, sym.devChainColPtr, sym.devChainData,
-            sym.devBoardColPtr, sym.devBoardChainColOrd,
-            sym.devChainRowsTillEnd, data, lumpsBegin, lumpsEnd);*/
+        factor_lumps_kernel<double><<<numGroups, wgs>>>(
+            sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+            sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
+            sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
 
         /*for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
             factorLump(skel, data, l);
@@ -356,10 +365,10 @@ struct CudaNumericCtx : NumericCtx<T> {
         BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
         OpInstance timer(sym.asmblStat);
         const int64_t* pChainRowsTillEnd =
-            sym.devChainRowsTillEnd + srcColDataOffset;
-        const int64_t* pToSpan = sym.devChainRowSpan + srcColDataOffset;
+            sym.devChainRowsTillEnd.ptr + srcColDataOffset;
+        const int64_t* pToSpan = sym.devChainRowSpan.ptr + srcColDataOffset;
         const int64_t* pSpanToChainOffset = devSpanToChainOffset;
-        const int64_t* pSpanOffsetInLump = sym.devSpanOffsetInLump;
+        const int64_t* pSpanOffsetInLump = sym.devSpanOffsetInLump.ptr;
 
         const T* matRectPtr = devTempBuffer;
 
