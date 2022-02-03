@@ -293,7 +293,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         const int64_t* pSpanOffsetInLump = skel.spanOffsetInLump.data();
 
 #ifdef BASPACHO_HAVE_GEMM_BATCH
-        BASPACHO_CHECK_LT(numBatch, tempBuffer.size());
+        BASPACHO_CHECK_LT(numBatch, (int64_t)tempBuffer.size());
         const double* matRectPtr =
             numBatch == -1 ? tempBuffer.data() : tempBufPtrs[numBatch];
 #else

@@ -185,25 +185,25 @@ add_library(testing
 target_link_libraries (testing BaSpaCho)
 
 
-set(BAL_test_sources
+set(BAL_bench_sources
     baspacho/benchmarking/BaAtLarge.cpp
-    baspacho/benchmarking/BaAtLargeTest.cpp)
+    baspacho/benchmarking/BaAtLargeBench.cpp)
 set(bench_sources
     baspacho/benchmarking/Bench.cpp)
 
 if(HAVE_CHOLMOD)
-  list(APPEND BAL_test_sources baspacho/benchmarking/BenchCholmod.cpp)
+  list(APPEND BAL_bench_sources baspacho/benchmarking/BenchCholmod.cpp)
   list(APPEND bench_sources baspacho/benchmarking/BenchCholmod.cpp)
 endif()
 
-add_executable(BAL_test ${BAL_test_sources})
-target_link_libraries (BAL_test BaSpaCho testing)
+add_executable(BAL_bench ${BAL_bench_sources})
+target_link_libraries (BAL_bench BaSpaCho testing)
 
 add_executable(bench ${bench_sources})
 target_link_libraries (bench BaSpaCho testing)
 
 if(HAVE_CHOLMOD)
-  target_link_libraries (BAL_test ${CHOLMOD_LIBRARIES})
+  target_link_libraries (BAL_bench ${CHOLMOD_LIBRARIES})
   target_link_libraries (bench ${CHOLMOD_LIBRARIES})
 endif()
 

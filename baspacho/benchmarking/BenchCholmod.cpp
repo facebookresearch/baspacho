@@ -16,7 +16,7 @@ using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
 std::pair<double, double> benchmarkCholmodSolve(
-    const vector<int64_t>& paramSize, const SparseStructure& ss, bool verbose) {
+    const vector<int64_t>& paramSize, const SparseStructure& ss, int verbose) {
     BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
     vector<int64_t> rowPtr, colInd;
     vector<double> val;
@@ -29,7 +29,7 @@ std::pair<double, double> benchmarkCholmodSolve(
     uniform_real_distribution<double> unif(-1.0, 1.0);
     double diagBoost = totSize * 2;  // make positive definite
 
-    if (verbose) {
+    if (verbose >= 2) {
         std::cout << "to csr... (order=" << totSize << ")" << std::endl;
     }
     for (int64_t rb = 0; rb < paramSize.size(); rb++) {
@@ -49,7 +49,7 @@ std::pair<double, double> benchmarkCholmodSolve(
             rowPtr.push_back(colInd.size());
         }
     }
-    if (verbose) {
+    if (verbose >= 2) {
         std::cout << "to csr done." << std::endl;
     }
 
@@ -79,18 +79,18 @@ std::pair<double, double> benchmarkCholmodSolve(
     A.xtype = CHOLMOD_REAL;
     A.dtype = CHOLMOD_DOUBLE;
 
-    if (verbose) {
+    if (verbose >= 2) {
         std::cout << "Analyzing..." << std::endl;
     }
     auto startAnalysis = hrc::now();
     cholmod_factor* cholmodFactor_ = cholmod_l_analyze(&A, &cc_);
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
-    if (verbose) {
+    if (verbose >= 2) {
         std::cout << "Analysis time: " << analysisTime << "s" << std::endl;
     }
     BASPACHO_CHECK_EQ(cc_.status, CHOLMOD_OK);
 
-    if (verbose) {
+    if (verbose >= 2) {
         std::cout << "Factoring..." << std::endl;
     }
     auto startFactor = hrc::now();
@@ -100,13 +100,14 @@ std::pair<double, double> benchmarkCholmodSolve(
     long cholmod_status = cholmod_l_factorize(&A, cholmodFactor_, &cc_);
     cc_.print = oldPrintLevel;
     double factorTime = tdelta(hrc::now() - startFactor).count();
-    if (verbose) {
+    if (verbose >= 2) {
         std::cout << "Factor time: " << factorTime << "s" << std::endl;
     }
 
-    if (verbose) {
-        std::cout << "Cholmod, A size: " << A.ncol << ", nz: " << A.nzmax
-                  << " (" << A.nzmax / ((double)A.ncol * A.nrow) << " fill)"
+    if (verbose >= 1) {
+        std::cout << "Matrix stats:"
+                  << "\n  A size: " << A.ncol << "\n  nz: " << A.nzmax
+                  << "\n  fill: " << A.nzmax / ((double)A.ncol * A.nrow)
                   << std::endl;
         if (!cholmodFactor_->is_super) {
             std::cout << "Cholmod, simplicial factor nz: "
@@ -115,23 +116,25 @@ std::pair<double, double> benchmarkCholmodSolve(
                              ((double)cholmodFactor_->n * cholmodFactor_->n)
                       << " fill)" << std::endl;
         } else {
-            std::cout << "Cholmod\nsupernodes: " << cholmodFactor_->nsuper
-                      << "\nssize: " << cholmodFactor_->ssize
-                      << "\nxsize: " << cholmodFactor_->xsize
-                      << "\nmaxcsize: " << cholmodFactor_->maxcsize
-                      << "\nmaxesize: " << cholmodFactor_->maxesize << " ("
+            std::cout << "Node stats:"
+                      << "\n  supernodes: " << cholmodFactor_->nsuper
+                      << "\n  ssize: " << cholmodFactor_->ssize
+                      << "\n  xsize: " << cholmodFactor_->xsize
+                      << "\n  maxcsize: " << cholmodFactor_->maxcsize
+                      << "\n  maxesize: " << cholmodFactor_->maxesize << " ("
                       << cholmodFactor_->xsize /
                              ((double)cholmodFactor_->n * cholmodFactor_->n)
                       << " fill)" << std::endl;
-            std::cout << "Stats:\ngemm calls: " << cc_.cholmod_cpu_gemm_calls
+            std::cout << "Timings and call stats:"
+                      << "\n  gemm calls: " << cc_.cholmod_cpu_gemm_calls
                       << ", time: " << cc_.cholmod_cpu_gemm_time
-                      << "\nsyrk calls: " << cc_.cholmod_cpu_syrk_calls
+                      << "\n  syrk calls: " << cc_.cholmod_cpu_syrk_calls
                       << ", time: " << cc_.cholmod_cpu_syrk_time
-                      << "\npotrf calls: " << cc_.cholmod_cpu_potrf_calls
+                      << "\n  potrf calls: " << cc_.cholmod_cpu_potrf_calls
                       << ", time: " << cc_.cholmod_cpu_potrf_time
-                      << "\ntrsm calls: " << cc_.cholmod_cpu_trsm_calls
+                      << "\n  trsm calls: " << cc_.cholmod_cpu_trsm_calls
                       << ", time: " << cc_.cholmod_cpu_trsm_time
-                      << "\nassemb1: " << cc_.cholmod_assemble_time
+                      << "\n  assemb1: " << cc_.cholmod_assemble_time
                       << ", assemb2: " << cc_.cholmod_assemble_time2
                       << std::endl;
         }
@@ -162,7 +165,7 @@ std::pair<double, double> benchmarkCholmodSolve(
             exit(1);
         case CHOLMOD_OK:
             if (cholmod_status != 0) {
-                if (verbose) {
+                if (verbose >= 2) {
                     std::cout << "Success!" << std::endl;
                 }
                 break;
