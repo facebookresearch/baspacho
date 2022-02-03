@@ -106,7 +106,9 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
     CpuBaseNumericCtx(int64_t bufSize, int64_t numSpans)
         : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
 
-    // helper for elimination
+    // helper for elimination, does
+    // 1. potrf on diagonal block corresponding to a supernode (lump), and
+    // 2. trsm on all rows below
     static inline void factorLump(const CoalescedBlockMatrixSkel& skel, T* data,
                                   int64_t lump) {
         int64_t lumpStart = skel.lumpStart[lump];

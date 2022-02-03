@@ -50,6 +50,22 @@ __device__ inline std::pair<int64_t, int64_t> toOrderedPair(int64_t n,
     return std::make_pair(x, y);
 }
 
+struct CudaSymElimCtx : SymElimCtx {
+    CudaSymElimCtx() {}
+    virtual ~CudaSymElimCtx() override {}
+
+#if 0  // TODO
+    // per-row pointers to chains in a rectagle:
+    // * span-rows from lumpToSpan[lumpsEnd],
+    // * board cols in interval lumpsBegin:lumpsEnd
+    int64_t spanRowBegin;
+    int64_t maxBufferSize;
+    std::vector<int64_t> rowPtr;       // row data pointer
+    std::vector<int64_t> colLump;      // col-lump
+    std::vector<int64_t> chainColOrd;  // order in col chain elements
+#endif
+};
+
 struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     CudaSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
         : CpuBaseSymbolicCtx(skel) {
@@ -98,8 +114,11 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
 
     virtual SymElimCtxPtr prepareElimination(int64_t lumpsBegin,
                                              int64_t lumpsEnd) override {
-        BASPACHO_CHECK(!"Not implemented yet!");
-        return SymElimCtxPtr();
+        CudaSymElimCtx* elim = new CudaSymElimCtx;
+
+        // TODO
+
+        return SymElimCtxPtr(elim);
     }
 
     virtual NumericCtxBase* createNumericCtxForType(
@@ -126,6 +145,40 @@ struct CudaOps : Ops {
 };
 
 template <typename T>
+__global__ static inline void factor_lumps_kernel(
+    const int64_t* lumpStart, const int64_t* chainColPtr,
+    const int64_t* chainData, const int64_t* boardColPtr,
+    const int64_t* boardChainColOrd, const int64_t* chainRowsTillEnd, T* data,
+    int64_t lumpIndexStart, int64_t lumpIndexEnd) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int64_t lump = lumpIndexStart + i;
+    if (lump >= lumpIndexEnd) {
+        return;
+    }
+    int64_t lumpSize = lumpStart[lump + 1] - lumpStart[lump];
+    int64_t colStart = chainColPtr[lump];
+    int64_t dataPtr = chainData[colStart];
+
+    // in-place lower diag cholesky dec on diagonal block
+    Eigen::Map<MatRMaj<T>> diagBlock(data + dataPtr, lumpSize, lumpSize);
+    { Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(diagBlock); }
+
+    int64_t gatheredStart = boardColPtr[lump];
+    int64_t gatheredEnd = boardColPtr[lump + 1];
+    int64_t rowDataStart = boardChainColOrd[gatheredStart + 1];
+    int64_t rowDataEnd = boardChainColOrd[gatheredEnd - 1];
+    int64_t belowDiagStart = chainData[colStart + rowDataStart];
+    int64_t numRows = chainRowsTillEnd[colStart + rowDataEnd - 1] -
+                      chainRowsTillEnd[colStart + rowDataStart - 1];
+
+    Eigen::Map<MatRMaj<T>> belowDiagBlock(data + belowDiagStart, numRows,
+                                          lumpSize);
+    diagBlock.template triangularView<Eigen::Lower>()
+        .transpose()
+        .template solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
+}
+
+template <typename T>
 __device__ static inline void stridedMatSubDev(T* dst, int64_t dstStride,
                                                const T* src, int64_t srcStride,
                                                int64_t rSize, int64_t cSize) {
@@ -145,7 +198,7 @@ __global__ void assemble_kernel(
     const int64_t* pToSpan, const int64_t* pSpanToChainOffset,
     const int64_t* pSpanOffsetInLump, const T* matRectPtr, T* data) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i > numBlockRows + numBlockCols) {
+    if (i > numBlockRows * numBlockCols) {
         return;
     }
     int64_t r = i % numBlockRows;
@@ -192,19 +245,26 @@ struct CudaNumericCtx : NumericCtx<T> {
 
     virtual void doElimination(const SymElimCtx& elimData, T* data,
                                int64_t lumpsBegin, int64_t lumpsEnd) override {
-        BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
-        const CpuBaseSymElimCtx* pElim =
-            dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
+        const CudaSymElimCtx* pElim =
+            dynamic_cast<const CudaSymElimCtx*>(&elimData);
         BASPACHO_CHECK_NOTNULL(pElim);
-        const CpuBaseSymElimCtx& elim = *pElim;
-        const CoalescedBlockMatrixSkel& skel = sym.skel;
+        const CudaSymElimCtx& elim = *pElim;
+        // const CoalescedBlockMatrixSkel& skel = sym.skel;
+
         OpInstance timer(elim.elimStat);
 
-        for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
-            factorLump(skel, data, l);
-        }
+        int wgs = 32;
+        int numGroups = (lumpsEnd - lumpsBegin + wgs - 1) / wgs;
+        /*factor_lumps_kernel<double><<<numGroups, wgs>>>(
+            sym.devLumpStart, sym.devChainColPtr, sym.devChainData,
+            sym.devBoardColPtr, sym.devBoardChainColOrd,
+            sym.devChainRowsTillEnd, data, lumpsBegin, lumpsEnd);*/
 
+        /*for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
+            factorLump(skel, data, l);
+        }*/
+
+#if 0  // not yet
         int64_t numElimRows = elim.rowPtr.size() - 1;
         int64_t numSpans = skel.spanStart.size() - 1;
         std::vector<T> tempBuffer(elim.maxBufferSize);

@@ -58,7 +58,7 @@ void testCoalescedFactor(OpsPtr&& ops) {
     ASSERT_NEAR(Eigen::MatrixXd(
                     (verifyMat - computedMat).triangularView<Eigen::Lower>())
                     .norm(),
-                0, 1e-5);
+                0, 1e-7);
 }
 
 TEST(CudaFactor, CoalescedFactor) { testCoalescedFactor(cudaOps()); }
@@ -103,14 +103,11 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
 
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
-        // Cuda operations have less precision (no idea why)
         ASSERT_NEAR(
             Eigen::MatrixXd(
                 (verifyMat - computedMat).triangularView<Eigen::Lower>())
-                    .norm() /
-                Eigen::MatrixXd(verifyMat.triangularView<Eigen::Lower>())
-                    .norm(),
-            0, 2e-5);
+                .norm(),
+            0, 1e-7);
     }
 }
 
