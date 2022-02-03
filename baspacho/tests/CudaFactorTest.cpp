@@ -76,11 +76,11 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
-        et.computeMerges();
+        et.computeMerges(/* compute sparse elim ranges = */ false);
         et.computeAggregateStruct();
 
-        CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
-                                            et.colStart, et.rowParam);
+        CoalescedBlockMatrixSkel factorSkel(
+            et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
 
         vector<double> data =
             randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);

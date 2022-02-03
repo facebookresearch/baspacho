@@ -464,15 +464,7 @@ SolverPtr createSolver(const Settings& settings,
     et.computeMerges(settings.findSparseEliminationRanges);
     et.computeAggregateStruct();
 
-    // compute span start as cumSum of sorted paramSize
-    vector<int64_t> finalSpanStart(paramSize.size() + 1);
-    leftPermute(finalSpanStart.begin(), et.permInverse, sortedParamSize);
-    cumSumVec(finalSpanStart);
-
-    BASPACHO_CHECK_EQ(finalSpanStart.size() - 1,
-                      et.lumpToSpan[et.lumpToSpan.size() - 1]);
-
-    CoalescedBlockMatrixSkel factorSkel(finalSpanStart, et.lumpToSpan,
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
                                         et.colStart, et.rowParam);
 
     vector<int64_t> etTotalInvPerm =
@@ -515,8 +507,8 @@ SolverPtr createSolverSchur(const Settings& settings,
     et.computeMerges(settings.findSparseEliminationRanges);
     et.computeAggregateStruct();
 
-    BASPACHO_CHECK_EQ(et.spanStart.size() - 1,
-                      et.lumpToSpan[et.lumpToSpan.size() - 1]);
+    /*BASPACHO_CHECK_EQ(et.spanStart.size() - 1,
+                      et.lumpToSpan[et.lumpToSpan.size() - 1]);*/
 
     // ss last rows are to be permuted according to etTotalInvPerm
     vector<int64_t> etTotalInvPerm =

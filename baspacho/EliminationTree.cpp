@@ -292,12 +292,14 @@ void EliminationTree::computeAggregateStruct() {
                   rowParam.end());
         colStart.push_back(rowParam.size());
     }
+}
 
-    // set spanStart to cumSumVec of paramSize
-    /*spanStart.reserve(paramSize.size() + 1);
-    spanStart = paramSize;
-    spanStart.push_back(0);
-    cumSumVec(spanStart);*/
+std::vector<int64_t> EliminationTree::computeSpanStart() {
+    vector<int64_t> spanStart(paramSize.size() + 1);
+    leftPermute(spanStart.begin(), permInverse, paramSize);
+    cumSumVec(spanStart);
+
+    return spanStart;
 }
 
 }  // end namespace BaSpaCho

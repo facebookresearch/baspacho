@@ -35,12 +35,12 @@ TEST(EliminationTree, Build) {
 
         et.buildTree();
 
-        et.computeMerges();
+        et.computeMerges(/* compute sparse elim ranges = */ false);
 
         et.computeAggregateStruct();
 
-        CoalescedBlockMatrixSkel skel(et.spanStart, et.lumpToSpan, et.colStart,
-                                      et.rowParam);
+        CoalescedBlockMatrixSkel skel(et.computeSpanStart(), et.lumpToSpan,
+                                      et.colStart, et.rowParam);
         int64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData, 1);
         Eigen::MatrixXd mat = skel.densify(data);

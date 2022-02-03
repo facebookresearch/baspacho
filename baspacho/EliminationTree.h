@@ -16,6 +16,9 @@ struct EliminationTree {
 
     void computeAggregateStruct();
 
+    // utility helper
+    std::vector<int64_t> computeSpanStart();
+
     std::vector<int64_t> paramSize;
     const SparseStructure& ss;  // input
 
@@ -31,7 +34,6 @@ struct EliminationTree {
 
     // generated computing aggregate struct
     std::vector<int64_t> permInverse;
-    std::vector<int64_t> spanStart;  // TODO: kill this
     std::vector<int64_t> lumpStart;
     std::vector<int64_t> lumpToSpan;
     std::vector<int64_t> colStart;

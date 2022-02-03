@@ -64,11 +64,11 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
-        et.computeMerges();
+        et.computeMerges(/* compute sparse elim ranges = */ false);
         et.computeAggregateStruct();
 
-        CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
-                                            et.colStart, et.rowParam);
+        CoalescedBlockMatrixSkel factorSkel(
+            et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
 
         vector<double> data =
             randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -97,11 +97,11 @@ TEST(Factor, CoalescedFactor_Many_Ref) {
     testCoalescedFactor_Many([] { return simpleOps(); });
 }
 
-namespace BaSpaCho {
+/*namespace BaSpaCho {
 pair<int64_t, bool> findLargestIndependentLumpSet(
     const CoalescedBlockMatrixSkel& factorSkel, int64_t startLump,
     int64_t maxSize = 8);
-}
+}*/
 
 void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
@@ -117,11 +117,11 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
-        et.computeMerges();
+        et.computeMerges(/* compute sparse elim ranges = */ true);
         et.computeAggregateStruct();
 
-        CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
-                                            et.colStart, et.rowParam);
+        CoalescedBlockMatrixSkel factorSkel(
+            et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
 
         vector<double> data =
             randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -130,9 +130,12 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-        int64_t largestIndep =
-            findLargestIndependentLumpSet(factorSkel, 0).first;
-        Solver solver(std::move(factorSkel), {0, largestIndep}, {}, genOps());
+        /*int64_t largestIndep =
+            findLargestIndependentLumpSet(factorSkel, 0).first;*/
+        ASSERT_GE(et.sparseElimRanges.size(), 2);
+        int64_t largestIndep = et.sparseElimRanges[1];
+        Solver solver(move(factorSkel),  // {0, largestIndep},
+                      move(et.sparseElimRanges), {}, genOps());
         NumericCtxPtr<double> numCtx =
             solver.symCtx->createNumericCtx<double>(0);
         numCtx->doElimination(*solver.elimCtxs[0], data.data(), 0,
@@ -170,11 +173,11 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
-        et.computeMerges();
+        et.computeMerges(/* compute sparse elim ranges = */ true);
         et.computeAggregateStruct();
 
-        CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
-                                            et.colStart, et.rowParam);
+        CoalescedBlockMatrixSkel factorSkel(
+            et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
 
         vector<double> data =
             randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -183,9 +186,12 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-        int64_t largestIndep =
-            findLargestIndependentLumpSet(factorSkel, 0).first;
-        Solver solver(std::move(factorSkel), {0, largestIndep}, {}, genOps());
+        /*int64_t largestIndep =
+            findLargestIndependentLumpSet(factorSkel, 0).first;*/
+        ASSERT_GE(et.sparseElimRanges.size(), 2);
+        int64_t largestIndep = et.sparseElimRanges[1];
+        Solver solver(move(factorSkel),  // {0, largestIndep},
+                      move(et.sparseElimRanges), {}, genOps());
         solver.factor(data.data());
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
