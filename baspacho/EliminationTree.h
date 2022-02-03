@@ -12,8 +12,6 @@ struct EliminationTree {
 
     void computeMerges(bool computeSparseElimRanges);
 
-    void computeMerges2();
-
     void computeAggregateStruct();
 
     // utility helper
