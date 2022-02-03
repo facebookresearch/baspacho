@@ -42,13 +42,12 @@ struct CudaSymElimCtx : SymElimCtx {
 struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     CudaSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
         : CpuBaseSymbolicCtx(skel) {
-        // cout << "sym-init Hs" << endl;
+        // TODO: support custom stream in the future
         cublasCHECK(cublasCreate(&cublasH));
         // cublasCHECK(cublasSetStream(cublasH, stream));
         cusolverCHECK(cusolverDnCreate(&cusolverDnH));
         // cusolverCHECK(cusolverDnSetStream(cusolverDnH, stream));
 
-        // cout << "sym-init..." << endl;
         devChainRowsTillEnd.load(skel.chainRowsTillEnd);
         devChainRowSpan.load(skel.chainRowSpan);
         devSpanOffsetInLump.load(skel.spanOffsetInLump);
@@ -198,8 +197,7 @@ __device__ static inline double aAdd(double* address, double val) {
         old = ::atomicCAS(
             address_as_ull, assumed,
             ::__double_as_longlong(val + __longlong_as_double(assumed)));
-        // Note: uses integer comparison to avoid hang in case of NaN (since NaN
-        // != NaN)
+        // integer comparison to avoid hang in case of NaN (since NaN != NaN)
     } while (assumed != old);
     return __longlong_as_double(old);
 }
@@ -223,7 +221,6 @@ __device__ static inline void do_sparse_elim(
     const int64_t* spanOffsetInLump, T* data, int64_t l, int64_t di,
     int64_t dj) {
     int64_t startPtr = chainColPtr[l] + 1;  // skip diag block
-    int64_t endPtr = chainColPtr[l + 1];
     int64_t lColSize = lumpStart[l + 1] - lumpStart[l];
 
     int64_t i = startPtr + di;
@@ -247,7 +244,6 @@ __device__ static inline void do_sparse_elim(
 
     uint64_t pos = bisect(chainRowSpan + targetStartPtr,
                           targetEndPtr - targetStartPtr, sj);
-    // BASPACHO_CHECK_EQ(chainRowSpan[targetStartPtr + pos], sj);
     int64_t jiDataPtr = chainData[targetStartPtr + pos];
     OuterStridedMatM<T> jiBlock(data + jiDataPtr + targetSpanOffsetInLump,
                                 sjSize, siSize, OuterStride(targetLumpSize));
@@ -355,11 +351,9 @@ struct CudaNumericCtx : NumericCtx<T> {
     CudaNumericCtx(const CudaSymbolicCtx& sym, int64_t bufSize,
                    int64_t numSpans)
         : spanToChainOffset(numSpans), sym(sym) {
-        // cout << "num-init..." << endl;
         cuCHECK(cudaMalloc((void**)&devTempBuffer, bufSize * sizeof(T)));
         cuCHECK(cudaMalloc((void**)&devSpanToChainOffset,
                            spanToChainOffset.size() * sizeof(int64_t)));
-        // cout << "num-init done!" << endl;
     }
 
     virtual ~CudaNumericCtx() override {
@@ -377,7 +371,6 @@ struct CudaNumericCtx : NumericCtx<T> {
             dynamic_cast<const CudaSymElimCtx*>(&elimData);
         BASPACHO_CHECK_NOTNULL(pElim);
         const CudaSymElimCtx& elim = *pElim;
-        // const CoalescedBlockMatrixSkel& skel = sym.skel;
 
         OpInstance timer(elim.elimStat);
 
@@ -389,6 +382,7 @@ struct CudaNumericCtx : NumericCtx<T> {
             sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
 
 #if 0
+        // double inner loop
         sparse_elim_kernel<double><<<numGroups, wgs>>>(
             sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
@@ -407,24 +401,9 @@ struct CudaNumericCtx : NumericCtx<T> {
             lumpsBegin, lumpsEnd, elim.makeBlockPairEnumStraight.ptr,
             elim.numBlockPairs);
 #endif
-        /*for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
-            factorLump(skel, data, l);
-        }*/
-
-#if 0  // not yet
-        int64_t numElimRows = elim.rowPtr.size() - 1;
-        int64_t numSpans = skel.spanStart.size() - 1;
-        std::vector<T> tempBuffer(elim.maxBufferSize);
-        std::vector<int64_t> spanToChainOffset(numSpans);
-        for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
-            eliminateRowChain(elim, skel, data, sRel, spanToChainOffset,
-                              tempBuffer);
-        }
-#endif
     }
 
     virtual void potrf(int64_t n, T* A) override {
-        // cout << "potrf n=" << n << endl;
         OpInstance timer(sym.potrfStat);
         sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
@@ -449,7 +428,6 @@ struct CudaNumericCtx : NumericCtx<T> {
     }
 
     virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
-        // cout << "trsm n=" << n << ", k=" << k << endl;
         OpInstance timer(sym.trsmStat);
 
         T alpha(1.0);
@@ -460,7 +438,6 @@ struct CudaNumericCtx : NumericCtx<T> {
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override {
-        // cout << "gemm m=" << m << ", n=" << n << ", k=" << k << endl;
         OpInstance timer(sym.sygeStat);
 
         T alpha(1.0), beta(0.0);
@@ -496,10 +473,6 @@ struct CudaNumericCtx : NumericCtx<T> {
                           int64_t srcColDataOffset, int64_t srcRectWidth,
                           int64_t numBlockRows, int64_t numBlockCols,
                           int numBatch = -1) override {
-        // cout << "assembl rows=" << numBlockRows << ", cols=" << numBlockCols
-        //     << endl;
-        // BASPACHO_CHECK(!"Not implemented yet!");
-
         BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
         OpInstance timer(sym.asmblStat);
         const int64_t* pChainRowsTillEnd =
