@@ -37,4 +37,20 @@ __BASPACHO_HOST_DEVICE__ inline static void cholesky(T* A, int n) {
     }
 }
 
+template <typename T>
+__BASPACHO_HOST_DEVICE__ inline static void solveUpperT(const T* A, int n,
+                                                        T* v) {
+    const T* b_ii = A;
+    for (int i = 0; i < n; i++) {
+        T x = v[i];
+
+        for (int j = 0; j < i; j++) {
+            x -= b_ii[j] * v[j];
+        }
+
+        v[i] = x / b_ii[i];
+        b_ii += n;
+    }
+}
+
 }  // end namespace BaSpaCho
