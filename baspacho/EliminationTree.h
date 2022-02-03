@@ -23,18 +23,14 @@ struct EliminationTree {
     std::vector<int64_t> parent;
     std::vector<int64_t> nodeSize;
     std::vector<int64_t> nodeRows;
-    std::vector<int64_t> nodeFill;
-    std::vector<int64_t> firstChild;
-    std::vector<int64_t> nextSibling;
 
     // generated data, computeMerges
     std::vector<int64_t> mergeWith;
     int64_t numMerges;
 
     // generated computing aggregate struct
-    std::vector<int64_t> permutation;
     std::vector<int64_t> permInverse;
-    std::vector<int64_t> spanStart;
+    std::vector<int64_t> spanStart;  // TODO: kill this
     std::vector<int64_t> lumpStart;
     std::vector<int64_t> lumpToSpan;
     std::vector<int64_t> colStart;
