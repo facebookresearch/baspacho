@@ -97,12 +97,6 @@ TEST(Factor, CoalescedFactor_Many_Ref) {
     testCoalescedFactor_Many([] { return simpleOps(); });
 }
 
-/*namespace BaSpaCho {
-pair<int64_t, bool> findLargestIndependentLumpSet(
-    const CoalescedBlockMatrixSkel& factorSkel, int64_t startLump,
-    int64_t maxSize = 8);
-}*/
-
 void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.03, 57 + i);

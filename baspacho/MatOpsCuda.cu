@@ -7,6 +7,7 @@
 #include "baspacho/CudaDefs.h"
 #include "baspacho/DebugMacros.h"
 #include "baspacho/MatOpsCpuBase.h"
+#include "baspacho/MathUtils.h"
 #include "baspacho/Utils.h"
 
 namespace BaSpaCho {
@@ -166,10 +167,9 @@ __global__ static inline void factor_lumps_kernel(
     int64_t colStart = chainColPtr[lump];
     int64_t dataPtr = chainData[colStart];
 
-#if 0
     // in-place lower diag cholesky dec on diagonal block
-    Eigen::Map<MatRMaj<T>> diagBlock(data + dataPtr, lumpSize, lumpSize);
-    { Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(diagBlock); }
+    T* diagBlockPtr = data + dataPtr;
+    cholesky(diagBlockPtr, lumpSize);
 
     int64_t gatheredStart = boardColPtr[lump];
     int64_t gatheredEnd = boardColPtr[lump + 1];
@@ -179,12 +179,11 @@ __global__ static inline void factor_lumps_kernel(
     int64_t numRows = chainRowsTillEnd[colStart + rowDataEnd - 1] -
                       chainRowsTillEnd[colStart + rowDataStart - 1];
 
-    Eigen::Map<MatRMaj<T>> belowDiagBlock(data + belowDiagStart, numRows,
-                                          lumpSize);
-    diagBlock.template triangularView<Eigen::Lower>()
-        .transpose()
-        .template solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
-#endif
+    T* belowDiagBlockPtr = data + belowDiagStart;
+    for (int i = 0; i < numRows; i++) {
+        solveUpperT(diagBlockPtr, lumpSize, belowDiagBlockPtr);
+        belowDiagBlockPtr += lumpSize;
+    }
 }
 
 template <typename T>
