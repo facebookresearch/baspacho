@@ -434,30 +434,6 @@ void Solver::printStats() const {
               << "\nasmbl: " << symCtx->asmblStat.toString() << std::endl;
 }
 
-// TODO: make EliminationTree compute sparse elimination ranges
-pair<int64_t, bool> findLargestIndependentLumpSet(
-    const CoalescedBlockMatrixSkel& factorSkel, int64_t startLump,
-    int64_t maxSize = 8) {
-    int64_t limit = numeric_limits<int64_t>::max();
-    for (int64_t a = startLump; a < factorSkel.lumpToSpan.size() - 1; a++) {
-        if (a >= limit) {
-            break;
-        }
-        if (factorSkel.lumpStart[a + 1] - factorSkel.lumpStart[a] > maxSize) {
-            return make_pair(a, true);
-        }
-        int64_t aPtrStart = factorSkel.boardColPtr[a];
-        int64_t aPtrEnd = factorSkel.boardColPtr[a + 1];
-        BASPACHO_CHECK_EQ(factorSkel.boardRowLump[aPtrStart], a);
-        BASPACHO_CHECK_LE(2, aPtrEnd - aPtrStart);
-        int64_t next = factorSkel.boardRowLump[aPtrStart + 1];
-        if (next != kInvalid) {
-            limit = min(next, limit);
-        }
-    }
-    return make_pair(min(limit, (int64_t)factorSkel.lumpToSpan.size()), false);
-}
-
 OpsPtr getBackend(const Settings& settings) {
     if (settings.backend == BackendBlas) {
         return blasOps();
@@ -487,7 +463,7 @@ SolverPtr createSolver(const Settings& settings,
 
     EliminationTree et(sortedParamSize, sortedSs);
     et.buildTree();
-    et.computeMerges();
+    et.computeMerges(settings.findSparseEliminationRanges);
     et.computeAggregateStruct();
 
     // compute span start as cumSum of sorted paramSize
@@ -504,33 +480,9 @@ SolverPtr createSolver(const Settings& settings,
     CoalescedBlockMatrixSkel factorSkel(finalSpanStart, et.lumpToSpan,
                                         et.colStart, et.rowParam);
 
-    // find progressive Schur elimination sets
-    std::vector<int64_t> elimLumpRanges{0};
-    if (settings.findSparseEliminationRanges) {
-        while (true) {
-            int64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
-            auto [rangeEnd, hitSizeLimit] =
-                findLargestIndependentLumpSet(factorSkel, rangeStart);
-            if (rangeEnd < rangeStart + 10) {
-                break;
-            }
-            if (verbose) {
-                std::cout << "Adding indep set: " << rangeStart << ".."
-                          << rangeEnd << std::endl;
-            }
-            elimLumpRanges.push_back(rangeEnd);
-            if (hitSizeLimit) {
-                break;
-            }
-        }
-    }
-    if (elimLumpRanges.size() == 1) {
-        elimLumpRanges.pop_back();
-    }
-
     vector<int64_t> etTotalInvPerm =
         composePermutations(et.permInverse, invPerm);
-    return SolverPtr(new Solver(move(factorSkel), move(elimLumpRanges),
+    return SolverPtr(new Solver(move(factorSkel), move(et.sparseElimRanges),
                                 move(etTotalInvPerm), getBackend(settings)));
 }
 
@@ -565,7 +517,7 @@ SolverPtr createSolverSchur(const Settings& settings,
     // compute as ordinary elimination tree on br-corner
     EliminationTree et(sortedBottomParamSize, sortedSsBottom);
     et.buildTree();
-    et.computeMerges();
+    et.computeMerges(settings.findSparseEliminationRanges);
     et.computeAggregateStruct();
 
     BASPACHO_CHECK_EQ(et.spanStart.size() - 1,
@@ -626,31 +578,19 @@ SolverPtr createSolverSchur(const Settings& settings,
     CoalescedBlockMatrixSkel factorSkel(fullSpanStart, fullLumpToSpan,
                                         fullColStart, fullRowParam);
 
-    // find (additional) progressive Schur elimination sets
-    std::vector<int64_t> elimLumpRangesArg = elimLumpRanges;
+    // include (additional) progressive Schur elimination sets, shifted
+    std::vector<int64_t> fullElimLumpRanges = elimLumpRanges;
     if (settings.findSparseEliminationRanges) {
-        while (true) {
-            int64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
-            auto [rangeEnd, hitSizeLimit] =
-                findLargestIndependentLumpSet(factorSkel, rangeStart);
-            if (rangeEnd < rangeStart + 10) {
-                break;
-            }
-            if (verbose) {
-                std::cout << "Adding indep set: " << rangeStart << ".."
-                          << rangeEnd << std::endl;
-            }
-            elimLumpRangesArg.push_back(rangeEnd);
-            if (hitSizeLimit) {
-                break;
-            }
+        int64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
+        for (size_t i = 1; i < et.sparseElimRanges.size(); i++) {
+            fullElimLumpRanges.push_back(rangeStart + et.sparseElimRanges[i]);
         }
     }
-    if (elimLumpRangesArg.size() == 1) {
-        elimLumpRangesArg.pop_back();
+    if (fullElimLumpRanges.size() == 1) {
+        fullElimLumpRanges.pop_back();
     }
 
-    return SolverPtr(new Solver(move(factorSkel), move(elimLumpRangesArg),
+    return SolverPtr(new Solver(move(factorSkel), move(fullElimLumpRanges),
                                 move(fullInvPerm), getBackend(settings)));
 }
 

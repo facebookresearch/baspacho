@@ -10,7 +10,7 @@ struct EliminationTree {
 
     void buildTree();
 
-    void computeMerges();
+    void computeMerges(bool computeSparseElimRanges);
 
     void computeMerges2();
 
@@ -25,6 +25,7 @@ struct EliminationTree {
     std::vector<int64_t> nodeRows;
 
     // generated data, computeMerges
+    std::vector<int64_t> sparseElimRanges;
     std::vector<int64_t> mergeWith;
     int64_t numMerges;
 

@@ -59,20 +59,7 @@ void EliminationTree::buildTree() {
 // TODO: expand on merge settings
 static constexpr double kPropRows = 0.8;
 
-template <typename T>
-std::string printVec(const std::vector<T>& ints) {
-    std::stringstream ss;
-    ss << "[";
-    bool first = true;
-    for (auto c : ints) {
-        ss << (first ? "" : ", ") << c;
-        first = false;
-    }
-    ss << "]";
-    return ss.str();
-}
-
-void EliminationTree::computeMerges() {
+void EliminationTree::computeMerges(bool computeSparseElimRanges) {
     int64_t ord = ss.order();
 
     // Compute node heights:
@@ -100,25 +87,30 @@ void EliminationTree::computeMerges() {
     // Compute the sparse elimination ranges (after permutation is applied),
     // and set a flag to forbid merge of nodes which will be sparse-eliminated
     vector<bool> forbidMerge(ord, false);
-    vector<int64_t> sparseElimRanges(0);
-    int64_t mergeHeight = 0;
-    static constexpr int64_t maxSparseElimNodeSize = 8;
-    static constexpr int64_t minNumSparseElimNodes = 100;
-    for (int64_t k0 = 0; k0 < ord; /* */) {
-        int64_t k1 = k0;
-        while (k1 < ord && get<0>(unmergedHeightNode[k1]) == mergeHeight &&
-               get<1>(unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
-            k1++;
+    if (computeSparseElimRanges) {
+        int64_t mergeHeight = 0;
+        static constexpr int64_t maxSparseElimNodeSize = 8;
+        static constexpr int64_t minNumSparseElimNodes = 30;
+        sparseElimRanges.push_back(0);
+        for (int64_t k0 = 0; k0 < ord; /* */) {
+            int64_t k1 = k0;
+            while (k1 < ord && get<0>(unmergedHeightNode[k1]) == mergeHeight &&
+                   get<1>(unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
+                k1++;
+            }
+            if (k1 - k0 < minNumSparseElimNodes) {
+                break;
+            }
+            mergeHeight++;
+            for (int64_t k = k0; k < k1; k++) {
+                forbidMerge[get<2>(unmergedHeightNode[k])] = true;
+            }
+            sparseElimRanges.push_back(k1);
+            k0 = k1;
         }
-        if (k1 - k0 < minNumSparseElimNodes) {
-            break;
+        if (sparseElimRanges.size() == 1) {
+            sparseElimRanges.pop_back();
         }
-        mergeHeight++;
-        for (int64_t k = k0; k < k1; k++) {
-            forbidMerge[get<2>(unmergedHeightNode[k])] = true;
-        }
-        sparseElimRanges.push_back(k1);
-        k0 = k1;
     }
 
     std::priority_queue<std::tuple<double, int64_t, int64_t>> mergeCandidates;
