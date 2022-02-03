@@ -26,7 +26,7 @@ void SparseStructure::sortIndices() {
 }
 
 // assumed square matrix
-SparseStructure SparseStructure::transpose(bool sortIndices) const {
+SparseStructure SparseStructure::transpose() const {
     int64_t ord = order();
     SparseStructure retv;
     retv.ptrs.assign(ord + 1, 0);
@@ -56,10 +56,6 @@ SparseStructure SparseStructure::transpose(bool sortIndices) const {
     }
 
     rewindVec(retv.ptrs);
-
-    if (sortIndices) {
-        retv.sortIndices();
-    }
 
     return retv;
 }
@@ -167,7 +163,7 @@ SparseStructure SparseStructure::addIndependentEliminationFill(
         return *this;
     }
 
-    SparseStructure tThis = transpose(false);
+    SparseStructure tThis = transpose();
     for (int64_t i = elimStart; i < elimEnd; i++) {  // sort subset
         int64_t start = tThis.ptrs[i];
         int64_t end = tThis.ptrs[i + 1];

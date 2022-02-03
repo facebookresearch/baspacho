@@ -24,7 +24,7 @@ struct SparseStructure {
     void sortIndices();
 
     // transpose
-    SparseStructure transpose(bool sortIndices = true) const;
+    SparseStructure transpose() const;
 
     // clear upper/lower half (csc)
     SparseStructure clear(bool clearLower = true) const;

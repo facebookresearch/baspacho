@@ -537,7 +537,7 @@ SolverPtr createSolverSchur(const Settings& settings,
 
     // matrix with blocks not joined, we will need the first columns
     SparseStructure sortedSsT =
-        ss.symmetricPermutation(fullInvPerm, false).transpose(false);
+        ss.symmetricPermutation(fullInvPerm, false).transpose();
 
     // fullColStart joining sortedSsT.ptrs + shifted elimEndDataPtr
     vector<int64_t> fullColStart;
