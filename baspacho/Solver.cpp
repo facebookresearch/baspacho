@@ -434,6 +434,7 @@ void Solver::printStats() const {
               << "\nasmbl: " << symCtx->asmblStat.toString() << std::endl;
 }
 
+// TODO: make EliminationTree compute sparse elimination ranges
 pair<int64_t, bool> findLargestIndependentLumpSet(
     const CoalescedBlockMatrixSkel& factorSkel, int64_t startLump,
     int64_t maxSize = 8) {

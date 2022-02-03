@@ -80,8 +80,48 @@ static constexpr double kPropRows = 0.8;
 void EliminationTree::computeMerges() {
     int64_t ord = ss.order();
 
+    // compute node heights (leafs can be sparsely eliminated, then
+    // nodes above the leafs, etc...)
+    vector<int64_t> height(ord, 0);
+    vector<tuple<int64_t, int64_t, int64_t>> unmergedHeightNode(ord);
+    for (int64_t k = 0; k < ord; k++) {
+        unmergedHeightNode[k] = make_tuple(height[k], nodeSize[k], k);
+
+        int64_t par = parent[k];
+        if (par == -1) {
+            continue;
+        }
+        height[par] = max(height[par], height[k] + 1);
+    }
+    sort(unmergedHeightNode.begin(), unmergedHeightNode.end());
+
+    // TODO: allow some merge (perhaps...) and use this to build
+    // sparse elimination ranges
+    vector<bool> forbidMerge(ord, false);
+    int64_t mergeHeight = 0;
+    static constexpr int64_t maxSparseElimNodeSize = 8;
+    static constexpr int64_t minNumSparseElimNodes = 100;
+    for (int64_t k0 = 0; k0 < ord; /* */) {
+        int64_t k1 = k0;
+        while (k1 < ord && get<0>(unmergedHeightNode[k1]) == mergeHeight &&
+               get<1>(unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
+            k1++;
+        }
+        if (k1 - k0 < minNumSparseElimNodes) {
+            break;
+        }
+        mergeHeight++;
+        for (int64_t k = k0; k < k1; k++) {
+            forbidMerge[get<2>(unmergedHeightNode[k])] = true;
+        }
+        k0 = k1;
+    }
+
     std::priority_queue<std::tuple<double, int64_t, int64_t>> mergeCandidates;
     for (int64_t k = ord - 1; k >= 0; k--) {
+        if (forbidMerge[k]) {
+            continue;
+        }
         int64_t p = parent[k];
         if (p == -1) {
             continue;
@@ -204,6 +244,7 @@ void EliminationTree::computeAggregateStruct() {
         }
     }
 
+    // TODO: use result of computation above
     // sort according to height (and secondly size)
     vector<int64_t> height(ord, 0);
     vector<tuple<int64_t, int64_t, int64_t>> heightNode;
