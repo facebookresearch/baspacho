@@ -490,7 +490,18 @@ SolverPtr createSolver(const Settings& settings,
     et.computeMerges();
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.spanStart, et.lumpToSpan,
+    // compute span start as cumSum of sorted paramSize
+    vector<int64_t> finalSpanStart(paramSize.size() + 1);
+    for (size_t i = 0; i < paramSize.size(); i++) {
+        finalSpanStart[et.permInverse[i]] = sortedParamSize[i];
+    }
+    finalSpanStart[paramSize.size()] = 0;
+    cumSumVec(finalSpanStart);
+
+    BASPACHO_CHECK_EQ(finalSpanStart.size() - 1,
+                      et.lumpToSpan[et.lumpToSpan.size() - 1]);
+
+    CoalescedBlockMatrixSkel factorSkel(finalSpanStart, et.lumpToSpan,
                                         et.colStart, et.rowParam);
 
     // find progressive Schur elimination sets

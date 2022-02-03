@@ -80,8 +80,15 @@ static constexpr double kPropRows = 0.8;
 void EliminationTree::computeMerges() {
     int64_t ord = ss.order();
 
-    // compute node heights (leafs can be sparsely eliminated, then
-    // nodes above the leafs, etc...)
+    // Compute node heights:
+    // depending on the structure of the matrix, if we have many small leaf
+    // nodes (height = 0) we can eliminate them with a sparse elimination
+    // step that skips the node-merge adding fill in. It's then possible
+    // to eliminate progressively nodes with height=1, 2, etc till when
+    // this strategy is no longer effective and we're better off with
+    // merged nodes and blas operations.
+    // In order to do so we sort nodes according to height.
+    // TODO: consider allowing some initial merge of very small nodes?
     vector<int64_t> height(ord, 0);
     vector<tuple<int64_t, int64_t, int64_t>> unmergedHeightNode(ord);
     for (int64_t k = 0; k < ord; k++) {
@@ -95,9 +102,10 @@ void EliminationTree::computeMerges() {
     }
     sort(unmergedHeightNode.begin(), unmergedHeightNode.end());
 
-    // TODO: allow some merge (perhaps...) and use this to build
-    // sparse elimination ranges
+    // Compute the sparse elimination ranges (after permutation is applied),
+    // and set a flag to forbid merge of nodes which will be sparse-eliminated
     vector<bool> forbidMerge(ord, false);
+    vector<int64_t> sparseElimRanges(0);
     int64_t mergeHeight = 0;
     static constexpr int64_t maxSparseElimNodeSize = 8;
     static constexpr int64_t minNumSparseElimNodes = 100;
@@ -114,6 +122,7 @@ void EliminationTree::computeMerges() {
         for (int64_t k = k0; k < k1; k++) {
             forbidMerge[get<2>(unmergedHeightNode[k])] = true;
         }
+        sparseElimRanges.push_back(k1);
         k0 = k1;
     }
 
@@ -132,6 +141,7 @@ void EliminationTree::computeMerges() {
     }
 
     mergeWith.assign(ord, -1);
+    vector<int64_t> numMergedNodes(ord, 1);
     numMerges = 0;
     while (!mergeCandidates.empty()) {
         auto [wasFillAfterMerge, k, p] = mergeCandidates.top();
@@ -169,10 +179,12 @@ void EliminationTree::computeMerges() {
         if (willMerge) {
             mergeWith[k] = p;
             nodeSize[p] += nodeSize[k];
+            numMergedNodes[p] += numMergedNodes[k];
             numMerges++;
         }
     }
 
+    // collapse pointer to parent, make parent become root ancestor
     int64_t numMergesAlt = 0;
     for (int64_t k = ord - 1; k >= 0; k--) {
         int64_t p = mergeWith[k];
@@ -184,6 +196,97 @@ void EliminationTree::computeMerges() {
             mergeWith[k] = a;
         }
     }
+
+#if 0
+    // compute childern list
+    int64_t ord = ss.order();
+    vector<int64_t> firstMergeChild(ord, -1);
+    vector<int64_t> nextMergeSibling(ord, -1);
+    for (int64_t k = 0; k < ord; k++) {
+        int64_t p = mergeWith[k];
+        if (p != -1) {
+            nextMergeSibling[k] = firstMergeChild[p];
+            firstMergeChild[p] = k;
+        }
+    }
+#endif
+
+    // straightening permutation, make merged nodes consecutive
+    // lumpStart.resize(numLumps + 1);      // permuted
+    // lumpToSpan.assign(numLumps + 1, 0);  // permuted
+
+    /*    int64_t lumpCounter = numLumps;
+        for (int64_t i = ord - 1; i >= 0; i--) {
+            auto [height, unmergedSize, k] = unmergedHeightNode[i];
+            int64_t p = mergeWith[k];
+            int64_t lumpIndex;
+            if (p == -1) {
+                lumpIndex = --lumpCounter;
+                spanToLump[i] = lumpIndex;
+            } else {
+                spanToLump[i]
+            }
+        }*/
+
+    int64_t numLumps = ord - numMerges, lumpIndex = 0;
+    lumpStart.resize(numLumps + 1);   // permuted
+    lumpToSpan.resize(numLumps + 1);  // permuted
+    vector<int64_t> unpermutedRootSpanToLump(ord);
+    for (int64_t i = 0; i < ord; i++) {
+        auto [height, unmergedSize, k] = unmergedHeightNode[i];
+        if (mergeWith[k] != -1) {
+            continue;
+        }
+        unpermutedRootSpanToLump[k] = lumpIndex;
+        lumpStart[lumpIndex] = nodeSize[k];
+        lumpToSpan[lumpIndex] = numMergedNodes[k];
+        lumpIndex++;
+    }
+    BASPACHO_CHECK_EQ(lumpIndex, numLumps);
+
+    cumSumVec(lumpStart);
+    cumSumVec(lumpToSpan);
+
+    // permutation.resize(ord);
+    permInverse.resize(ord);
+    vector<int64_t> spanToLump(ord);  // permuted
+    for (int64_t i = 0; i < ord; i++) {
+        auto [height, unmergedSize, k] = unmergedHeightNode[i];
+        int64_t p = mergeWith[k];
+        int64_t lumpIndex = unpermutedRootSpanToLump[p == -1 ? k : p];
+        permInverse[i] = lumpToSpan[lumpIndex]++;  // advance
+    }
+
+    rewindVec(lumpToSpan);  // restore after advancing
+#if 0
+    // straightening permutation, make merged nodes consecutive
+    int64_t numLumps = ord - numMerges;
+    vector<int64_t> spanToLump(ord);
+    permutation.resize(ord);
+    lumpStart.resize(numLumps + 1);
+    lumpToSpan.assign(numLumps + 1, 0);
+    int64_t pIdx = ord;
+    int64_t agIdx = numLumps;
+    for (int64_t idx = heightNode.size() - 1; idx >= 0; idx--) {
+        auto [_1, _2, k] = heightNode[idx];
+
+        BASPACHO_CHECK_GT(agIdx, 0);
+        lumpStart[--agIdx] = nodeSize[k];
+
+        BASPACHO_CHECK_GT(pIdx, 0);
+        permutation[--pIdx] = k;
+        spanToLump[k] = agIdx;
+        lumpToSpan[agIdx]++;
+        for (int64_t q = firstMergeChild[k]; q != -1; q = nextMergeSibling[q]) {
+            BASPACHO_CHECK_GT(pIdx, 0);
+            permutation[--pIdx] = q;
+            spanToLump[q] = agIdx;
+            lumpToSpan[agIdx]++;
+        }
+    }
+    BASPACHO_CHECK_EQ(pIdx, 0);
+    BASPACHO_CHECK_EQ(agIdx, 0);
+#endif
 }
 
 void EliminationTree::computeMerges2() {
@@ -232,6 +335,7 @@ void EliminationTree::computeMerges2() {
 }
 
 void EliminationTree::computeAggregateStruct() {
+#if 0
     // compute childern list
     int64_t ord = ss.order();
     vector<int64_t> firstMergeChild(ord, -1);
@@ -292,11 +396,17 @@ void EliminationTree::computeAggregateStruct() {
     }
     BASPACHO_CHECK_EQ(pIdx, 0);
     BASPACHO_CHECK_EQ(agIdx, 0);
+#endif
 
+#if 0
     // cum-sum lumpStart
     cumSumVec(lumpToSpan);
     int64_t tot = cumSumVec(lumpStart);
     permInverse = inversePermutation(permutation);
+#endif
+
+    int64_t ord = ss.order();
+    int64_t numLumps = ord - numMerges;
 
     SparseStructure tperm =  // lower-half csc
         ss.symmetricPermutation(permInverse, /* lowerHalf = */ false,
@@ -324,10 +434,10 @@ void EliminationTree::computeAggregateStruct() {
     }
 
     // set spanStart to cumSumVec of paramSize
-    spanStart.reserve(paramSize.size() + 1);
+    /*spanStart.reserve(paramSize.size() + 1);
     spanStart = paramSize;
     spanStart.push_back(0);
-    cumSumVec(spanStart);
+    cumSumVec(spanStart);*/
 }
 
 }  // end namespace BaSpaCho
