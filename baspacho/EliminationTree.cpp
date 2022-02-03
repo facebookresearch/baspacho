@@ -77,6 +77,19 @@ void EliminationTree::buildTree() {
 // TODO: expand on merge settings
 static constexpr double kPropRows = 0.8;
 
+template <typename T>
+std::string printVec(const std::vector<T>& ints) {
+    std::stringstream ss;
+    ss << "[";
+    bool first = true;
+    for (auto c : ints) {
+        ss << (first ? "" : ", ") << c;
+        first = false;
+    }
+    ss << "]";
+    return ss.str();
+}
+
 void EliminationTree::computeMerges() {
     int64_t ord = ss.order();
 
@@ -118,6 +131,8 @@ void EliminationTree::computeMerges() {
         if (k1 - k0 < minNumSparseElimNodes) {
             break;
         }
+        /*cout << "elim Range[" << mergeHeight << "]: " << k0 << ".." << k1
+             << endl;*/
         mergeHeight++;
         for (int64_t k = k0; k < k1; k++) {
             forbidMerge[get<2>(unmergedHeightNode[k])] = true;
@@ -231,12 +246,16 @@ void EliminationTree::computeMerges() {
     int64_t numLumps = ord - numMerges, lumpIndex = 0;
     lumpStart.resize(numLumps + 1);   // permuted
     lumpToSpan.resize(numLumps + 1);  // permuted
-    vector<int64_t> unpermutedRootSpanToLump(ord);
+    vector<int64_t> unpermutedRootSpanToLump(ord, -1);
     for (int64_t i = 0; i < ord; i++) {
         auto [height, unmergedSize, k] = unmergedHeightNode[i];
         if (mergeWith[k] != -1) {
             continue;
         }
+        /*if (k >= 15 && k < 25) {
+            cout << "k =" << k << ", h = " << height << ", i = " << i
+                 << ", lumpIndex = " << lumpIndex << endl;
+        }*/
         unpermutedRootSpanToLump[k] = lumpIndex;
         lumpStart[lumpIndex] = nodeSize[k];
         lumpToSpan[lumpIndex] = numMergedNodes[k];
@@ -247,17 +266,51 @@ void EliminationTree::computeMerges() {
     cumSumVec(lumpStart);
     cumSumVec(lumpToSpan);
 
+    /*int64_t q = 0;
+    while (q < ord && lumpToSpan[q] == q) {
+        q++;
+    }
+    cout << "Is the identity up to: " << q << endl;
+
+    int64_t w = 0;
+    while (w < ord && unpermutedRootSpanToLump[w] == w) {
+        w++;
+    }
+    cout << "unpermutedRootSpanToLump is the identity up to: " << w << endl;
+
+    cout << "M: "
+         << printVec(vector<int64_t>(mergeWith.begin(), mergeWith.begin() + 30))
+         << endl;
+    cout << "R2L: "
+         << printVec(vector<int64_t>(unpermutedRootSpanToLump.begin(),
+                                     unpermutedRootSpanToLump.begin() + 30))
+         << endl;*/
+
     // permutation.resize(ord);
     permInverse.resize(ord);
-    vector<int64_t> spanToLump(ord);  // permuted
+    // vector<int64_t> spanToLump(ord);  // permuted
     for (int64_t i = 0; i < ord; i++) {
-        auto [height, unmergedSize, k] = unmergedHeightNode[i];
-        int64_t p = mergeWith[k];
-        int64_t lumpIndex = unpermutedRootSpanToLump[p == -1 ? k : p];
+        // auto [height, unmergedSize, k] = unmergedHeightNode[i];
+        int64_t p = mergeWith[i];
+        int64_t lumpIndex = unpermutedRootSpanToLump[p == -1 ? i : p];
+        /*if (i >= 15 && i < 25) {
+            cout << "k = " << k << ", p = " << p << ", h = " << height
+                 << ", i = " << i << ", lumpIndex = " << lumpIndex
+                 << ", l2sp: " << lumpToSpan[lumpIndex] << endl;
+        }*/
         permInverse[i] = lumpToSpan[lumpIndex]++;  // advance
     }
-
     rewindVec(lumpToSpan);  // restore after advancing
+
+    /*int64_t z = 0;
+    while (z < ord && permInverse[z] == z) {
+        z++;
+    }
+    cout << "Perm is the identity up to: " << z << endl;
+    cout << "iP: "
+         << printVec(
+                vector<int64_t>(permInverse.begin(), permInverse.begin() + 30))
+         << endl;*/
 #if 0
     // straightening permutation, make merged nodes consecutive
     int64_t numLumps = ord - numMerges;

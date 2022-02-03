@@ -57,6 +57,14 @@ inline int64_t bisect(const int64_t* array, int64_t size, int64_t needle) {
     return a;
 }
 
+template <typename T, typename Iterator>
+void leftPermute(Iterator& it, const std::vector<int64_t>& perm,
+                 const std::vector<T>& w) {
+    for (size_t i = 0; i < perm.size(); i++) {
+        *(it + perm[i]) = w[i];
+    }
+}
+
 std::vector<int64_t> composePermutations(const std::vector<int64_t>& v,
                                          const std::vector<int64_t>& w);
 
