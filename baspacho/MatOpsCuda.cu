@@ -30,60 +30,13 @@ using OuterStridedCMajMatK = Eigen::Map<
     const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
     OuterStride>;
 
-// returns all pairs (x, y) with 0 <= x <= y < n, while p varies in 0 <= p <
-// n*(n+1)/2
-__device__ inline std::pair<int64_t, int64_t> toOrderedPair(int64_t n,
-                                                            int64_t p) {
-    // the trick below converts p that varies in the range 0,1,...,n*(n+1)/2
-    // to a pair x<=y, where y varies in the range 0,1,...,(n-1) and,
-    // for each y, x varies in the range 0,1,...,y
-    // furthermore, x increases sequentially in all pairs that are generated,
-    // and this will optimize the memory accesses
-    int64_t odd = n & 1;
-    int64_t m = n + 1 - odd;
-    int64_t x = p % m;            // here: x = 0,1,...,n-1
-    int64_t y = n - 1 - (p / m);  // here: y = n-1,n-2,...,floor(n/2)
-    if (x > y) {  // flip the triangle formed by points with x>y, and move it
-                  // close to the origin
-        x = x - y - 1;
-        y = n - 1 - odd - y;
-    }
-    return std::make_pair(x, y);
-}
-
 struct CudaSymElimCtx : SymElimCtx {
     CudaSymElimCtx() {}
     virtual ~CudaSymElimCtx() override {}
 
-#if 0  // TODO
-    // per-row pointers to chains in a rectagle:
-    // * span-rows from lumpToSpan[lumpsEnd],
-    // * board cols in interval lumpsBegin:lumpsEnd
-    int64_t spanRowBegin;
-    int64_t maxBufferSize;
-    std::vector<int64_t> rowPtr;       // row data pointer
-    std::vector<int64_t> colLump;      // col-lump
-    std::vector<int64_t> chainColOrd;  // order in col chain elements
-#endif
-};
-
-template <typename T>
-struct DevMirror {
-    DevMirror() {}
-    ~DevMirror() {
-        if (ptr) {
-            cuCHECK(cudaFree(ptr));
-        }
-    }
-    void load(const vector<T>& vec) {
-        if (ptr) {
-            cuCHECK(cudaFree(ptr));
-        }
-        cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T)));
-        cuCHECK(cudaMemcpy(ptr, vec.data(), vec.size() * sizeof(T),
-                           cudaMemcpyHostToDevice));
-    }
-    T* ptr = nullptr;
+    int64_t numColumns;
+    int64_t numBlockPairs;
+    DevMirror<int64_t> makeBlockPairEnumStraight;
 };
 
 struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
@@ -121,7 +74,20 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
                                              int64_t lumpsEnd) override {
         CudaSymElimCtx* elim = new CudaSymElimCtx;
 
-        // TODO
+        vector<int64_t> makeStraight(lumpsEnd - lumpsBegin + 1);
+
+        // for each lump, compute number of pairs contributing to elim
+        for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
+            int64_t startPtr = skel.chainColPtr[l] + 1;  // skip diag block
+            int64_t endPtr = skel.chainColPtr[l + 1];
+            int64_t n = endPtr - startPtr;
+            makeStraight[l - lumpsBegin] = n * (n + 1) / 2;
+        }
+        cumSumVec(makeStraight);
+
+        elim->numColumns = lumpsEnd - lumpsBegin;
+        elim->numBlockPairs = makeStraight[makeStraight.size() - 1];
+        elim->makeBlockPairEnumStraight.load(makeStraight);
 
         return SymElimCtxPtr(elim);
     }
@@ -313,6 +279,34 @@ __global__ static inline void sparse_elim_kernel(
 }
 
 template <typename T>
+__global__ static inline void sparse_elim_straight_kernel(
+    const int64_t* chainColPtr, const int64_t* lumpStart,
+    const int64_t* chainRowSpan, const int64_t* spanStart,
+    const int64_t* chainData, const int64_t* spanToLump,
+    const int64_t* spanOffsetInLump, T* data, int64_t lumpIndexStart,
+    int64_t lumpIndexEnd, const int64_t* makeBlockPairEnumStraight,
+    int64_t numBlockPairs) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= numBlockPairs) {
+        return;
+    }
+    // makeBlockPairEnumStraight contains the cumulated sum of nb*(nb+1)/2
+    // over all columns, nb being the number of blocks in the columns.
+    // `i` is the index in the index in the list of all pairs of block in
+    // the same column. We bisect and get as position the column (relative to
+    // lumpIndexStart), and as offset to the found value the index
+    // 0..nb*(nb+1)/2-1 in the list of pairs of blocks in the column. Such
+    // index if converted to ordered the pair di/dj
+    int64_t pos =
+        bisect(makeBlockPairEnumStraight, lumpIndexEnd - lumpIndexStart, i);
+    int64_t l = lumpIndexStart + pos;
+    int64_t n = chainColPtr[l + 1] - (chainColPtr[l] + 1);
+    auto [di, dj] = toOrderedPair(n, i - makeBlockPairEnumStraight[pos]);
+    do_sparse_elim(chainColPtr, lumpStart, chainRowSpan, spanStart, chainData,
+                   spanToLump, spanOffsetInLump, data, l, di, dj);
+}
+
+template <typename T>
 __device__ static inline void stridedMatSubDev(T* dst, int64_t dstStride,
                                                const T* src, int64_t srcStride,
                                                int64_t rSize, int64_t cSize) {
@@ -394,12 +388,25 @@ struct CudaNumericCtx : NumericCtx<T> {
             sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
             sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
 
+#if 0
         sparse_elim_kernel<double><<<numGroups, wgs>>>(
             sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
             sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
             lumpsBegin, lumpsEnd);
-
+#else
+        /*int64_t numColumns;
+        int64_t numBlockPairs;
+        DevMirror<int64_t> makeBlockPairEnumStraight;*/
+        int wgs2 = 32;
+        int numGroups2 = (elim.numBlockPairs + wgs2 - 1) / wgs2;
+        sparse_elim_straight_kernel<double><<<numGroups2, wgs2>>>(
+            sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
+            sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
+            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
+            lumpsBegin, lumpsEnd, elim.makeBlockPairEnumStraight.ptr,
+            elim.numBlockPairs);
+#endif
         /*for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
             factorLump(skel, data, l);
         }*/

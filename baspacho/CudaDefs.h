@@ -7,6 +7,8 @@
 #include <cusolverSp.h>
 #include <cusparse.h>
 
+#include <vector>
+
 namespace BaSpaCho {
 
 const char* cublasGetErrorEnum(cublasStatus_t error);
@@ -57,3 +59,23 @@ const char* cusolverGetErrorEnum(cusolverStatus_t error);
             abort();                                           \
         }                                                      \
     } while (0)
+
+// utility class to mirror an std::vector
+template <typename T>
+struct DevMirror {
+    DevMirror() {}
+    ~DevMirror() {
+        if (ptr) {
+            cuCHECK(cudaFree(ptr));
+        }
+    }
+    void load(const std::vector<T>& vec) {
+        if (ptr) {
+            cuCHECK(cudaFree(ptr));
+        }
+        cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T)));
+        cuCHECK(cudaMemcpy(ptr, vec.data(), vec.size() * sizeof(T),
+                           cudaMemcpyHostToDevice));
+    }
+    T* ptr = nullptr;
+};
