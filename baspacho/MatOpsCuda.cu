@@ -104,6 +104,8 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         devChainData.load(skel.chainData);
         devBoardColPtr.load(skel.boardColPtr);
         devBoardChainColOrd.load(skel.boardChainColOrd);
+        devSpanStart.load(skel.spanStart);
+        devSpanToLump.load(skel.spanToLump);
     }
 
     virtual ~CudaSymbolicCtx() override {
@@ -141,6 +143,8 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     DevMirror<int64_t> devChainData;
     DevMirror<int64_t> devBoardColPtr;
     DevMirror<int64_t> devBoardChainColOrd;
+    DevMirror<int64_t> devSpanStart;
+    DevMirror<int64_t> devSpanToLump;
 };
 
 // cuda ops implemented using CUBLAS and custom kernels
@@ -186,8 +190,127 @@ __global__ static inline void factor_lumps_kernel(
     }
 }
 
+#if 0
+// magic IEEE double number locking mechanism
+struct MagicLock {
+    // this is a magic value (a NaN with "content" 0xb10cd, "blocked")
+    // which his functionally equivalent to a NaN but cannot be ever
+    // obtained as result of a computation, and can therefore be used as
+    // a "magic" value to block matrix of double numbers
+    // For future reference a magic value for floats could be 0x7f80b1cdu
+    static constexpr uint64_t magicValue = 0x7ff00000000b10cdul;
+
+    static inline __attribute__((always_inline)) double lock(double* address) {
+        uint64_t retv;
+        do {
+            retv = __atomic_exchange_n((uint64_t*)address, magicValue,
+                                       __ATOMIC_ACQUIRE);
+        } while (retv == magicValue);
+        return *(double*)(&retv);
+    }
+
+    static inline __attribute__((always_inline)) void unlock(double* address,
+                                                             double val) {
+        __atomic_store_n((uint64_t*)address, *(uint64_t*)(&val),
+                         __ATOMIC_RELEASE);
+    }
+};
+
+template <typename A, typename B, typename C>
+__device__ void locked_sub_product(A& aMat, const B& bMat, const C& cMatT) {}
+#endif
+
+__device__ static inline float aAdd(float* address, float val) {
+    return atomicAdd(address, val);
+}
+
+__device__ static inline double aAdd(double* address, double val) {
+    unsigned long long int* address_as_ull = (unsigned long long int*)address;
+    unsigned long long int old = *address_as_ull, assumed;
+    do {
+        assumed = old;
+        old = ::atomicCAS(
+            address_as_ull, assumed,
+            ::__double_as_longlong(val + __longlong_as_double(assumed)));
+        // Note: uses integer comparison to avoid hang in case of NaN (since NaN
+        // != NaN)
+    } while (assumed != old);
+    return __longlong_as_double(old);
+}
+
+template <typename A, typename B, typename C>
+__device__ void locked_sub_product(A& aMat, const B& bMat, const C& cMatT) {
+    for (int i = 0; i < bMat.rows(); i++) {
+        for (int j = 0; j < cMatT.rows(); j++) {
+            double* addr = &aMat(i, j);
+            double val = -bMat.row(i).dot(cMatT.row(j));
+            aAdd(addr, val);
+        }
+    }
+}
+
 template <typename T>
-__global__ static inline void sparse_elim_kernel() {}
+__device__ static inline void do_sparse_elim(
+    const int64_t* chainColPtr, const int64_t* lumpStart,
+    const int64_t* chainRowSpan, const int64_t* spanStart,
+    const int64_t* chainData, const int64_t* spanToLump,
+    const int64_t* spanOffsetInLump, T* data, int64_t l, int64_t di,
+    int64_t dj) {
+    int64_t startPtr = chainColPtr[l] + 1;  // skip diag block
+    int64_t endPtr = chainColPtr[l + 1];
+    int64_t lColSize = lumpStart[l + 1] - lumpStart[l];
+
+    int64_t i = startPtr + di;
+    int64_t si = chainRowSpan[i];
+    int64_t siSize = spanStart[si + 1] - spanStart[si];
+    int64_t siDataPtr = chainData[i];
+    Eigen::Map<MatRMaj<T>> ilBlock(data + siDataPtr, siSize, lColSize);
+
+    int64_t targetLump = spanToLump[si];
+    int64_t targetSpanOffsetInLump = spanOffsetInLump[si];
+    int64_t targetStartPtr = chainColPtr[targetLump];  // skip diag block
+    int64_t targetEndPtr = chainColPtr[targetLump + 1];
+    int64_t targetLumpSize = lumpStart[targetLump + 1] - lumpStart[targetLump];
+
+    int64_t j = startPtr + dj;
+    int64_t sj = chainRowSpan[j];
+    int64_t sjSize = spanStart[sj + 1] - spanStart[sj];
+    int64_t sjDataPtr = chainData[j];
+
+    Eigen::Map<MatRMaj<T>> jlBlock(data + sjDataPtr, sjSize, lColSize);
+
+    uint64_t pos = bisect(chainRowSpan + targetStartPtr,
+                          targetEndPtr - targetStartPtr, sj);
+    // BASPACHO_CHECK_EQ(chainRowSpan[targetStartPtr + pos], sj);
+    int64_t jiDataPtr = chainData[targetStartPtr + pos];
+    OuterStridedMatM<T> jiBlock(data + jiDataPtr + targetSpanOffsetInLump,
+                                sjSize, siSize, OuterStride(targetLumpSize));
+    // jiBlock -= jlBlock * ilBlock.transpose();
+    locked_sub_product(jiBlock, jlBlock, ilBlock);
+}
+
+template <typename T>
+__global__ static inline void sparse_elim_kernel(
+    const int64_t* chainColPtr, const int64_t* lumpStart,
+    const int64_t* chainRowSpan, const int64_t* spanStart,
+    const int64_t* chainData, const int64_t* spanToLump,
+    const int64_t* spanOffsetInLump, T* data, int64_t lumpIndexStart,
+    int64_t lumpIndexEnd) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int64_t l = lumpIndexStart + i;
+    if (l >= lumpIndexEnd) {
+        return;
+    }
+    int64_t startPtr = chainColPtr[l] + 1;  // skip diag block
+    int64_t endPtr = chainColPtr[l + 1];
+    for (int64_t i = startPtr; i < endPtr; i++) {
+        for (int64_t j = i; j < endPtr; j++) {
+            do_sparse_elim(chainColPtr, lumpStart, chainRowSpan, spanStart,
+                           chainData, spanToLump, spanOffsetInLump, data, l,
+                           i - startPtr, j - startPtr);
+        }
+    }
+}
 
 template <typename T>
 __device__ static inline void stridedMatSubDev(T* dst, int64_t dstStride,
@@ -270,6 +393,12 @@ struct CudaNumericCtx : NumericCtx<T> {
             sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
             sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
             sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
+
+        sparse_elim_kernel<double><<<numGroups, wgs>>>(
+            sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
+            sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
+            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
+            lumpsBegin, lumpsEnd);
 
         /*for (int64_t l = lumpsBegin; l < lumpsEnd; l++) {
             factorLump(skel, data, l);

@@ -142,12 +142,10 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         Eigen::MatrixXd verifyMat = factorSkel.densify(data);
         Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
 
-        /*int64_t largestIndep =
-            findLargestIndependentLumpSet(factorSkel, 0).first;*/
         ASSERT_GE(et.sparseElimRanges.size(), 2);
         int64_t largestIndep = et.sparseElimRanges[1];
-        Solver solver(move(factorSkel),  // {0, largestIndep},
-                      move(et.sparseElimRanges), {}, genOps());
+        Solver solver(move(factorSkel), move(et.sparseElimRanges), {},
+                      genOps());
 
         NumericCtxPtr<double> numCtx =
             solver.symCtx->createNumericCtx<double>(0);
@@ -157,7 +155,6 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
         cuCHECK(cudaMemcpy(dataGPU, data.data(), data.size() * sizeof(double),
                            cudaMemcpyHostToDevice));
-        // solver.factor(dataGPU);
         numCtx->doElimination(*solver.elimCtxs[0], dataGPU, 0, largestIndep);
         cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
                            cudaMemcpyDeviceToHost));
@@ -176,4 +173,60 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
 
 TEST(CudaFactor, SparseElim_Many_Blas) {
     testSparseElim_Many([] { return cudaOps(); });
+}
+
+void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
+    for (int i = 0; i < 20; i++) {
+        auto colBlocks = randomCols(115, 0.03, 57 + i);
+        colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
+        SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
+
+        vector<int64_t> permutation = ss.fillReducingPermutation();
+        vector<int64_t> invPerm = inversePermutation(permutation);
+        SparseStructure sortedSs = ss;
+
+        vector<int64_t> paramSize =
+            randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
+        EliminationTree et(paramSize, sortedSs);
+        et.buildTree();
+        et.computeMerges(/* compute sparse elim ranges = */ true);
+        et.computeAggregateStruct();
+
+        CoalescedBlockMatrixSkel factorSkel(
+            et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
+
+        vector<double> data =
+            randomData(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
+        factorSkel.damp(data, 0, factorSkel.order() * 1.5);
+
+        Eigen::MatrixXd verifyMat = factorSkel.densify(data);
+        Eigen::LLT<Eigen::Ref<Eigen::MatrixXd>> llt(verifyMat);
+
+        ASSERT_GE(et.sparseElimRanges.size(), 2);
+        int64_t largestIndep = et.sparseElimRanges[1];
+        Solver solver(move(factorSkel), move(et.sparseElimRanges), {},
+                      genOps());
+
+        // call factor on gpu data
+        double* dataGPU;
+        cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
+        cuCHECK(cudaMemcpy(dataGPU, data.data(), data.size() * sizeof(double),
+                           cudaMemcpyHostToDevice));
+        solver.factor(dataGPU);
+        cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
+                           cudaMemcpyDeviceToHost));
+        cuCHECK(cudaFree(dataGPU));
+
+        Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
+
+        ASSERT_NEAR(
+            Eigen::MatrixXd(
+                (verifyMat - computedMat).triangularView<Eigen::Lower>())
+                .norm(),
+            0, 1e-5);
+    }
+}
+
+TEST(CudaFactor, SparseElimAndFactor_Many_Blas) {
+    testSparseElimAndFactor_Many([] { return cudaOps(); });
 }

@@ -44,6 +44,13 @@ bool isWeaklyIncreasing(const std::vector<T>& v, std::size_t begin,
     return i == e;
 }
 
+#ifdef __CUDACC__
+#define __BASPACHO_HOST_DEVICE__ __host__ __device__
+#else
+#define __BASPACHO_HOST_DEVICE__
+#endif
+
+__BASPACHO_HOST_DEVICE__
 inline int64_t bisect(const int64_t* array, int64_t size, int64_t needle) {
     int64_t a = 0, b = size;
     while (b - a > 1) {
