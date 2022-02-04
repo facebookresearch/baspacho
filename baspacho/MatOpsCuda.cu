@@ -185,11 +185,13 @@ template <typename A, typename B, typename C>
 __device__ void locked_sub_product(A& aMat, const B& bMat, const C& cMatT) {}
 #endif
 
-__device__ static inline float aAdd(float* address, float val) {
+__device__ [[maybe_unused]] static inline float aAdd(float* address,
+                                                     float val) {
     return atomicAdd(address, val);
 }
 
-__device__ static inline double aAdd(double* address, double val) {
+__device__ [[maybe_unused]] static inline double aAdd(double* address,
+                                                      double val) {
     unsigned long long int* address_as_ull = (unsigned long long int*)address;
     unsigned long long int old = *address_as_ull, assumed;
     do {
@@ -451,6 +453,7 @@ struct CudaNumericCtx : NumericCtx<T> {
     virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
                                      const T* data, int64_t* offsets,
                                      int batchSize) {
+        UNUSED(ms, ns, ks, data, offsets, batchSize);
         BASPACHO_CHECK(!"Batching not supported");
     }
 
@@ -505,7 +508,8 @@ struct CudaSolveCtx : SolveCtx<T> {
 
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
                         int64_t offC, int64_t ldc, int64_t nRHS) override {
-        // BASPACHO_CHECK(!"Not implemented yet!");
+        UNUSED(data, offM, n, C, offC, ldc, nRHS);
+        BASPACHO_CHECK(!"Not implemented yet!");
 #if 0
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
         OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
@@ -516,7 +520,8 @@ struct CudaSolveCtx : SolveCtx<T> {
     virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
                       const T* A, int64_t offA, int64_t lda, T* C,
                       int64_t nRHS) override {
-        // BASPACHO_CHECK(!"Not implemented yet!");
+        UNUSED(data, offM, nRows, nCols, C, nRHS, A, offA, lda);
+        BASPACHO_CHECK(!"Not implemented yet!");
 #if 0
         Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatK<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
@@ -528,7 +533,8 @@ struct CudaSolveCtx : SolveCtx<T> {
     virtual void assembleVec(const T* A, int64_t chainColPtr,
                              int64_t numColItems, T* C, int64_t ldc,
                              int64_t nRHS) override {
-        // BASPACHO_CHECK(!"Not implemented yet!");
+        UNUSED(C, ldc, nRHS, A, chainColPtr, numColItems);
+        BASPACHO_CHECK(!"Not implemented yet!");
 #if 0
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
@@ -552,7 +558,8 @@ struct CudaSolveCtx : SolveCtx<T> {
 
     virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
                          int64_t offC, int64_t ldc, int64_t nRHS) override {
-        // BASPACHO_CHECK(!"Not implemented yet!");
+        UNUSED(data, offM, n, C, offC, ldc, nRHS);
+        BASPACHO_CHECK(!"Not implemented yet!");
 #if 0
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
         OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
@@ -564,7 +571,8 @@ struct CudaSolveCtx : SolveCtx<T> {
     virtual void gemvT(const T* data, int64_t offM, int64_t nRows,
                        int64_t nCols, const T* C, int64_t nRHS, T* A,
                        int64_t offA, int64_t lda) override {
-        // BASPACHO_CHECK(!"Not implemented yet!");
+        UNUSED(data, offM, nRows, nCols, C, nRHS, A, offA, lda);
+        BASPACHO_CHECK(!"Not implemented yet!");
 #if 0
         Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatM<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
@@ -576,7 +584,8 @@ struct CudaSolveCtx : SolveCtx<T> {
     virtual void assembleVecT(const T* C, int64_t ldc, int64_t nRHS, T* A,
                               int64_t chainColPtr,
                               int64_t numColItems) override {
-        // BASPACHO_CHECK(!"Not implemented yet!");
+        UNUSED(C, ldc, nRHS, A, chainColPtr, numColItems);
+        BASPACHO_CHECK(!"Not implemented yet!");
 #if 0
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
@@ -603,6 +612,7 @@ struct CudaSolveCtx : SolveCtx<T> {
 NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
                                                          int64_t tempBufSize,
                                                          int maxBatchSize) {
+    UNUSED(maxBatchSize);
     if (tIdx == std::type_index(typeid(double))) {
         return new CudaNumericCtx<double>(*this, tempBufSize,
                                           skel.spanStart.size() - 1);

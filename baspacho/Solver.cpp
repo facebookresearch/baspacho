@@ -25,7 +25,7 @@ Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_,
       permutation(std::move(permutation_)),
       ops(std::move(ops_)) {
     symCtx = ops->createSymbolicCtx(factorSkel);
-    for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+    for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
         elimCtxs.push_back(symCtx->prepareElimination(elimLumpRanges[l],
                                                       elimLumpRanges[l + 1]));
     }
@@ -157,8 +157,6 @@ void Solver::eliminateBoardBatch(NumericCtx<double>& numCtx, double* data,
         int64_t origLump = factorSkel.boardColLump[ptr + i];
         int64_t boardIndexInCol = factorSkel.boardColOrd[ptr + i];
 
-        int64_t origLumpSize =
-            factorSkel.lumpStart[origLump + 1] - factorSkel.lumpStart[origLump];
         int64_t chainColBegin = factorSkel.chainColPtr[origLump];
 
         int64_t boardColBegin = factorSkel.boardColPtr[origLump];
@@ -170,16 +168,11 @@ void Solver::eliminateBoardBatch(NumericCtx<double>& numCtx, double* data,
             factorSkel.boardChainColOrd[boardColBegin + boardIndexInCol + 1];
         int64_t rowDataEnd1 = factorSkel.boardChainColOrd[boardColEnd - 1];
 
-        int64_t belowDiagStart =
-            factorSkel.chainData[chainColBegin + belowDiagChainColOrd];
         int64_t rectRowBegin =
             factorSkel
                 .chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
         int64_t numRowsSub =
             factorSkel.chainRowsTillEnd[chainColBegin + rowDataEnd0 - 1] -
-            rectRowBegin;
-        int64_t numRowsFull =
-            factorSkel.chainRowsTillEnd[chainColBegin + rowDataEnd1 - 1] -
             rectRowBegin;
 
         int64_t targetLump =
@@ -228,8 +221,8 @@ void Solver::initElimination() {
     startElimRowPtr.resize(factorSkel.chainColPtr.size() - 1 -
                            denseOpsFromLump);
     maxElimTempSize = 0;
-    for (int64_t l = denseOpsFromLump; l < factorSkel.chainColPtr.size() - 1;
-         l++) {
+    for (int64_t l = denseOpsFromLump;
+         l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
         //  iterate over columns having a non-trivial a-block
         int64_t rPtr = factorSkel.boardRowPtr[l];
         int64_t rEnd = factorSkel.boardRowPtr[l + 1];
@@ -272,7 +265,7 @@ void Solver::factorXp2(double* data, bool verbose) const {
     NumericCtxPtr<double> numCtx =
         symCtx->createNumericCtx<double>(maxElimTempSize, maxBatchSize);
 
-    for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+    for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
         if (verbose) {
             std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
                       << elimLumpRanges[l + 1] << ")" << std::endl;
@@ -287,8 +280,8 @@ void Solver::factorXp2(double* data, bool verbose) const {
         std::cout << "Block-Fact from: " << denseOpsFromLump << std::endl;
     }
 
-    for (int64_t l = denseOpsFromLump; l < factorSkel.chainColPtr.size() - 1;
-         l++) {
+    for (int64_t l = denseOpsFromLump;
+         l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
         int64_t rPtr = startElimRowPtr[l - denseOpsFromLump],
                 rEnd = factorSkel.boardRowPtr[l + 1] -
                        1;  // skip last (diag block)
@@ -308,7 +301,7 @@ void Solver::factorXp(double* data, bool verbose) const {
     NumericCtxPtr<double> numCtx =
         symCtx->createNumericCtx<double>(maxElimTempSize);
 
-    for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+    for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
         if (verbose) {
             std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
                       << elimLumpRanges[l + 1] << ")" << std::endl;
@@ -323,8 +316,8 @@ void Solver::factorXp(double* data, bool verbose) const {
         std::cout << "Block-Fact from: " << denseOpsFromLump << std::endl;
     }
 
-    for (int64_t l = denseOpsFromLump; l < factorSkel.chainColPtr.size() - 1;
-         l++) {
+    for (int64_t l = denseOpsFromLump;
+         l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
         numCtx->prepareAssemble(l);
 
         //  iterate over columns having a non-trivial a-block
@@ -345,7 +338,7 @@ void Solver::solveL(const double* matData, double* vecData, int64_t stride,
     vector<double> tmpData(order * nRHS);
 
     SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>();
-    for (int64_t l = 0; l < factorSkel.chainColPtr.size() - 1; l++) {
+    for (int64_t l = 0; l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
         int64_t chainColBegin = factorSkel.chainColPtr[l];
@@ -425,7 +418,7 @@ void Solver::printStats() const {
     if (elimLumpRanges.size() >= 2) {
         cout << "Sparse elimination sets:" << endl;
     }
-    for (int64_t l = 0; l + 1 < elimLumpRanges.size(); l++) {
+    for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
         cout << "  elim set [" << elimLumpRanges[l] << ".."
              << elimLumpRanges[l + 1]
              << "]: " << elimCtxs[l]->elimStat.toString() << endl;
@@ -456,7 +449,7 @@ OpsPtr getBackend(const Settings& settings) {
 
 SolverPtr createSolver(const Settings& settings,
                        const std::vector<int64_t>& paramSize,
-                       const SparseStructure& ss, bool verbose) {
+                       const SparseStructure& ss) {
     vector<int64_t> permutation = ss.fillReducingPermutation();
     vector<int64_t> invPerm = inversePermutation(permutation);
     SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
@@ -481,12 +474,11 @@ SolverPtr createSolver(const Settings& settings,
 SolverPtr createSolverSchur(const Settings& settings,
                             const std::vector<int64_t>& paramSize,
                             const SparseStructure& ss_,
-                            const std::vector<int64_t>& elimLumpRanges,
-                            bool verbose) {
-    BASPACHO_CHECK_GE(elimLumpRanges.size(), 2);
+                            const std::vector<int64_t>& elimLumpRanges) {
+    BASPACHO_CHECK_GE((int64_t)elimLumpRanges.size(), 2);
     SparseStructure ss =
         ss_.addIndependentEliminationFill(elimLumpRanges[0], elimLumpRanges[1]);
-    for (int64_t e = 1; e < elimLumpRanges.size() - 1; e++) {
+    for (int64_t e = 1; e < (int64_t)elimLumpRanges.size() - 1; e++) {
         ss = ss.addIndependentEliminationFill(elimLumpRanges[e],
                                               elimLumpRanges[e + 1]);
     }
@@ -512,9 +504,6 @@ SolverPtr createSolverSchur(const Settings& settings,
     et.computeMerges(settings.findSparseEliminationRanges);
     et.computeAggregateStruct();
 
-    /*BASPACHO_CHECK_EQ(et.spanStart.size() - 1,
-                      et.lumpToSpan[et.lumpToSpan.size() - 1]);*/
-
     // ss last rows are to be permuted according to etTotalInvPerm
     vector<int64_t> etTotalInvPerm =
         composePermutations(et.permInverse, invPerm);
@@ -537,7 +526,7 @@ SolverPtr createSolverSchur(const Settings& settings,
     iota(fullLumpToSpan.begin(), fullLumpToSpan.begin() + elimEnd, 0);
     shiftConcat(fullLumpToSpan, elimEnd, et.lumpToSpan.begin(),
                 et.lumpToSpan.end());
-    BASPACHO_CHECK_EQ(fullSpanStart.size() - 1,
+    BASPACHO_CHECK_EQ((int64_t)fullSpanStart.size() - 1,
                       fullLumpToSpan[fullLumpToSpan.size() - 1]);
 
     // matrix with blocks not joined, we will need the first columns
@@ -560,7 +549,7 @@ SolverPtr createSolverSchur(const Settings& settings,
     fullRowParam.insert(fullRowParam.begin(), sortedSsT.inds.begin(),
                         sortedSsT.inds.begin() + elimEndDataPtr);
     shiftConcat(fullRowParam, elimEnd, et.rowParam.begin(), et.rowParam.end());
-    BASPACHO_CHECK_EQ(fullRowParam.size(),
+    BASPACHO_CHECK_EQ((int64_t)fullRowParam.size(),
                       fullColStart[fullColStart.size() - 1]);
 
     CoalescedBlockMatrixSkel factorSkel(fullSpanStart, fullLumpToSpan,

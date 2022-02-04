@@ -7,6 +7,11 @@
 
 namespace BaSpaCho {
 
+template <typename... Args>
+void UNUSED(const Args&... args) {
+    (void)(sizeof...(args));
+}
+
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 struct OpStat {

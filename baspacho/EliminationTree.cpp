@@ -134,10 +134,10 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
         mergeCandidates.pop();
 
         auto oldP = p;
-        BASPACHO_CHECK_LT(p, mergeWith.size());
+        BASPACHO_CHECK_LT(p, (int64_t)mergeWith.size());
         while (mergeWith[p] != -1) {
             p = mergeWith[p];
-            BASPACHO_CHECK_LT(p, mergeWith.size());
+            BASPACHO_CHECK_LT(p, (int64_t)mergeWith.size());
         }
 
         // parent was merged? value changed, re-prioritize
@@ -172,7 +172,6 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
     }
 
     // collapse pointer to parent, make parent become root ancestor
-    int64_t numMergesAlt = 0;
     for (int64_t k = ord - 1; k >= 0; k--) {
         int64_t p = mergeWith[k];
         if (p == -1) {

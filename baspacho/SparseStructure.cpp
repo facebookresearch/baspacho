@@ -50,7 +50,7 @@ SparseStructure SparseStructure::transpose() const {
         for (int64_t k = start; k < end; k++) {
             int64_t j = inds[k];
             BASPACHO_CHECK_LT(j, ord);
-            BASPACHO_CHECK_LT(retv.ptrs[j], retv.inds.size());
+            BASPACHO_CHECK_LT(retv.ptrs[j], (int64_t)retv.inds.size());
             retv.inds[retv.ptrs[j]++] = i;
         }
     }
@@ -91,7 +91,7 @@ SparseStructure SparseStructure::clear(bool lowerHalf) const {
             if (i != j && (j > i) == lowerHalf) {
                 continue;
             }
-            BASPACHO_CHECK_LT(retv.ptrs[i], retv.inds.size());
+            BASPACHO_CHECK_LT(retv.ptrs[i], (int64_t)retv.inds.size());
             retv.inds[retv.ptrs[i]++] = j;
         }
     }
@@ -105,7 +105,7 @@ SparseStructure SparseStructure::symmetricPermutation(
     const std::vector<int64_t>& mapPerm, bool lowerHalf,
     bool sortIndices) const {
     int64_t ord = order();
-    BASPACHO_CHECK_EQ(ord, mapPerm.size());
+    BASPACHO_CHECK_EQ(ord, (int64_t)mapPerm.size());
 
     SparseStructure retv;
     retv.ptrs.assign(ord + 1, 0);
@@ -140,7 +140,7 @@ SparseStructure SparseStructure::symmetricPermutation(
             BASPACHO_CHECK_LT(newJ, ord);
             int64_t col = lowerHalf ? min(newI, newJ) : max(newI, newJ);
             int64_t row = lowerHalf ? max(newI, newJ) : min(newI, newJ);
-            BASPACHO_CHECK_LT(retv.ptrs[col], retv.inds.size());
+            BASPACHO_CHECK_LT(retv.ptrs[col], (int64_t)retv.inds.size());
             retv.inds[retv.ptrs[col]++] = row;
         }
     }
@@ -176,7 +176,6 @@ SparseStructure SparseStructure::addIndependentEliminationFill(
     retv.inds.assign(inds.begin(), inds.begin() + ptrs[elimEnd]);
 
     vector<int64_t> tags(ord, -1);  // mark added row entries
-    int64_t numMatches = 0;
     for (int64_t k = elimEnd; k < ord; ++k) {
         int64_t start = ptrs[k];
         int64_t end = ptrs[k + 1];
@@ -363,7 +362,8 @@ SparseStructure SparseStructure::extractRightBottom(int64_t startRow) {
             int64_t j = inds[k];
             BASPACHO_CHECK_LT(j, ord);
             if (j >= startRow) {
-                BASPACHO_CHECK_LT(retv.ptrs[i - startRow], retv.inds.size());
+                BASPACHO_CHECK_LT(retv.ptrs[i - startRow],
+                                  (int64_t)retv.inds.size());
                 retv.inds[retv.ptrs[i - startRow]++] = j - startRow;
             }
         }

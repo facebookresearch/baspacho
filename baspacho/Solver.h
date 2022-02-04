@@ -71,12 +71,11 @@ struct Settings {
 
 SolverPtr createSolver(const Settings& settings,
                        const std::vector<int64_t>& paramSize,
-                       const SparseStructure& ss, bool verbose = false);
+                       const SparseStructure& ss);
 
 SolverPtr createSolverSchur(const Settings& settings,
                             const std::vector<int64_t>& paramSize,
                             const SparseStructure& ss,
-                            const std::vector<int64_t>& elimLumpRanges,
-                            bool verbose = false);
+                            const std::vector<int64_t>& elimLumpRanges);
 
 }  // end namespace BaSpaCho

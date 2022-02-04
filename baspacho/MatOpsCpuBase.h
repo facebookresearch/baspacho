@@ -91,7 +91,7 @@ struct CpuBaseSymbolicCtx : SymbolicCtx {
         elim->spanRowBegin = spanRowBegin;
 
         elim->maxBufferSize = 0;
-        for (int64_t r = 0; r < elim->rowPtr.size() - 1; r++) {
+        for (int64_t r = 0; r < (int64_t)elim->rowPtr.size() - 1; r++) {
             elim->maxBufferSize = std::max(elim->maxBufferSize,
                                            computeMaxBufSize(*elim, skel, r));
         }
@@ -198,7 +198,8 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
             Eigen::Map<MatRMaj<T>> chainOnwardSubMat(data + dataOffset,
                                                      nRowsOnward, lumpSize);
 
-            BASPACHO_CHECK_GE(tempBuffer.size(), nRowsOnward * nRowsChain);
+            BASPACHO_CHECK_GE((int64_t)tempBuffer.size(),
+                              nRowsOnward * nRowsChain);
             Eigen::Map<MatRMaj<T>> prod(tempBuffer.data(), nRowsOnward,
                                         nRowsChain);
             prod.noalias() = chainOnwardSubMat * chainSubMat.transpose();

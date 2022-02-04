@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 # set the project name
 project(BaSpaCho CXX)
 set(CMAKE_CXX_STANDARD 17)
+set(BASPACHO_CXX_FLAGS -Wall -Wextra -pedantic -Werror)
 
 message("* Build type: " ${CMAKE_BUILD_TYPE})
 
@@ -15,11 +16,13 @@ if(BASPACHO_USE_CUBLAS)
   check_language(CUDA)
   find_package(CUDAToolkit REQUIRED)
 
-  LIST(APPEND CUDA_NVCC_FLAGS --expt-relaxed-constexpr)
+  LIST(APPEND CUDA_NVCC_FLAGS
+       -Xcompiler -Wall,-Wextra,-Werror,-Wno-unknown-pragmas
+       --expt-relaxed-constexpr)
   message("* CUDA Includes : " ${CUDAToolkit_INCLUDE_DIRS})
   message("* CUDA Libraries: " ${CUDAToolkit_LIBRARY_DIR})
   include_directories(${CUDAToolkit_INCLUDE_DIRS})
-  add_compile_definitions(BASPACHO_USE_CUBLAS=1)
+  add_compile_definitions(BASPACHO_USE_CUBLAS)
 endif()
 
 # BLAS. a few possibilities are:
@@ -57,7 +60,7 @@ if(BASPACHO_USE_SUITESPARSE_AMD)
   message("* Using Algebraic Minimum Degree (AMD) algorithm from SuiteSparse")
   message("* Amd Source = " ${AMD_INCLUDE_DIR})
   message("* Amd Libraries = " ${AMD_LIBRARIES})
-  add_compile_definitions(BASPACHO_USE_SUITESPARSE_AMD=1)
+  add_compile_definitions(BASPACHO_USE_SUITESPARSE_AMD)
 else()
   set(HAVE_AMD 0)
   message("* Using Algebraic Minimum Degree (AMD) algorithm from Eigen")
@@ -79,7 +82,7 @@ else()
   set(HAVE_CHOLMOD 1)
   message("* Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
   message("* Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
-  add_compile_definitions(BASPACHO_HAVE_CHOLMOD=1)
+  add_compile_definitions(BASPACHO_HAVE_CHOLMOD)
   include_directories(${CHOLMOD_INCLUDE_DIR})
 endif()
 
@@ -169,6 +172,9 @@ target_link_libraries (BaSpaCho dispenso ${BLAS_LIBRARIES})
 
 if(BASPACHO_USE_CUBLAS)
   target_link_libraries (BaSpaCho CUDA::cublas CUDA::cusolver)
+  target_compile_options(BaSpaCho PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
+                        ${BASPACHO_CXX_FLAGS}
+                        >)
   target_compile_options(BaSpaCho PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         ${CUDA_NVCC_FLAGS}
                         >)

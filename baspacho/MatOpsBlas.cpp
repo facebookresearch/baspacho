@@ -117,8 +117,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                     [=]() -> ElimContext {
                         return ElimContext(elim.maxBufferSize, numSpans);
                     },
-                    dispenso::makeChunkedRange(0UL, numElimRows, 5UL),
-                    [&, this](ElimContext& ctx, size_t sBegin, size_t sEnd) {
+                    dispenso::makeChunkedRange(0L, numElimRows, 5L),
+                    [&, this](ElimContext& ctx, int64_t sBegin, int64_t sEnd) {
                         for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
                             eliminateRowChain(elim, skel, data, sRel,
                                               ctx.spanToChainOffset,
@@ -134,8 +134,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
             } else {
                 dispenso::TaskSet taskSet(sym.threadPool);
                 dispenso::parallel_for(
-                    taskSet, dispenso::makeChunkedRange(0UL, numElimRows, 5UL),
-                    [&, this](size_t sBegin, size_t sEnd) {
+                    taskSet, dispenso::makeChunkedRange(0L, numElimRows, 5L),
+                    [&, this](int64_t sBegin, int64_t sEnd) {
                         for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
                             eliminateVerySparseRowChain(elim, skel, data, sRel);
                         }
@@ -180,7 +180,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override {
         OpInstance timer(sym.sygeStat);
-        BASPACHO_CHECK_LE(m * n, tempBuffer.size());
+        BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
 
         // in some cases it could be faster with syrk+gemm
         // as it saves some computation, not the case in practice
@@ -209,6 +209,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                                      const T* data, int64_t* offsets,
                                      int batchSize) {
 #ifndef BASPACHO_HAVE_GEMM_BATCH
+        UNUSED(ms, ns, ks, data, offsets, batchSize);
         BASPACHO_CHECK(!"Batching not supported");
 #else
         OpInstance timer(sym.sygeStat);

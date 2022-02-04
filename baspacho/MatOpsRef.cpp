@@ -158,7 +158,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override {
         OpInstance timer(sym.sygeStat);
-        BASPACHO_CHECK_LE(m * n, tempBuffer.size());
+        BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
 
         const T* AB = data + offset;
         T* C = tempBuffer.data();
@@ -173,6 +173,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
     virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
                                      const T* data, int64_t* offsets,
                                      int batchSize) {
+        UNUSED(ms, ns, ks, data, offsets, batchSize);
         BASPACHO_CHECK(!"Batching not supported");
     }
 
@@ -316,9 +317,8 @@ struct SimpleSolveCtx : SolveCtx<T> {
     const SimpleSymbolicCtx& sym;
 };
 
-NumericCtxBase* SimpleSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
-                                                           int64_t tempBufSize,
-                                                           int maxBatchSize) {
+NumericCtxBase* SimpleSymbolicCtx::createNumericCtxForType(
+    std::type_index tIdx, int64_t tempBufSize, int /* maxBatchSize */) {
     if (tIdx == std::type_index(typeid(double))) {
         return new SimpleNumericCtx<double>(*this, tempBufSize,
                                             skel.spanStart.size() - 1);

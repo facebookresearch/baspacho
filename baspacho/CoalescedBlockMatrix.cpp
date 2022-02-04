@@ -14,8 +14,9 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
     const vector<int64_t>& colPtr, const vector<int64_t>& rowInd)
     : spanStart(spanStart), lumpToSpan(lumpToSpan) {
     BASPACHO_CHECK_GE(spanStart.size(), lumpToSpan.size());
-    BASPACHO_CHECK_GE(lumpToSpan.size(), 1);
-    BASPACHO_CHECK_EQ(spanStart.size() - 1, lumpToSpan[lumpToSpan.size() - 1]);
+    BASPACHO_CHECK_GE((int64_t)lumpToSpan.size(), 1);
+    BASPACHO_CHECK_EQ((int64_t)spanStart.size() - 1,
+                      lumpToSpan[lumpToSpan.size() - 1]);
     BASPACHO_CHECK_EQ(colPtr.size(), lumpToSpan.size());
     BASPACHO_CHECK(isStrictlyIncreasing(spanStart, 0, spanStart.size()));
     BASPACHO_CHECK(isStrictlyIncreasing(lumpToSpan, 0, lumpToSpan.size()));
@@ -26,11 +27,11 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
 
     spanToLump.resize(numSpans);
     lumpStart.resize(numLumps + 1);
-    for (size_t l = 0; l < numLumps; l++) {
+    for (int64_t l = 0; l < numLumps; l++) {
         int64_t sBegin = lumpToSpan[l];
         int64_t sEnd = lumpToSpan[l + 1];
         lumpStart[l] = spanStart[sBegin];
-        for (size_t s = sBegin; s < sEnd; s++) {
+        for (int64_t s = sBegin; s < sEnd; s++) {
             spanToLump[s] = l;
         }
     }
@@ -48,8 +49,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
     boardRowLump.clear();
     boardChainColOrd.clear();
     int64_t dataPtr = 0;
-    int64_t gatheredDataPtr = 0;
-    for (size_t l = 0; l < numLumps; l++) {
+    for (int64_t l = 0; l < numLumps; l++) {
         int64_t colStart = colPtr[l];
         int64_t colEnd = colPtr[l + 1];
         BASPACHO_CHECK(isStrictlyIncreasing(rowInd, colStart, colEnd));
@@ -71,7 +71,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
         boardColPtr[l] = boardRowLump.size();
         int64_t currentRowAggreg = kInvalid;
         int64_t numRowsSkipped = 0;
-        for (size_t i = colStart; i < colEnd; i++) {
+        for (int64_t i = colStart; i < colEnd; i++) {
             int64_t p = rowInd[i];
             chainRowSpan.push_back(p);
             chainData.push_back(dataPtr);
@@ -94,7 +94,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
     chainData.push_back(dataPtr);
 
     boardRowPtr.assign(numLumps + 1, 0);
-    for (size_t l = 0; l < numLumps; l++) {
+    for (int64_t l = 0; l < numLumps; l++) {
         for (int64_t i = boardColPtr[l]; i < boardColPtr[l + 1] - 1; i++) {
             int64_t rowLump = boardRowLump[i];
             boardRowPtr[rowLump]++;
@@ -103,7 +103,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
     int64_t numBoards = cumSumVec(boardRowPtr);
     boardColLump.resize(numBoards);
     boardColOrd.resize(numBoards);
-    for (size_t l = 0; l < numLumps; l++) {
+    for (int64_t l = 0; l < numLumps; l++) {
         for (int64_t i = boardColPtr[l]; i < boardColPtr[l + 1] - 1; i++) {
             int64_t rowLump = boardRowLump[i];
             boardColLump[boardRowPtr[rowLump]] = l;
@@ -117,7 +117,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
 Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
     const std::vector<double>& data) const {
     int64_t totData = chainData[chainData.size() - 1];
-    BASPACHO_CHECK_EQ(totData, data.size());
+    BASPACHO_CHECK_EQ(totData, (int64_t)data.size());
 
     int64_t totSize = spanStart[spanStart.size() - 1];
     Eigen::MatrixXd retv(totSize, totSize);
@@ -146,9 +146,7 @@ Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
 void CoalescedBlockMatrixSkel::damp(std::vector<double>& data, double alpha,
                                     double beta) const {
     int64_t totData = chainData[chainData.size() - 1];
-    BASPACHO_CHECK_EQ(totData, data.size());
-
-    int64_t totSize = spanStart[spanStart.size() - 1];
+    BASPACHO_CHECK_EQ(totData, (int64_t)data.size());
 
     for (size_t a = 0; a < chainColPtr.size() - 1; a++) {
         int64_t aStart = lumpStart[a];

@@ -34,7 +34,7 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob,
                                      const Settings& settings, bool verbose) {
     auto startAnalysis = hrc::now();
     SolverPtr solver =
-        createSolver(settings, prob.paramSize, prob.sparseStruct, verbose);
+        createSolver(settings, prob.paramSize, prob.sparseStruct);
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     // generate mock data, make positive def
