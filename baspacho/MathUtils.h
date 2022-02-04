@@ -1,10 +1,6 @@
 #pragma once
 
-#ifdef __CUDACC__
-#define __BASPACHO_HOST_DEVICE__ __host__ __device__
-#else
-#define __BASPACHO_HOST_DEVICE__
-#endif
+#include "baspacho/Utils.h"
 
 namespace BaSpaCho {
 

@@ -1,6 +1,8 @@
 
 #include "baspacho/Utils.h"
 
+#include <ctime>
+#include <iomanip>
 #include <sstream>
 
 #include "baspacho/DebugMacros.h"
@@ -11,6 +13,17 @@ using namespace std;
 
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
+
+string timeStamp() {
+    using namespace chrono;
+    auto now = system_clock::now();
+    auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
+    const time_t t_c = system_clock::to_time_t(now);
+    stringstream ss;
+    ss << put_time(localtime(&t_c), "%T") << "." << setfill('0') << setw(3)
+       << ms.count();
+    return ss.str();
+}
 
 string OpStat::toString() const {
     stringstream ss;

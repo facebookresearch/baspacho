@@ -12,6 +12,8 @@ void UNUSED(const Args&... args) {
     (void)(sizeof...(args));
 }
 
+std::string timeStamp();
+
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 struct OpStat {
