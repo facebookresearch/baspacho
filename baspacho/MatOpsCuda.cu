@@ -383,6 +383,10 @@ struct CudaNumericCtx : NumericCtx<T> {
             sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
             sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
 
+        /*cuCHECK(cudaDeviceSynchronize());
+        cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
+             << "s" << endl;*/
+
 #if 0
         // double inner loop
         sparse_elim_kernel<double><<<numGroups, wgs>>>(
@@ -403,6 +407,8 @@ struct CudaNumericCtx : NumericCtx<T> {
             lumpsBegin, lumpsEnd, elim.makeBlockPairEnumStraight.ptr,
             elim.numBlockPairs);
 #endif
+
+        cuCHECK(cudaDeviceSynchronize());
     }
 
     virtual void potrf(int64_t n, T* A) override {

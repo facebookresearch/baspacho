@@ -32,6 +32,13 @@ string OpStat::toString() const {
     return ss.str();
 }
 
+void OpStat::reset() {
+    numRuns = 0;
+    totTime = 0;
+    maxTime = 0;
+    lastTime = 0;
+}
+
 OpInstance::OpInstance(OpStat& stat) : stat(stat), start(hrc::now()) {}
 
 OpInstance::~OpInstance() {

@@ -22,6 +22,7 @@ struct OpStat {
     double maxTime = 0;
     double lastTime = 0;
     std::string toString() const;
+    void reset();
 };
 
 struct OpInstance {

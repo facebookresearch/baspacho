@@ -418,7 +418,7 @@ void Solver::printStats() const {
     if (elimLumpRanges.size() >= 2) {
         cout << "Sparse elimination sets:" << endl;
     }
-    for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
+    for (int64_t l = 0; l < (int64_t)elimLumpRanges.size() - 1; l++) {
         cout << "  elim set [" << elimLumpRanges[l] << ".."
              << elimLumpRanges[l + 1]
              << "]: " << elimCtxs[l]->elimStat.toString() << endl;
@@ -430,6 +430,19 @@ void Solver::printStats() const {
          << "\n  syrk/gemm(" << symCtx->syrkCalls << "+" << symCtx->gemmCalls
          << "): " << symCtx->sygeStat.toString()
          << "\n  asmbl: " << symCtx->asmblStat.toString() << endl;
+}
+
+void Solver::resetStats() {
+    for (int64_t l = 0; l < (int64_t)elimLumpRanges.size() - 1; l++) {
+        elimCtxs[l]->elimStat.reset();
+    }
+    symCtx->potrfBiggestN = 0;
+    symCtx->potrfStat.reset();
+    symCtx->trsmStat.reset();
+    symCtx->syrkCalls = 0;
+    symCtx->gemmCalls = 0;
+    symCtx->sygeStat.reset();
+    symCtx->asmblStat.reset();
 }
 
 OpsPtr getBackend(const Settings& settings) {

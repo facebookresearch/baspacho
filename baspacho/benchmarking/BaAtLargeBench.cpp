@@ -60,9 +60,9 @@ void testSolvers(Data& data) {
     // cout << "Building ss..." << endl;
     SparseStructure origSs = columnsToCscStruct(colBlocks).transpose();
 
-    cout << "===========================================" << endl;
-    cout << "Testing Baspacho/BLAS (on full Points+Cameras system)" << endl;
-    {
+    if (0) {
+        cout << "===========================================" << endl;
+        cout << "Testing Baspacho/BLAS (on full Points+Cameras system)" << endl;
         auto startAnalysis = hrc::now();
         auto solver = createSolverSchur({}, paramSize, origSs, {0, numPts});
         double analysisTime = tdelta(hrc::now() - startAnalysis).count();
@@ -95,9 +95,66 @@ void testSolvers(Data& data) {
 
     // test Cuda
 #ifdef BASPACHO_USE_CUBLAS
-    cout << "===========================================" << endl;
-    cout << "Testing CUDA (on reduced Camera-Camera matrix)" << endl;
     {
+        cout << "===========================================" << endl;
+        cout << "Testing CUDA (on full Points+Cameras system)" << endl;
+        {
+            cout << "heating up cuda..." << endl;
+            auto solver = createSolverSchur({.backend = BackendCuda}, paramSize,
+                                            origSs, {0, numPts});
+        }
+        auto startAnalysis = hrc::now();
+        auto solver = createSolverSchur({.backend = BackendCuda}, paramSize,
+                                        origSs, {0, numPts});
+        double analysisTime = tdelta(hrc::now() - startAnalysis).count();
+
+        cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges)
+             << endl;
+
+        // generate mock data, make positive def
+        vector<double> matData =
+            randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
+        solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
+
+        double* dataGPU;
+        cuCHECK(cudaMalloc((void**)&dataGPU, matData.size() * sizeof(double)));
+
+        {
+            cout << "heating up factor..." << endl;
+            cuCHECK(cudaMemcpy(dataGPU, matData.data(),
+                               matData.size() * sizeof(double),
+                               cudaMemcpyHostToDevice));
+            solver->factor(dataGPU);
+            solver->resetStats();
+        }
+
+        cuCHECK(cudaMemcpy(dataGPU, matData.data(),
+                           matData.size() * sizeof(double),
+                           cudaMemcpyHostToDevice));
+        auto startFactor = hrc::now();
+        solver->factor(dataGPU);
+        double factorTime = tdelta(hrc::now() - startFactor).count();
+        cuCHECK(cudaMemcpy(matData.data(), dataGPU,
+                           matData.size() * sizeof(double),
+                           cudaMemcpyDeviceToHost));
+        cuCHECK(cudaFree(dataGPU));
+
+        solver->printStats();
+        double elimTime = solver->elimCtxs[0]->elimStat.totTime;
+        cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
+        cout << "Total Factor Time....: " << factorTime << "s" << endl;
+        cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
+        cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s"
+             << endl
+             << endl;
+    }
+#endif  // BASPACHO_USE_CUBLAS
+
+    // test Cuda
+#ifdef BASPACHO_USE_CUBLAS
+    {
+        cout << "===========================================" << endl;
+        cout << "Testing CUDA (on reduced Camera-Camera matrix)" << endl;
         auto startAnalysis = hrc::now();
         auto solver = createSolver(
             {.findSparseEliminationRanges = false, .backend = BackendCuda},
@@ -130,11 +187,13 @@ void testSolvers(Data& data) {
 
     // test Cholmod
 #ifdef BASPACHO_HAVE_CHOLMOD
-    cout << "===========================================" << endl;
-    cout << "Testing CHOLMOD (on reduced Camera-Camera matrix)" << endl;
-    auto [aTime, fTime] = benchmarkCholmodSolve(camSz, camCamSs, true);
-    cout << "Cam-Cam Analysis Time: " << aTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << fTime << "s" << endl;
+    {
+        cout << "===========================================" << endl;
+        cout << "Testing CHOLMOD (on reduced Camera-Camera matrix)" << endl;
+        auto [aTime, fTime] = benchmarkCholmodSolve(camSz, camCamSs, true);
+        cout << "Cam-Cam Analysis Time: " << aTime << "s" << endl;
+        cout << "Cam-Cam Factor Time..: " << fTime << "s" << endl;
+    }
 #endif  // BASPACHO_HAVE_CHOLMOD
 }
 

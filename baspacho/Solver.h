@@ -19,6 +19,8 @@ struct Solver {
 
     void printStats() const;
 
+    void resetStats();
+
     void solveL(const double* matData, double* vecData, int64_t stride,
                 int nRHS) const;
 

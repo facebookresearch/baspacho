@@ -34,7 +34,7 @@ Libraries fetched automatical by build:
 Optional libraries:
 * AMD, from SuiteSparse, can be used instead of Eigen for reordering algorithm.
 * CHOLMOD, from SuiteSparse, used in benchmark as a reference for performance of sparse solvers.
-  
+
 ## Configure and Install
 
 Configuring with system blas (eg OpenBLAS):
@@ -88,15 +88,18 @@ AMD as part of SuiteSparse. Add `-DBASPACHO_USE_SUITESPARSE_AMD=1` to the build 
 implementation in SuiteSparse instead of Eigen.
 
 ## Todo
-* float/double in all backends
-* Cuda: include and test sparse elimination in BAL_bench
-* Cuda: test atomics vs magic-locked block updates
-* Cuda: batched mode
-* Benchmark results (bench + BAL comparing sparse elimination with optimizers)
-* optimizer demo
+[ ] float/double in all backends
+[X] Cuda: include and test sparse elimination in BAL_bench
+[ ] Cuda: test atomics vs magic-locked block updates
+[ ] Cuda: solve methods
+[ ] Cuda: batched mode
+[ ] Benchmark results (bench + BAL comparing sparse elimination with optimizers)
+[ ] small optimizer demo on BAL data
 ### Longer term todo:
-* better heuristics in Node merge, test more configurations
-* simple block matrix with application and mixed-precision iterative solver
+[ ] better heuristics in Node merge, test more configurations
+[ ] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
+    possibly with mixed-precision preconditioner (fast "rough" factor as float, iterate
+    on a double vector for improved precision)
 
 ## Caveats
 
