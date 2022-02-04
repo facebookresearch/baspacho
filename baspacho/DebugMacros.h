@@ -5,8 +5,9 @@
 #include <iomanip>
 #include <iostream>
 
-#define BASPACHO_CHECKS
-#ifdef BASPACHO_CHECKS
+#include "baspacho/Utils.h"
+
+// #define BASPACHO_CHECKS
 
 #define BASPACHO_CHECK_WHAT(a, msg)                                            \
     if (!(a)) {                                                                \
@@ -20,15 +21,9 @@
                   << std::endl;                                                \
         exit(1);                                                               \
     }
-#else
 
-// define to nothing
-#define BASPACHO_CHECK_WHAT(a, msg)
-
-#endif
-
+#ifdef BASPACHO_CHECKS
 #define BASPACHO_CHECK(a) BASPACHO_CHECK_WHAT(a, #a)
-
 #define BASPACHO_CHECK_OP(a, b, op)                                          \
     {                                                                        \
         auto aEval = a;                                                      \
@@ -37,6 +32,10 @@
                                                 << aEval << " vs. " << bEval \
                                                 << ")")                      \
     }
+#else
+#define BASPACHO_CHECK(a) UNUSED(a)
+#define BASPACHO_CHECK_OP(a, b, op) UNUSED(a, b)
+#endif
 
 #define BASPACHO_CHECK_EQ(a, b) BASPACHO_CHECK_OP(a, b, ==)
 #define BASPACHO_CHECK_LE(a, b) BASPACHO_CHECK_OP(a, b, <=)
