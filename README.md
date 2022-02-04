@@ -87,6 +87,17 @@ BaSpaCho can use either the implementation in Eigen of AMD (by default), or the 
 AMD as part of SuiteSparse. Add `-DBASPACHO_USE_SUITESPARSE_AMD=1` to the build step to use the
 implementation in SuiteSparse instead of Eigen.
 
+## Todo
+* float/double in all backends
+* Cuda: include and test sparse elimination in BAL_bench
+* Cuda: test atomics vs magic-locked block updates
+* Cuda: batched mode
+* Benchmark results (bench + BAL comparing sparse elimination with optimizers)
+* optimizer demo
+### Longer term todo:
+* better heuristics in Node merge, test more configurations
+* simple block matrix with application and mixed-precision iterative solver
+
 ## Caveats
 
 * Only supernodal Cholesky is implemented. We focused on problems having at least a certain degree of
