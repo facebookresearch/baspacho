@@ -16,7 +16,10 @@ if(BASPACHO_USE_CUBLAS)
   check_language(CUDA)
   find_package(CUDAToolkit REQUIRED)
 
-  LIST(APPEND CUDA_NVCC_FLAGS
+  # https://cmake.org/cmake/help/git-stage/prop_tgt/CUDA_ARCHITECTURES.html
+  set(BASPACHO_CUDA_ARCHITECTURES "75")
+
+  list(APPEND CUDA_NVCC_FLAGS
        -Xcompiler -Wall,-Wextra,-Werror,-Wno-unknown-pragmas
        --expt-relaxed-constexpr)
   message("* CUDA Includes : " ${CUDAToolkit_INCLUDE_DIRS})
@@ -171,6 +174,7 @@ add_library(BaSpaCho ${BaSpaCho_sources})
 target_link_libraries (BaSpaCho dispenso ${BLAS_LIBRARIES})
 
 if(BASPACHO_USE_CUBLAS)
+  set_target_properties(BaSpaCho PROPERTIES CUDA_ARCHITECTURES ${BASPACHO_CUDA_ARCHITECTURES})
   target_link_libraries (BaSpaCho CUDA::cublas CUDA::cusolver)
   target_compile_options(BaSpaCho PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
                         ${BASPACHO_CXX_FLAGS}

@@ -88,25 +88,32 @@ AMD as part of SuiteSparse. Add `-DBASPACHO_USE_SUITESPARSE_AMD=1` to the build 
 implementation in SuiteSparse instead of Eigen.
 
 ## Todo
-[ ] float/double in all backends
-[X] Cuda: include and test sparse elimination in BAL_bench
-[ ] Cuda: test atomics vs magic-locked block updates
-[ ] Cuda: solve methods
-[ ] Cuda: batched mode
-[ ] Benchmark results (bench + BAL comparing sparse elimination with optimizers)
-[ ] small optimizer demo on BAL data
+- [ ] add continuous integration for testing
+- [ ] document more code (before I forget how it works), and provide better API
+- [ ] float/double in all backends
+- [X] Cuda: include and test sparse elimination in BAL_bench
+- [X] Cuda: test atomics vs magic-locked block updates
+- [ ] Cuda: solve methods
+- [ ] Cuda: batched mode
+- [ ] Benchmark results (bench + BAL comparing sparse elimination with optimizers)
+- [ ] small optimizer demo on BAL data
+
 ### Longer term todo:
-[ ] better heuristics in Node merge, test more configurations
-[ ] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
+- [ ] better heuristics in Node merge, test more configurations
+- [ ] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
     possibly with mixed-precision preconditioner (fast "rough" factor as float, iterate
     on a double vector for improved precision)
+- [ ] investigate possible support of update/downdate ops (note that such support in CHOLMOD
+    is only for simplicial decomposition, or decompositions are automatically converted to
+    simplicial)
 
 ## Caveats
 
 * Only supernodal Cholesky is implemented. We focused on problems having at least a certain degree of
 interconnectedness, which will benefit of Blas libraries and parallelism. If working with a problem where
-simplicial would have better performance (eg banded matrix) just use Cholmod or Eigen. Notice that given
-the strongly sequential nature of simplicial decomposition the GPU will not be a good fit either.
+simplicial would have better performance (eg banded matrix) just use Cholmod or Eigen. Also, because of
+this there is no support for update/downdate operations of factors. Notice that given the strongly sequential
+nature of simplicial decomposition the GPU will not be a good fit either.
 * Only reordering method currently supported is Approximate Minimum Degree (AMD), this will probably be
 expanded and made more customizable in the future but this is the current status of things.
 * The block-structured type of matrices is builtin in the library, and while this presents advantages in

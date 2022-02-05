@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iostream>
 
+#include "baspacho/CudaAtomic.cuh"
 #include "baspacho/CudaDefs.h"
 #include "baspacho/DebugMacros.h"
 #include "baspacho/MatOpsCpuBase.h"
@@ -155,66 +156,6 @@ __global__ static inline void factor_lumps_kernel(
     }
 }
 
-#if 0
-// magic IEEE double number locking mechanism
-struct MagicLock {
-    // this is a magic value (a NaN with "content" 0xb10cd, "blocked")
-    // which his functionally equivalent to a NaN but cannot be ever
-    // obtained as result of a computation, and can therefore be used as
-    // a "magic" value to block matrix of double numbers
-    // For future reference a magic value for floats could be 0x7f80b1cdu
-    static constexpr uint64_t magicValue = 0x7ff00000000b10cdul;
-
-    static inline __attribute__((always_inline)) double lock(double* address) {
-        uint64_t retv;
-        do {
-            retv = __atomic_exchange_n((uint64_t*)address, magicValue,
-                                       __ATOMIC_ACQUIRE);
-        } while (retv == magicValue);
-        return *(double*)(&retv);
-    }
-
-    static inline __attribute__((always_inline)) void unlock(double* address,
-                                                             double val) {
-        __atomic_store_n((uint64_t*)address, *(uint64_t*)(&val),
-                         __ATOMIC_RELEASE);
-    }
-};
-
-template <typename A, typename B, typename C>
-__device__ void locked_sub_product(A& aMat, const B& bMat, const C& cMatT) {}
-#endif
-
-__device__ [[maybe_unused]] static inline float aAdd(float* address,
-                                                     float val) {
-    return atomicAdd(address, val);
-}
-
-__device__ [[maybe_unused]] static inline double aAdd(double* address,
-                                                      double val) {
-    unsigned long long int* address_as_ull = (unsigned long long int*)address;
-    unsigned long long int old = *address_as_ull, assumed;
-    do {
-        assumed = old;
-        old = ::atomicCAS(
-            address_as_ull, assumed,
-            ::__double_as_longlong(val + __longlong_as_double(assumed)));
-        // integer comparison to avoid hang in case of NaN (since NaN != NaN)
-    } while (assumed != old);
-    return __longlong_as_double(old);
-}
-
-template <typename A, typename B, typename C>
-__device__ void locked_sub_product(A& aMat, const B& bMat, const C& cMatT) {
-    for (int i = 0; i < bMat.rows(); i++) {
-        for (int j = 0; j < cMatT.rows(); j++) {
-            double* addr = &aMat(i, j);
-            double val = -bMat.row(i).dot(cMatT.row(j));
-            aAdd(addr, val);
-        }
-    }
-}
-
 template <typename T>
 __device__ static inline void do_sparse_elim(
     const int64_t* chainColPtr, const int64_t* lumpStart,
@@ -253,8 +194,12 @@ __device__ static inline void do_sparse_elim(
     locked_sub_product(jiBlock, jlBlock, ilBlock);
 }
 
+// "naive" elimination kernel, in the sense there is one kernel instance
+// per column, and will internally iterate over pairs of blocks (two
+// nested loops). Not meant for performance, but as a simpler testing
+// version of the below "straigthened" kernel.
 template <typename T>
-__global__ static inline void sparse_elim_kernel(
+__global__ static inline void sparse_elim_2loops_kernel(
     const int64_t* chainColPtr, const int64_t* lumpStart,
     const int64_t* chainRowSpan, const int64_t* spanStart,
     const int64_t* chainData, const int64_t* spanToLump,
@@ -276,6 +221,13 @@ __global__ static inline void sparse_elim_kernel(
     }
 }
 
+// makeBlockPairEnumStraight contains the cumulated sum of nb*(nb+1)/2
+// over all columns, nb being the number of blocks in the columns.
+// `i` is the index in the index in the list of all pairs of block in
+// the same column. We bisect and get as position the column (relative to
+// lumpIndexStart), and as offset to the found value the index in range
+// 0..nb*(nb+1)/2-1 in the list of *pairs* of blocks in the column. Such
+// index if converted to the ordered pair di/dj
 template <typename T>
 __global__ static inline void sparse_elim_straight_kernel(
     const int64_t* chainColPtr, const int64_t* lumpStart,
@@ -288,13 +240,6 @@ __global__ static inline void sparse_elim_straight_kernel(
     if (i >= numBlockPairs) {
         return;
     }
-    // makeBlockPairEnumStraight contains the cumulated sum of nb*(nb+1)/2
-    // over all columns, nb being the number of blocks in the columns.
-    // `i` is the index in the index in the list of all pairs of block in
-    // the same column. We bisect and get as position the column (relative to
-    // lumpIndexStart), and as offset to the found value the index
-    // 0..nb*(nb+1)/2-1 in the list of pairs of blocks in the column. Such
-    // index if converted to ordered the pair di/dj
     int64_t pos =
         bisect(makeBlockPairEnumStraight, lumpIndexEnd - lumpIndexStart, i);
     int64_t l = lumpIndexStart + pos;
@@ -389,15 +334,12 @@ struct CudaNumericCtx : NumericCtx<T> {
 
 #if 0
         // double inner loop
-        sparse_elim_kernel<double><<<numGroups, wgs>>>(
+        sparse_elim_2loops_kernel<double><<<numGroups, wgs>>>(
             sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
             sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
             lumpsBegin, lumpsEnd);
 #else
-        /*int64_t numColumns;
-        int64_t numBlockPairs;
-        DevMirror<int64_t> makeBlockPairEnumStraight;*/
         int wgs2 = 32;
         int numGroups2 = (elim.numBlockPairs + wgs2 - 1) / wgs2;
         sparse_elim_straight_kernel<double><<<numGroups2, wgs2>>>(
