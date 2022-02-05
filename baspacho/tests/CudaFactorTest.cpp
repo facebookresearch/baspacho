@@ -44,6 +44,7 @@ void testCoalescedFactor(OpsPtr&& ops) {
     {
         DevMirror<double> dataGpu(data);
         solver.factor(dataGpu.ptr);
+        dataGpu.get(data);
     }
 
     Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
@@ -91,6 +92,7 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
         {
             DevMirror<double> dataGpu(data);
             solver.factor(dataGpu.ptr);
+            dataGpu.get(data);
         }
 
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
@@ -147,6 +149,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
             DevMirror<double> dataGpu(data);
             numCtx->doElimination(*solver.elimCtxs[0], dataGpu.ptr, 0,
                                   largestIndep);
+            dataGpu.get(data);
         }
 
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
@@ -200,6 +203,7 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
         {
             DevMirror<double> dataGpu(data);
             solver.factor(dataGpu.ptr);
+            dataGpu.get(data);
         }
 
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);

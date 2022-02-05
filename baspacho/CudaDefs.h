@@ -78,5 +78,9 @@ struct DevMirror {
         cuCHECK(cudaMemcpy(ptr, vec.data(), vec.size() * sizeof(T),
                            cudaMemcpyHostToDevice));
     }
+    void get(std::vector<T>& vec) const {
+        cuCHECK(cudaMemcpy(vec.data(), ptr, vec.size() * sizeof(T),
+                           cudaMemcpyDeviceToHost));
+    }
     T* ptr = nullptr;
 };
