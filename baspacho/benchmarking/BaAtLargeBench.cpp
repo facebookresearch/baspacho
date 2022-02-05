@@ -116,28 +116,20 @@ void testSolvers(Data& data) {
             randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
         solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
 
-        double* dataGPU;
-        cuCHECK(cudaMalloc((void**)&dataGPU, matData.size() * sizeof(double)));
-
         {
             cout << "heating up factor..." << endl;
-            cuCHECK(cudaMemcpy(dataGPU, matData.data(),
-                               matData.size() * sizeof(double),
-                               cudaMemcpyHostToDevice));
-            solver->factor(dataGPU);
+            DevMirror<double> matDataGpu(matData);
+            solver->factor(matDataGpu.ptr);
             solver->resetStats();
         }
 
-        cuCHECK(cudaMemcpy(dataGPU, matData.data(),
-                           matData.size() * sizeof(double),
-                           cudaMemcpyHostToDevice));
-        auto startFactor = hrc::now();
-        solver->factor(dataGPU);
-        double factorTime = tdelta(hrc::now() - startFactor).count();
-        cuCHECK(cudaMemcpy(matData.data(), dataGPU,
-                           matData.size() * sizeof(double),
-                           cudaMemcpyDeviceToHost));
-        cuCHECK(cudaFree(dataGPU));
+        double factorTime;
+        {
+            DevMirror<double> matDataGpu(matData);
+            auto startFactor = hrc::now();
+            solver->factor(matDataGpu.ptr);
+            factorTime = tdelta(hrc::now() - startFactor).count();
+        }
 
         solver->printStats();
         double elimTime = solver->elimCtxs[0]->elimStat.totTime;
@@ -166,18 +158,13 @@ void testSolvers(Data& data) {
             randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
         solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
 
-        double* dataGPU;
-        cuCHECK(cudaMalloc((void**)&dataGPU, matData.size() * sizeof(double)));
-        cuCHECK(cudaMemcpy(dataGPU, matData.data(),
-                           matData.size() * sizeof(double),
-                           cudaMemcpyHostToDevice));
-        auto startFactor = hrc::now();
-        solver->factor(dataGPU);
-        double factorTime = tdelta(hrc::now() - startFactor).count();
-        cuCHECK(cudaMemcpy(matData.data(), dataGPU,
-                           matData.size() * sizeof(double),
-                           cudaMemcpyDeviceToHost));
-        cuCHECK(cudaFree(dataGPU));
+        double factorTime;
+        {
+            DevMirror<double> matDataGpu(matData);
+            auto startFactor = hrc::now();
+            solver->factor(matDataGpu.ptr);
+            factorTime = tdelta(hrc::now() - startFactor).count();
+        }
 
         solver->printStats();
         cout << "Cam-Cam Analysis Time: " << analysisTime << "s" << endl;

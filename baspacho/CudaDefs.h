@@ -64,15 +64,16 @@ const char* cusolverGetErrorEnum(cusolverStatus_t error);
 template <typename T>
 struct DevMirror {
     DevMirror() {}
-    ~DevMirror() {
+    DevMirror(const std::vector<T>& vec) { load(vec); }
+    ~DevMirror() { clear(); }
+    void clear() {
         if (ptr) {
             cuCHECK(cudaFree(ptr));
+            ptr = nullptr;
         }
     }
     void load(const std::vector<T>& vec) {
-        if (ptr) {
-            cuCHECK(cudaFree(ptr));
-        }
+        clear();
         cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T)));
         cuCHECK(cudaMemcpy(ptr, vec.data(), vec.size() * sizeof(T),
                            cudaMemcpyHostToDevice));

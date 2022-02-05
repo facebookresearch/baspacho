@@ -45,16 +45,10 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob,
     double factorTime;
 #ifdef BASPACHO_USE_CUBLAS
     if (settings.backend == BackendCuda) {
-        double* dataGPU;
-        cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
-        cuCHECK(cudaMemcpy(dataGPU, data.data(), data.size() * sizeof(double),
-                           cudaMemcpyHostToDevice));
+        DevMirror dataGpu(data);
         auto startFactor = hrc::now();
-        solver->factor(dataGPU);
+        solver->factor(dataGpu.ptr);
         factorTime = tdelta(hrc::now() - startFactor).count();
-        cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
-                           cudaMemcpyDeviceToHost));
-        cuCHECK(cudaFree(dataGPU));
     } else
 #endif  // BASPACHO_USE_CUBLAS
     {
