@@ -22,11 +22,20 @@ using namespace ::testing;
 template <typename T>
 using Matrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
-template<typename T> struct Epsilon;
-template<> struct Epsilon<double> { static constexpr double value = 1e-10; static constexpr double value2 = 1e-8; };
-template<> struct Epsilon<float> { static constexpr float value = 1e-5; static constexpr float value2 = 4e-5; };
+template <typename T>
+struct Epsilon;
+template <>
+struct Epsilon<double> {
+    static constexpr double value = 1e-10;
+    static constexpr double value2 = 1e-8;
+};
+template <>
+struct Epsilon<float> {
+    static constexpr float value = 1e-5;
+    static constexpr float value2 = 4e-5;
+};
 
-template<typename T>
+template <typename T>
 void testSolveL(OpsPtr&& ops, int nRHS = 1) {
     vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =
@@ -67,7 +76,7 @@ TEST(Solve, SolveL_Blas_float) { testSolveL<float>(blasOps(), 5); }
 
 TEST(Solve, SolveL_Ref_float) { testSolveL<float>(simpleOps(), 5); }
 
-template<typename T>
+template <typename T>
 void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
     vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
     SparseStructure ss =

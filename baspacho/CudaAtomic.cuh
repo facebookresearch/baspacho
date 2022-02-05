@@ -23,10 +23,11 @@
 // A -= B * C.T
 template <typename A, typename B, typename C>
 __device__ void locked_sub_product(A& aMat, const B& bMat, const C& cMatT) {
+    using T = std::remove_reference_t<decltype(aMat(0, 0))>;
     for (int i = 0; i < bMat.rows(); i++) {
         for (int j = 0; j < cMatT.rows(); j++) {
-            double* addr = &aMat(i, j);
-            double val = -bMat.row(i).dot(cMatT.row(j));
+            T* addr = &aMat(i, j);
+            T val = -bMat.row(i).dot(cMatT.row(j));
             atomicAdd(addr, val);
         }
     }
