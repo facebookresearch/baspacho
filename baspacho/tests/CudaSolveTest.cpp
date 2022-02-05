@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/CudaDefs.h"
 #include "baspacho/EliminationTree.h"
 #include "baspacho/Solver.h"
 #include "baspacho/SparseStructure.h"
@@ -29,23 +30,31 @@ void testSolveL(OpsPtr&& ops, int nRHS = 1) {
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
                                   groupedSs.inds);
+    int64_t order = skel.order();
 
     vector<double> data(skel.dataSize());
     iota(data.begin(), data.end(), 13);
     skel.damp(data, 5, 50);
 
-    vector<double> rhsData = randomData(15 * nRHS, -1.0, 1.0, 37);
-    vector<double> rhsVerif(15 * nRHS);
+    vector<double> rhsData = randomData(order * nRHS, -1.0, 1.0, 37);
+    vector<double> rhsVerif(order * nRHS);
     Eigen::MatrixXd verifyMat = skel.densify(data);
-    Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), 15, nRHS) =
+    Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), order, nRHS) =
         verifyMat.triangularView<Eigen::Lower>().solve(
-            Eigen::Map<Eigen::MatrixXd>(rhsData.data(), 15, nRHS));
+            Eigen::Map<Eigen::MatrixXd>(rhsData.data(), order, nRHS));
 
     Solver solver(std::move(skel), {}, {}, std::move(ops));
-    solver.solveL(data.data(), rhsData.data(), 15, nRHS);
 
-    ASSERT_NEAR((Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), 15, nRHS) -
-                 Eigen::Map<Eigen::MatrixXd>(rhsData.data(), 15, nRHS))
+    // call solve on gpu data
+    {
+        DevMirror<double> dataGpu(data), rhsDataGpu(rhsData);
+        solver.solveL(dataGpu.ptr, rhsDataGpu.ptr, order, nRHS);
+        dataGpu.get(data);
+        rhsDataGpu.get(rhsData);
+    }
+
+    ASSERT_NEAR((Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), order, nRHS) -
+                 Eigen::Map<Eigen::MatrixXd>(rhsData.data(), order, nRHS))
                     .norm(),
                 0, 1e-5);
 }
@@ -62,23 +71,31 @@ void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
         columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
     CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, groupedSs.ptrs,
                                   groupedSs.inds);
+    int64_t order = skel.order();
 
     vector<double> data(skel.dataSize());
     iota(data.begin(), data.end(), 13);
     skel.damp(data, 5, 50);
 
-    vector<double> rhsData = randomData(15 * nRHS, -1.0, 1.0, 37);
-    vector<double> rhsVerif(15 * nRHS);
+    vector<double> rhsData = randomData(order * nRHS, -1.0, 1.0, 37);
+    vector<double> rhsVerif(order * nRHS);
     Eigen::MatrixXd verifyMat = skel.densify(data);
-    Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), 15, nRHS) =
+    Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), order, nRHS) =
         verifyMat.triangularView<Eigen::Lower>().adjoint().solve(
-            Eigen::Map<Eigen::MatrixXd>(rhsData.data(), 15, nRHS));
+            Eigen::Map<Eigen::MatrixXd>(rhsData.data(), order, nRHS));
 
     Solver solver(std::move(skel), {}, {}, std::move(ops));
-    solver.solveLt(data.data(), rhsData.data(), 15, nRHS);
 
-    ASSERT_NEAR((Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), 15, nRHS) -
-                 Eigen::Map<Eigen::MatrixXd>(rhsData.data(), 15, nRHS))
+    // call solve on gpu data
+    {
+        DevMirror<double> dataGpu(data), rhsDataGpu(rhsData);
+        solver.solveLt(dataGpu.ptr, rhsDataGpu.ptr, order, nRHS);
+        dataGpu.get(data);
+        rhsDataGpu.get(rhsData);
+    }
+
+    ASSERT_NEAR((Eigen::Map<Eigen::MatrixXd>(rhsVerif.data(), order, nRHS) -
+                 Eigen::Map<Eigen::MatrixXd>(rhsData.data(), order, nRHS))
                     .norm(),
                 0, 1e-5);
 }

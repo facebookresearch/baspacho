@@ -49,14 +49,15 @@ struct SymbolicCtx {
                                                     int64_t tempBufSize,
                                                     int maxBatchSize = 1) = 0;
 
-    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx) = 0;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
+                                                int nRHS) = 0;
 
     template <typename T>
     NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize,
                                       int maxBatchSize = 1);
 
     template <typename T>
-    SolveCtxPtr<T> createSolveCtx();
+    SolveCtxPtr<T> createSolveCtx(int nRHS);
 
     mutable OpStat potrfStat;
     mutable int64_t potrfBiggestN = 0;
@@ -110,25 +111,22 @@ template <typename T>
 struct SolveCtx : SolveCtxBase {
     virtual ~SolveCtx() {}
     virtual void solveL(const T* data, int64_t offset, int64_t n, T* C,
-                        int64_t offC, int64_t ldc, int64_t nRHS) = 0;
+                        int64_t offC, int64_t ldc) = 0;
 
     virtual void gemv(const T* data, int64_t offset, int64_t nRows,
-                      int64_t nCols, const T* A, int64_t offA, int64_t lda,
-                      T* C, int64_t nRHS) = 0;
+                      int64_t nCols, const T* A, int64_t offA, int64_t lda) = 0;
 
-    virtual void assembleVec(const T* A, int64_t chainColPtr,
-                             int64_t numColItems, T* C, int64_t ldc,
-                             int64_t nRHS) = 0;
+    virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
+                             int64_t ldc) = 0;
 
     virtual void solveLt(const T* data, int64_t offset, int64_t n, T* C,
-                         int64_t offC, int64_t ldc, int64_t nRHS) = 0;
+                         int64_t offC, int64_t ldc) = 0;
 
     virtual void gemvT(const T* data, int64_t offset, int64_t nRows,
-                       int64_t nCols, const T* C, int64_t nRHS, T* A,
-                       int64_t offA, int64_t lda) = 0;
+                       int64_t nCols, T* A, int64_t offA, int64_t lda) = 0;
 
-    virtual void assembleVecT(const T* C, int64_t ldc, int64_t nRHS, T* A,
-                              int64_t chainColPtr, int64_t numColItems) = 0;
+    virtual void assembleVecT(const T* C, int64_t ldc, int64_t chainColPtr,
+                              int64_t numColItems) = 0;
 };
 
 template <typename T>
@@ -143,9 +141,9 @@ NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize,
 }
 
 template <typename T>
-SolveCtxPtr<T> SymbolicCtx::createSolveCtx() {
+SolveCtxPtr<T> SymbolicCtx::createSolveCtx(int nRHS) {
     static const std::type_index T_tIdx(typeid(T));
-    SolveCtxBase* ctx = createSolveCtxForType(T_tIdx);
+    SolveCtxBase* ctx = createSolveCtxForType(T_tIdx, nRHS);
     SolveCtx<T>* typedCtx = dynamic_cast<SolveCtx<T>*>(ctx);
     BASPACHO_CHECK_NOTNULL(typedCtx);
     return SolveCtxPtr<T>(typedCtx);

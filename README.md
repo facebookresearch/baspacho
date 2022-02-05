@@ -94,13 +94,15 @@ implementation in SuiteSparse instead of Eigen.
 - [X] Cuda: include and test sparse elimination in BAL_bench
 - [X] Cuda: test atomics vs magic-locked block updates (result: magic lock of blocks does not work
       in Cuda unless very expensive synchronized ops are used, making it not competitive)
-- [ ] Cuda: solve methods
+- [X] Cuda: solve methods
 - [ ] Cuda: batched mode
 - [ ] Benchmark results (bench + BAL comparing sparse elimination with optimizers)
 - [ ] small optimizer demo on BAL data
 
 ### Longer term todo:
 - [ ] better heuristics in Node merge, test more configurations
+- [ ] implement specialized solve for the case of "sparse elimination ranges" where the current
+      per-supernode solve would be quite slow
 - [ ] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
     possibly with mixed-precision preconditioner (fast "rough" factor as float, iterate
     on a double vector for improved precision)

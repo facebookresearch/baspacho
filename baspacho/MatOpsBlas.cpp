@@ -37,7 +37,8 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
         std::type_index tIdx, int64_t tempBufSize,
         int maxBatchSize = 1) override;
 
-    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx) override;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
+                                                int nRHS) override;
 
     bool useThreads;
     mutable dispenso::ThreadPool threadPool;
@@ -375,21 +376,21 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
 template <typename T>
 struct BlasSolveCtx : SolveCtx<T> {
-    BlasSolveCtx(const BlasSymbolicCtx& sym) : sym(sym) {}
+    BlasSolveCtx(const BlasSymbolicCtx& sym, int nRHS)
+        : sym(sym), nRHS(nRHS), tmpBuf(sym.skel.order() * nRHS) {}
     virtual ~BlasSolveCtx() override {}
 
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
-                        int64_t offC, int64_t ldc, int64_t nRHS) override {
+                        int64_t offC, int64_t ldc) override {
         cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
                     CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
     }
 
     virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
-                      const T* A, int64_t offA, int64_t lda, T* C,
-                      int64_t nRHS) override {
+                      const T* A, int64_t offA, int64_t lda) override {
         cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, nRHS, nRows,
-                    nCols, 1.0, A + offA, lda, data + offM, nCols, 0.0, C,
-                    nRHS);
+                    nCols, 1.0, A + offA, lda, data + offM, nCols, 0.0,
+                    tmpBuf.data(), nRHS);
     }
 
     static inline void stridedTransSub(double* dst, int64_t dstStride,
@@ -405,9 +406,9 @@ struct BlasSolveCtx : SolveCtx<T> {
         }
     }
 
-    virtual void assembleVec(const T* A, int64_t chainColPtr,
-                             int64_t numColItems, T* C, int64_t ldc,
-                             int64_t nRHS) override {
+    virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
+                             int64_t ldc) override {
+        const T* A = tmpBuf.data();
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
@@ -425,17 +426,17 @@ struct BlasSolveCtx : SolveCtx<T> {
     }
 
     virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
-                         int64_t offC, int64_t ldc, int64_t nRHS) override {
+                         int64_t offC, int64_t ldc) override {
         cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans,
                     CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
     }
 
     virtual void gemvT(const T* data, int64_t offM, int64_t nRows,
-                       int64_t nCols, const T* C, int64_t nRHS, T* A,
-                       int64_t offA, int64_t lda) override {
+                       int64_t nCols, T* A, int64_t offA,
+                       int64_t lda) override {
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, nCols, nRHS,
-                    nRows, -1.0, data + offM, nCols, C, nRHS, 1.0, A + offA,
-                    lda);
+                    nRows, -1.0, data + offM, nCols, tmpBuf.data(), nRHS, 1.0,
+                    A + offA, lda);
     }
 
     static inline void stridedTransSet(double* dst, int64_t dstStride,
@@ -451,9 +452,10 @@ struct BlasSolveCtx : SolveCtx<T> {
         }
     }
 
-    virtual void assembleVecT(const T* C, int64_t ldc, int64_t nRHS, T* A,
+    virtual void assembleVecT(const T* C, int64_t ldc, /* int64_t nRHS, T* A, */
                               int64_t chainColPtr,
                               int64_t numColItems) override {
+        T* A = tmpBuf.data();
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
@@ -471,6 +473,8 @@ struct BlasSolveCtx : SolveCtx<T> {
     }
 
     const BlasSymbolicCtx& sym;
+    int64_t nRHS;
+    vector<T> tmpBuf;
 };
 
 NumericCtxBase* BlasSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
@@ -487,11 +491,12 @@ NumericCtxBase* BlasSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
     }
 }
 
-SolveCtxBase* BlasSymbolicCtx::createSolveCtxForType(std::type_index tIdx) {
+SolveCtxBase* BlasSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
+                                                     int nRHS) {
     if (tIdx == std::type_index(typeid(double))) {
-        return new BlasSolveCtx<double>(*this);
+        return new BlasSolveCtx<double>(*this, nRHS);
         /*} else if (tIdx == std::type_index(typeid(float))) {
-            return new SimpleSolveCtx<float>(*this);*/
+            return new SimpleSolveCtx<float>(*this, nRHS);*/
     } else {
         return nullptr;
     }

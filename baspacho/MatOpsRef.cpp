@@ -34,7 +34,8 @@ struct SimpleSymbolicCtx : CpuBaseSymbolicCtx {
         std::type_index tIdx, int64_t tempBufSize,
         int maxBatchSize = 1) override;
 
-    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx) override;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
+                                                int nRHS) override;
 };
 
 // simple ops implemented using Eigen (therefore single thread)
@@ -235,28 +236,29 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
 
 template <typename T>
 struct SimpleSolveCtx : SolveCtx<T> {
-    SimpleSolveCtx(const SimpleSymbolicCtx& sym) : sym(sym) {}
+    SimpleSolveCtx(const SimpleSymbolicCtx& sym, int nRHS)
+        : sym(sym), nRHS(nRHS), tmpBuf(sym.skel.order() * nRHS) {}
     virtual ~SimpleSolveCtx() override {}
 
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
-                        int64_t offC, int64_t ldc, int64_t nRHS) override {
+                        int64_t offC,
+                        int64_t ldc /* , int64_t nRHS */) override {
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
         OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
         matA.template triangularView<Eigen::Lower>().solveInPlace(matC);
     }
 
     virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
-                      const T* A, int64_t offA, int64_t lda, T* C,
-                      int64_t nRHS) override {
+                      const T* A, int64_t offA, int64_t lda) override {
         Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatK<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
-        Eigen::Map<MatRMaj<T>> matC(C, nRows, nRHS);
+        Eigen::Map<MatRMaj<T>> matC(tmpBuf.data(), nRows, nRHS);
         matC.noalias() = matM * matA;
     }
 
-    virtual void assembleVec(const T* A, int64_t chainColPtr,
-                             int64_t numColItems, T* C, int64_t ldc,
-                             int64_t nRHS) override {
+    virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
+                             int64_t ldc) override {
+        const T* A = tmpBuf.data();
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
@@ -277,7 +279,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
     }
 
     virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
-                         int64_t offC, int64_t ldc, int64_t nRHS) override {
+                         int64_t offC, int64_t ldc) override {
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
         OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
         matA.template triangularView<Eigen::Lower>().adjoint().solveInPlace(
@@ -285,17 +287,17 @@ struct SimpleSolveCtx : SolveCtx<T> {
     }
 
     virtual void gemvT(const T* data, int64_t offM, int64_t nRows,
-                       int64_t nCols, const T* C, int64_t nRHS, T* A,
-                       int64_t offA, int64_t lda) override {
+                       int64_t nCols, T* A, int64_t offA,
+                       int64_t lda) override {
         Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatM<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
-        Eigen::Map<const MatRMaj<T>> matC(C, nRows, nRHS);
+        Eigen::Map<const MatRMaj<T>> matC(tmpBuf.data(), nRows, nRHS);
         matA.noalias() -= matM.transpose() * matC;
     }
 
-    virtual void assembleVecT(const T* C, int64_t ldc, int64_t nRHS, T* A,
-                              int64_t chainColPtr,
+    virtual void assembleVecT(const T* C, int64_t ldc, int64_t chainColPtr,
                               int64_t numColItems) override {
+        T* A = tmpBuf.data();
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
             skel.chainRowsTillEnd.data() + chainColPtr;
@@ -315,6 +317,8 @@ struct SimpleSolveCtx : SolveCtx<T> {
     }
 
     const SimpleSymbolicCtx& sym;
+    int64_t nRHS;
+    vector<T> tmpBuf;
 };
 
 NumericCtxBase* SimpleSymbolicCtx::createNumericCtxForType(
@@ -330,11 +334,12 @@ NumericCtxBase* SimpleSymbolicCtx::createNumericCtxForType(
     }
 }
 
-SolveCtxBase* SimpleSymbolicCtx::createSolveCtxForType(std::type_index tIdx) {
+SolveCtxBase* SimpleSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
+                                                       int nRHS) {
     if (tIdx == std::type_index(typeid(double))) {
-        return new SimpleSolveCtx<double>(*this);
+        return new SimpleSolveCtx<double>(*this, nRHS);
     } else if (tIdx == std::type_index(typeid(float))) {
-        return new SimpleSolveCtx<float>(*this);
+        return new SimpleSolveCtx<float>(*this, nRHS);
     } else {
         return nullptr;
     }

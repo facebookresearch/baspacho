@@ -96,7 +96,8 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         std::type_index tIdx, int64_t tempBufSize,
         int maxBatchSize = 1) override;
 
-    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx) override;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
+                                                int nRHS) override;
 
     cublasHandle_t cublasH = nullptr;
     cusolverDnHandle_t cusolverDnH = nullptr;
@@ -450,111 +451,142 @@ struct CudaNumericCtx : NumericCtx<T> {
 };
 
 template <typename T>
+__device__ static inline void stridedTransSub(T* dst, int64_t dstStride,
+                                              const T* src, int64_t srcStride,
+                                              int64_t rSize, int64_t cSize) {
+    for (uint j = 0; j < rSize; j++) {
+        T* pDst = dst + j;
+        for (uint i = 0; i < cSize; i++) {
+            *pDst -= src[i];
+            pDst += dstStride;
+        }
+        src += srcStride;
+    }
+}
+
+template <typename T>
+__device__ static inline void stridedTransSet(T* dst, int64_t dstStride,
+                                              const T* src, int64_t srcStride,
+                                              int64_t rSize, int64_t cSize) {
+    for (uint j = 0; j < rSize; j++) {
+        T* pDst = dst + j;
+        for (uint i = 0; i < cSize; i++) {
+            *pDst = src[i];
+            pDst += dstStride;
+        }
+        src += srcStride;
+    }
+}
+
+template <typename T>
+__global__ void assembleVec_kernel(const int64_t* chainRowsTillEnd,
+                                   const int64_t* toSpan,
+                                   const int64_t* spanStarts, const T* A,
+                                   int64_t numColItems, T* C, int64_t ldc,
+                                   int64_t nRHS) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i > numColItems) {
+        return;
+    }
+    int64_t rowOffset = chainRowsTillEnd[i - 1] - chainRowsTillEnd[-1];
+    int64_t span = toSpan[i];
+    int64_t spanStart = spanStarts[span];
+    int64_t spanSize = spanStarts[span + 1] - spanStart;
+
+    stridedTransSub(C + spanStart, ldc, A + rowOffset * nRHS, nRHS, spanSize,
+                    nRHS);
+}
+
+template <typename T>
+__global__ void assembleVecT_kernel(const int64_t* chainRowsTillEnd,
+                                    const int64_t* toSpan,
+                                    const int64_t* spanStarts, const T* C,
+                                    int64_t ldc, int64_t nRHS, T* A,
+                                    int64_t numColItems) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i > numColItems) {
+        return;
+    }
+    int64_t rowOffset = chainRowsTillEnd[i - 1] - chainRowsTillEnd[-1];
+    int64_t span = toSpan[i];
+    int64_t spanStart = spanStarts[span];
+    int64_t spanSize = spanStarts[span + 1] - spanStart;
+
+    stridedTransSet(A + rowOffset * nRHS, nRHS, C + spanStart, ldc, nRHS,
+                    spanSize);
+}
+
+template <typename T>
 struct CudaSolveCtx : SolveCtx<T> {
-    CudaSolveCtx(const CudaSymbolicCtx& sym) : sym(sym) {}
-    virtual ~CudaSolveCtx() override {}
+    CudaSolveCtx(const CudaSymbolicCtx& sym, int64_t nRHS)
+        : sym(sym), nRHS(nRHS) {
+        cuCHECK(cudaMalloc((void**)&devSolveBuf,
+                           sym.skel.order() * nRHS * sizeof(T)));
+    }
+    virtual ~CudaSolveCtx() override {
+        if (devSolveBuf) {
+            cuCHECK(cudaFree(devSolveBuf));
+        }
+    }
 
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
-                        int64_t offC, int64_t ldc, int64_t nRHS) override {
-        UNUSED(data, offM, n, C, offC, ldc, nRHS);
-        BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
-        Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
-        OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
-        matA.template triangularView<Eigen::Lower>().solveInPlace(matC);
-#endif
+                        int64_t offC, int64_t ldc) override {
+        T alpha(1.0);
+        cublasCHECK(cublasDtrsm(sym.cublasH, CUBLAS_SIDE_LEFT,
+                                CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
+                                CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha,
+                                data + offM, n, C + offC, ldc));
     }
 
     virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
-                      const T* A, int64_t offA, int64_t lda, T* C,
-                      int64_t nRHS) override {
-        UNUSED(data, offM, nRows, nCols, C, nRHS, A, offA, lda);
-        BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
-        Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
-        OuterStridedCMajMatK<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
-        Eigen::Map<MatRMaj<T>> matC(C, nRows, nRHS);
-        matC.noalias() = matM * matA;
-#endif
+                      const T* A, int64_t offA, int64_t lda) override {
+        T alpha(1.0), beta(0.0);
+        cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, nRHS,
+                                nRows, nCols, &alpha, A + offA, lda,
+                                data + offM, nCols, &beta, devSolveBuf, nRHS));
     }
 
-    virtual void assembleVec(const T* A, int64_t chainColPtr,
-                             int64_t numColItems, T* C, int64_t ldc,
-                             int64_t nRHS) override {
-        UNUSED(C, ldc, nRHS, A, chainColPtr, numColItems);
-        BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
-        const CoalescedBlockMatrixSkel& skel = sym.skel;
-        const int64_t* chainRowsTillEnd =
-            skel.chainRowsTillEnd.data() + chainColPtr;
-        const int64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
-        int64_t startRow = chainRowsTillEnd[-1];
-        for (int64_t i = 0; i < numColItems; i++) {
-            int64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
-            int64_t span = toSpan[i];
-            int64_t spanStart = skel.spanStart[span];
-            int64_t spanSize = skel.spanStart[span + 1] - spanStart;
-
-            Eigen::Map<const MatRMaj<T>> matA(A + rowOffset * nRHS, spanSize,
-                                              nRHS);
-            OuterStridedCMajMatM<T> matC(C + spanStart, spanSize, nRHS,
-                                         OuterStride(ldc));
-            matC -= matA;
-        }
-#endif
+    virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
+                             int64_t ldc) override {
+        int wgs = 32;
+        int numGroups = (numColItems + wgs - 1) / wgs;
+        assembleVec_kernel<double><<<numGroups, wgs>>>(
+            sym.devChainRowsTillEnd.ptr + chainColPtr,
+            sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr,
+            devSolveBuf, numColItems, C, ldc, nRHS);
     }
 
     virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
-                         int64_t offC, int64_t ldc, int64_t nRHS) override {
-        UNUSED(data, offM, n, C, offC, ldc, nRHS);
-        BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
-        Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
-        OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
-        matA.template triangularView<Eigen::Lower>().adjoint().solveInPlace(
-            matC);
-#endif
+                         int64_t offC, int64_t ldc) override {
+        T alpha(1.0);
+        cublasCHECK(cublasDtrsm(sym.cublasH, CUBLAS_SIDE_LEFT,
+                                CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N,
+                                CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha,
+                                data + offM, n, C + offC, ldc));
     }
 
     virtual void gemvT(const T* data, int64_t offM, int64_t nRows,
-                       int64_t nCols, const T* C, int64_t nRHS, T* A,
-                       int64_t offA, int64_t lda) override {
-        UNUSED(data, offM, nRows, nCols, C, nRHS, A, offA, lda);
-        BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
-        Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
-        OuterStridedCMajMatM<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
-        Eigen::Map<const MatRMaj<T>> matC(C, nRows, nRHS);
-        matA.noalias() -= matM.transpose() * matC;
-#endif
+                       int64_t nCols, T* A, int64_t offA,
+                       int64_t lda) override {
+        T alpha(-1.0), beta(1.0);
+        cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_N, CUBLAS_OP_C, nCols,
+                                nRHS, nRows, &alpha, data + offM, nCols,
+                                devSolveBuf, nRHS, &beta, A + offA, lda));
     }
 
-    virtual void assembleVecT(const T* C, int64_t ldc, int64_t nRHS, T* A,
-                              int64_t chainColPtr,
+    virtual void assembleVecT(const T* C, int64_t ldc, int64_t chainColPtr,
                               int64_t numColItems) override {
-        UNUSED(C, ldc, nRHS, A, chainColPtr, numColItems);
-        BASPACHO_CHECK(!"Not implemented yet!");
-#if 0
-        const CoalescedBlockMatrixSkel& skel = sym.skel;
-        const int64_t* chainRowsTillEnd =
-            skel.chainRowsTillEnd.data() + chainColPtr;
-        const int64_t* toSpan = skel.chainRowSpan.data() + chainColPtr;
-        int64_t startRow = chainRowsTillEnd[-1];
-        for (int64_t i = 0; i < numColItems; i++) {
-            int64_t rowOffset = chainRowsTillEnd[i - 1] - startRow;
-            int64_t span = toSpan[i];
-            int64_t spanStart = skel.spanStart[span];
-            int64_t spanSize = skel.spanStart[span + 1] - spanStart;
-
-            Eigen::Map<MatRMaj<T>> matA(A + rowOffset * nRHS, spanSize, nRHS);
-            OuterStridedCMajMatK<T> matC(C + spanStart, spanSize, nRHS,
-                                         OuterStride(ldc));
-            matA = matC;
-        }
-#endif
+        int wgs = 32;
+        int numGroups = (numColItems + wgs - 1) / wgs;
+        assembleVecT_kernel<double><<<numGroups, wgs>>>(
+            sym.devChainRowsTillEnd.ptr + chainColPtr,
+            sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr, C, ldc,
+            nRHS, devSolveBuf, numColItems);
     }
 
     const CudaSymbolicCtx& sym;
+    int64_t nRHS;
+    T* devSolveBuf;
 };
 
 NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
@@ -572,11 +604,12 @@ NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
     }
 }
 
-SolveCtxBase* CudaSymbolicCtx::createSolveCtxForType(std::type_index tIdx) {
+SolveCtxBase* CudaSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
+                                                     int nRHS) {
     if (tIdx == std::type_index(typeid(double))) {
-        return new CudaSolveCtx<double>(*this);
+        return new CudaSolveCtx<double>(*this, nRHS);
         /*} else if (tIdx == std::type_index(typeid(float))) {
-            return new CudaSolveCtx<float>(*this);*/
+            return new CudaSolveCtx<float>(*this, nRHS);*/
     } else {
         return nullptr;
     }

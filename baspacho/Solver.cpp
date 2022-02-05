@@ -334,10 +334,7 @@ void Solver::factorXp(double* data, bool verbose) const {
 
 void Solver::solveL(const double* matData, double* vecData, int64_t stride,
                     int nRHS) const {
-    int order = factorSkel.spanStart[factorSkel.spanStart.size() - 1];
-    vector<double> tmpData(order * nRHS);
-
-    SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>();
+    SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>(nRHS);
     for (int64_t l = 0; l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
@@ -345,7 +342,7 @@ void Solver::solveL(const double* matData, double* vecData, int64_t stride,
         int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
 
         slvCtx->solveL(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
-                       stride, nRHS);
+                       stride);
 
         int64_t boardColBegin = factorSkel.boardColPtr[l];
         int64_t boardColEnd = factorSkel.boardColPtr[l + 1];
@@ -363,21 +360,17 @@ void Solver::solveL(const double* matData, double* vecData, int64_t stride,
         }
 
         slvCtx->gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
-                     vecData, lumpStart, stride, tmpData.data(), nRHS);
+                     vecData, lumpStart, stride);
 
         int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
-        slvCtx->assembleVec(tmpData.data(), chainColPtr,
-                            numColChains - belowDiagChainColOrd, vecData,
-                            stride, nRHS);
+        slvCtx->assembleVec(chainColPtr, numColChains - belowDiagChainColOrd,
+                            vecData, stride);
     }
 }
 
 void Solver::solveLt(const double* matData, double* vecData, int64_t stride,
                      int nRHS) const {
-    int order = factorSkel.spanStart[factorSkel.spanStart.size() - 1];
-    vector<double> tmpData(order * nRHS);
-
-    SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>();
+    SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>(nRHS);
     for (int64_t l = factorSkel.chainColPtr.size() - 2; (int64_t)l >= 0; l--) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
@@ -397,17 +390,16 @@ void Solver::solveLt(const double* matData, double* vecData, int64_t stride,
 
         if (numRowsBelowDiag > 0) {
             int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
-            slvCtx->assembleVecT(vecData, stride, nRHS, tmpData.data(),
-                                 chainColPtr,
+            slvCtx->assembleVecT(vecData, stride, chainColPtr,
                                  numColChains - belowDiagChainColOrd);
 
             slvCtx->gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
-                          tmpData.data(), nRHS, vecData, lumpStart, stride);
+                          vecData, lumpStart, stride);
         }
 
         int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
         slvCtx->solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
-                        stride, nRHS);
+                        stride);
     }
 }
 
