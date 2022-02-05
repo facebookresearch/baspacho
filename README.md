@@ -90,7 +90,7 @@ implementation in SuiteSparse instead of Eigen.
 ## Todo
 - [ ] add continuous integration for testing
 - [ ] document more code (before I forget how it works), and provide better API
-- [ ] float/double in all backends
+- [X] float/double in all backends
 - [X] Cuda: include and test sparse elimination in BAL_bench
 - [X] Cuda: test atomics vs magic-locked block updates (result: magic lock of blocks does not work
       in Cuda unless very expensive synchronized ops are used, making it not competitive)
