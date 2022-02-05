@@ -266,4 +266,8 @@ if(BASPACHO_USE_CUBLAS)
     CudaFactorTest
     baspacho/tests/CudaFactorTest.cpp
   )
+  add_baspacho_test(
+    CudaSolveTest
+    baspacho/tests/CudaSolveTest.cpp
+  )
 endif()

@@ -40,15 +40,11 @@ void testCoalescedFactor(OpsPtr&& ops) {
 
     Solver solver(std::move(factorSkel), {}, {}, std::move(ops));
 
-    // call factor with data on device
-    double* dataGPU;
-    cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
-    cuCHECK(cudaMemcpy(dataGPU, data.data(), data.size() * sizeof(double),
-                       cudaMemcpyHostToDevice));
-    solver.factor(dataGPU);
-    cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
-                       cudaMemcpyDeviceToHost));
-    cuCHECK(cudaFree(dataGPU));
+    // call factor on gpu data
+    {
+        DevMirror<double> dataGpu(data);
+        solver.factor(dataGpu.ptr);
+    }
 
     Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
@@ -91,15 +87,11 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
 
         Solver solver(std::move(factorSkel), {}, {}, genOps());
 
-        // call factor with data on device
-        double* dataGPU;
-        cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
-        cuCHECK(cudaMemcpy(dataGPU, data.data(), data.size() * sizeof(double),
-                           cudaMemcpyHostToDevice));
-        solver.factor(dataGPU);
-        cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
-                           cudaMemcpyDeviceToHost));
-        cuCHECK(cudaFree(dataGPU));
+        // call factor on gpu data
+        {
+            DevMirror<double> dataGpu(data);
+            solver.factor(dataGpu.ptr);
+        }
 
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
@@ -151,14 +143,11 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
             solver.symCtx->createNumericCtx<double>(0);
 
         // call doElimination with data on device
-        double* dataGPU;
-        cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
-        cuCHECK(cudaMemcpy(dataGPU, data.data(), data.size() * sizeof(double),
-                           cudaMemcpyHostToDevice));
-        numCtx->doElimination(*solver.elimCtxs[0], dataGPU, 0, largestIndep);
-        cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
-                           cudaMemcpyDeviceToHost));
-        cuCHECK(cudaFree(dataGPU));
+        {
+            DevMirror<double> dataGpu(data);
+            numCtx->doElimination(*solver.elimCtxs[0], dataGpu.ptr, 0,
+                                  largestIndep);
+        }
 
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
@@ -208,14 +197,10 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
                       genOps());
 
         // call factor on gpu data
-        double* dataGPU;
-        cuCHECK(cudaMalloc((void**)&dataGPU, data.size() * sizeof(double)));
-        cuCHECK(cudaMemcpy(dataGPU, data.data(), data.size() * sizeof(double),
-                           cudaMemcpyHostToDevice));
-        solver.factor(dataGPU);
-        cuCHECK(cudaMemcpy(data.data(), dataGPU, data.size() * sizeof(double),
-                           cudaMemcpyDeviceToHost));
-        cuCHECK(cudaFree(dataGPU));
+        {
+            DevMirror<double> dataGpu(data);
+            solver.factor(dataGpu.ptr);
+        }
 
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
