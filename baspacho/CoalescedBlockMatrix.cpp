@@ -114,13 +114,14 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
     rewindVec(boardRowPtr);
 }
 
-Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
-    const std::vector<double>& data) const {
+template <typename T>
+Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>
+CoalescedBlockMatrixSkel::densify(const std::vector<T>& data) const {
     int64_t totData = chainData[chainData.size() - 1];
     BASPACHO_CHECK_EQ(totData, (int64_t)data.size());
 
     int64_t totSize = spanStart[spanStart.size() - 1];
-    Eigen::MatrixXd retv(totSize, totSize);
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> retv(totSize, totSize);
     retv.setZero();
 
     for (size_t a = 0; a < chainColPtr.size() - 1; a++) {
@@ -135,16 +136,17 @@ Eigen::MatrixXd CoalescedBlockMatrixSkel::densify(
             int64_t dataPtr = chainData[i];
 
             retv.block(pStart, lBegin, pSize, lSize) =
-                Eigen::Map<const MatRMaj<double>>(data.data() + dataPtr, pSize,
-                                                  lSize);
+                Eigen::Map<const MatRMaj<T>>(data.data() + dataPtr, pSize,
+                                             lSize);
         }
     }
 
     return retv;
 }
 
-void CoalescedBlockMatrixSkel::damp(std::vector<double>& data, double alpha,
-                                    double beta) const {
+template <typename T>
+void CoalescedBlockMatrixSkel::damp(std::vector<T>& data, T alpha,
+                                    T beta) const {
     int64_t totData = chainData[chainData.size() - 1];
     BASPACHO_CHECK_EQ(totData, (int64_t)data.size());
 
@@ -154,10 +156,22 @@ void CoalescedBlockMatrixSkel::damp(std::vector<double>& data, double alpha,
         int64_t colStart = chainColPtr[a];
         int64_t dataPtr = chainData[colStart];
 
-        Eigen::Map<MatRMaj<double>> block(data.data() + dataPtr, aSize, aSize);
+        Eigen::Map<MatRMaj<T>> block(data.data() + dataPtr, aSize, aSize);
         block.diagonal() *= (1 + alpha);
         block.diagonal().array() += beta;
     }
 }
+
+template Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>
+CoalescedBlockMatrixSkel::densify<double>(
+    const std::vector<double>& data) const;
+template Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>
+CoalescedBlockMatrixSkel::densify<float>(const std::vector<float>& data) const;
+template void CoalescedBlockMatrixSkel::damp<double>(std::vector<double>& data,
+                                                     double alpha,
+                                                     double beta) const;
+template void CoalescedBlockMatrixSkel::damp<float>(std::vector<float>& data,
+                                                    float alpha,
+                                                    float beta) const;
 
 }  // end namespace BaSpaCho

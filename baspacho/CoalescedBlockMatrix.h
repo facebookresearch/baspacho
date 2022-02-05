@@ -36,9 +36,12 @@ struct CoalescedBlockMatrixSkel {
                              const std::vector<int64_t>& colPtr,
                              const std::vector<int64_t>& rowInd);
 
-    Eigen::MatrixXd densify(const std::vector<double>& data) const;
+    template <typename T>
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> densify(
+        const std::vector<T>& data) const;
 
-    void damp(std::vector<double>& data, double alpha, double beta) const;
+    template <typename T>
+    void damp(std::vector<T>& data, T alpha, T beta) const;
 
     int64_t numSpans() const { return spanStart.size() - 1; }
 
@@ -77,10 +80,5 @@ struct CoalescedBlockMatrixSkel {
     std::vector<int64_t> boardColLump;  // board's col lump
     std::vector<int64_t> boardColOrd;   // board order in col
 };
-
-CoalescedBlockMatrixSkel initCoalescedBlockMatrixSkel(
-    const std::vector<int64_t>& spanStart,
-    const std::vector<int64_t>& lumpToSpan, const std::vector<int64_t>& colPtr,
-    const std::vector<int64_t>& rowInd);
 
 }  // end namespace BaSpaCho

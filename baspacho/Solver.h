@@ -21,27 +21,27 @@ struct Solver {
 
     void resetStats();
 
-    void solveL(const double* matData, double* vecData, int64_t stride,
-                int nRHS) const;
+    template <typename T>
+    void factor(T* data, bool verbose = false) const;
 
-    void solveLt(const double* matData, double* vecData, int64_t stride,
-                 int nRHS) const;
+    template <typename T>
+    void solveL(const T* matData, T* vecData, int64_t stride, int nRHS) const;
 
-    void factor(double* data, bool verbose = false) const;
+    template <typename T>
+    void solveLt(const T* matData, T* vecData, int64_t stride, int nRHS) const;
 
+   private:
     void initElimination();
 
     int64_t boardElimTempSize(int64_t lump, int64_t boardIndexInSN) const;
 
-    void factorLump(NumericCtx<double>& numCtx, double* data,
-                    int64_t lump) const;
+    template <typename T>
+    void factorLump(NumericCtx<T>& numCtx, T* data, int64_t lump) const;
 
-    void eliminateBoard(NumericCtx<double>& numCtx, double* data,
-                        int64_t ptr) const;
+    template <typename T>
+    void eliminateBoard(NumericCtx<T>& numCtx, T* data, int64_t ptr) const;
 
-    void eliminateBoardBatch(NumericCtx<double>& numCtx, double* data,
-                             int64_t ptr, int64_t batchSize) const;
-
+   public:
     CoalescedBlockMatrixSkel factorSkel;
     std::vector<int64_t> elimLumpRanges;
     std::vector<int64_t> permutation;  // *on indices*: v'[p[i]] = v[i];

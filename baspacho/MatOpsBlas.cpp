@@ -132,66 +132,12 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         }
     }
 
-    virtual void potrf(int64_t n, T* A) override {
-        OpInstance timer(sym.potrfStat);
-        sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
+    virtual void potrf(int64_t n, T* A) override;
 
-        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', n, A, n);
-    }
-
-    virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
-        OpInstance timer(sym.trsmStat);
-
-        // TSRM should be fast but appears very slow in OpenBLAS
-        static constexpr bool slowTrsmWorkaround = BASPACHO_USE_TRSM_WORAROUND;
-        if (slowTrsmWorkaround) {
-            using MatCMajD = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic,
-                                           Eigen::ColMajor>;
-
-            // col-major's upper = (row-major's lower).transpose()
-            Eigen::Map<const MatCMajD> matA(A, n, n);
-            dispenso::TaskSet taskSet(sym.threadPool);
-            dispenso::parallel_for(
-                taskSet, dispenso::makeChunkedRange(0, k, 16UL),
-                [&](int64_t k1, int64_t k2) {
-                    Eigen::Map<MatRMaj<T>> matB(B + n * k1, k2 - k1, n);
-                    matA.template triangularView<Eigen::Upper>()
-                        .template solveInPlace<Eigen::OnTheRight>(matB);
-                });
-            return;
-        }
-
-        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
-                    CblasNonUnit, n, k, 1.0, A, n, B, n);
-    }
+    virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override;
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
-                              int64_t offset) override {
-        OpInstance timer(sym.sygeStat);
-        BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
-
-        // in some cases it could be faster with syrk+gemm
-        // as it saves some computation, not the case in practice
-        bool doSyrk = (m == n) || (m + n + k > 150);
-        bool doGemm = !(doSyrk && m == n);
-
-        if (doSyrk) {
-            cblas_dsyrk(CblasColMajor, CblasUpper, CblasConjTrans, m, k, 1.0,
-                        data + offset, k, 0.0, tempBuffer.data(), m);
-            sym.syrkCalls++;
-        }
-
-        if (doGemm) {
-            int64_t gemmStart = doSyrk ? m : 0;
-            int64_t gemmInOffset = doSyrk ? m * k : 0;
-            int64_t gemmOutOffset = doSyrk ? m * m : 0;
-            cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, m,
-                        n - gemmStart, k, 1.0, data + offset, k,
-                        data + offset + gemmInOffset, k, 0.0,
-                        tempBuffer.data() + gemmOutOffset, m);
-            sym.gemmCalls++;
-        }
-    }
+                              int64_t offset) override;
 
     virtual void prepareAssemble(int64_t targetLump) override {
         const CoalescedBlockMatrixSkel& skel = sym.skel;
@@ -281,6 +227,136 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
     const BlasSymbolicCtx& sym;
 };
 
+template <>
+void BlasNumericCtx<double>::potrf(int64_t n, double* A) {
+    OpInstance timer(sym.potrfStat);
+    sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
+
+    LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', n, A, n);
+}
+
+template <>
+void BlasNumericCtx<float>::potrf(int64_t n, float* A) {
+    OpInstance timer(sym.potrfStat);
+    sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
+
+    LAPACKE_spotrf(LAPACK_COL_MAJOR, 'U', n, A, n);
+}
+
+template <>
+void BlasNumericCtx<double>::trsm(int64_t n, int64_t k, const double* A,
+                                  double* B) {
+    OpInstance timer(sym.trsmStat);
+
+    // TSRM should be fast but appears very slow in OpenBLAS
+    static constexpr bool slowTrsmWorkaround = BASPACHO_USE_TRSM_WORAROUND;
+    if (slowTrsmWorkaround) {
+        using MatCMajD = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                                       Eigen::ColMajor>;
+
+        // col-major's upper = (row-major's lower).transpose()
+        Eigen::Map<const MatCMajD> matA(A, n, n);
+        dispenso::TaskSet taskSet(sym.threadPool);
+        dispenso::parallel_for(
+            taskSet, dispenso::makeChunkedRange(0, k, 16UL),
+            [&](int64_t k1, int64_t k2) {
+                Eigen::Map<MatRMaj<double>> matB(B + n * k1, k2 - k1, n);
+                matA.template triangularView<Eigen::Upper>()
+                    .template solveInPlace<Eigen::OnTheRight>(matB);
+            });
+        return;
+    }
+
+    cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
+                CblasNonUnit, n, k, 1.0, A, n, B, n);
+}
+
+template <>
+void BlasNumericCtx<float>::trsm(int64_t n, int64_t k, const float* A,
+                                 float* B) {
+    OpInstance timer(sym.trsmStat);
+
+    // TSRM should be fast but appears very slow in OpenBLAS
+    static constexpr bool slowTrsmWorkaround = BASPACHO_USE_TRSM_WORAROUND;
+    if (slowTrsmWorkaround) {
+        using MatCMajD = Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
+                                       Eigen::ColMajor>;
+
+        // col-major's upper = (row-major's lower).transpose()
+        Eigen::Map<const MatCMajD> matA(A, n, n);
+        dispenso::TaskSet taskSet(sym.threadPool);
+        dispenso::parallel_for(
+            taskSet, dispenso::makeChunkedRange(0, k, 16UL),
+            [&](int64_t k1, int64_t k2) {
+                Eigen::Map<MatRMaj<float>> matB(B + n * k1, k2 - k1, n);
+                matA.template triangularView<Eigen::Upper>()
+                    .template solveInPlace<Eigen::OnTheRight>(matB);
+            });
+        return;
+    }
+
+    cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
+                CblasNonUnit, n, k, 1.0, A, n, B, n);
+}
+
+template <>
+void BlasNumericCtx<double>::saveSyrkGemm(int64_t m, int64_t n, int64_t k,
+                                          const double* data, int64_t offset) {
+    OpInstance timer(sym.sygeStat);
+    BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
+
+    // in some cases it could be faster with syrk+gemm
+    // as it saves some computation, not the case in practice
+    bool doSyrk = (m == n) || (m + n + k > 150);
+    bool doGemm = !(doSyrk && m == n);
+
+    if (doSyrk) {
+        cblas_dsyrk(CblasColMajor, CblasUpper, CblasConjTrans, m, k, 1.0,
+                    data + offset, k, 0.0, tempBuffer.data(), m);
+        sym.syrkCalls++;
+    }
+
+    if (doGemm) {
+        int64_t gemmStart = doSyrk ? m : 0;
+        int64_t gemmInOffset = doSyrk ? m * k : 0;
+        int64_t gemmOutOffset = doSyrk ? m * m : 0;
+        cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, m,
+                    n - gemmStart, k, 1.0, data + offset, k,
+                    data + offset + gemmInOffset, k, 0.0,
+                    tempBuffer.data() + gemmOutOffset, m);
+        sym.gemmCalls++;
+    }
+}
+
+template <>
+void BlasNumericCtx<float>::saveSyrkGemm(int64_t m, int64_t n, int64_t k,
+                                         const float* data, int64_t offset) {
+    OpInstance timer(sym.sygeStat);
+    BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
+
+    // in some cases it could be faster with syrk+gemm
+    // as it saves some computation, not the case in practice
+    bool doSyrk = (m == n) || (m + n + k > 150);
+    bool doGemm = !(doSyrk && m == n);
+
+    if (doSyrk) {
+        cblas_ssyrk(CblasColMajor, CblasUpper, CblasConjTrans, m, k, 1.0,
+                    data + offset, k, 0.0, tempBuffer.data(), m);
+        sym.syrkCalls++;
+    }
+
+    if (doGemm) {
+        int64_t gemmStart = doSyrk ? m : 0;
+        int64_t gemmInOffset = doSyrk ? m * k : 0;
+        int64_t gemmOutOffset = doSyrk ? m * m : 0;
+        cblas_sgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, m,
+                    n - gemmStart, k, 1.0, data + offset, k,
+                    data + offset + gemmInOffset, k, 0.0,
+                    tempBuffer.data() + gemmOutOffset, m);
+        sym.gemmCalls++;
+    }
+}
+
 template <typename T>
 struct BlasSolveCtx : SolveCtx<T> {
     BlasSolveCtx(const BlasSymbolicCtx& sym, int nRHS)
@@ -288,17 +364,10 @@ struct BlasSolveCtx : SolveCtx<T> {
     virtual ~BlasSolveCtx() override {}
 
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
-                        int64_t offC, int64_t ldc) override {
-        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
-                    CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
-    }
+                        int64_t offC, int64_t ldc) override;
 
     virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
-                      const T* A, int64_t offA, int64_t lda) override {
-        cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, nRHS, nRows,
-                    nCols, 1.0, A + offA, lda, data + offM, nCols, 0.0,
-                    tmpBuf.data(), nRHS);
-    }
+                      const T* A, int64_t offA, int64_t lda) override;
 
     static inline void stridedTransSub(T* dst, int64_t dstStride, const T* src,
                                        int64_t srcStride, int64_t rSize,
@@ -333,18 +402,10 @@ struct BlasSolveCtx : SolveCtx<T> {
     }
 
     virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
-                         int64_t offC, int64_t ldc) override {
-        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans,
-                    CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
-    }
+                         int64_t offC, int64_t ldc) override;
 
     virtual void gemvT(const T* data, int64_t offM, int64_t nRows,
-                       int64_t nCols, T* A, int64_t offA,
-                       int64_t lda) override {
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, nCols, nRHS,
-                    nRows, -1.0, data + offM, nCols, tmpBuf.data(), nRHS, 1.0,
-                    A + offA, lda);
-    }
+                       int64_t nCols, T* A, int64_t offA, int64_t lda) override;
 
     static inline void stridedTransSet(T* dst, int64_t dstStride, const T* src,
                                        int64_t srcStride, int64_t rSize,
@@ -384,14 +445,78 @@ struct BlasSolveCtx : SolveCtx<T> {
     vector<T> tmpBuf;
 };
 
+template <>
+void BlasSolveCtx<double>::solveL(const double* data, int64_t offM, int64_t n,
+                                  double* C, int64_t offC, int64_t ldc) {
+    cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
+                CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
+}
+
+template <>
+void BlasSolveCtx<float>::solveL(const float* data, int64_t offM, int64_t n,
+                                 float* C, int64_t offC, int64_t ldc) {
+    cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
+                CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
+}
+
+template <>
+void BlasSolveCtx<double>::gemv(const double* data, int64_t offM, int64_t nRows,
+                                int64_t nCols, const double* A, int64_t offA,
+                                int64_t lda) {
+    cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, nRHS, nRows, nCols,
+                1.0, A + offA, lda, data + offM, nCols, 0.0, tmpBuf.data(),
+                nRHS);
+}
+
+template <>
+void BlasSolveCtx<float>::gemv(const float* data, int64_t offM, int64_t nRows,
+                               int64_t nCols, const float* A, int64_t offA,
+                               int64_t lda) {
+    cblas_sgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, nRHS, nRows, nCols,
+                1.0, A + offA, lda, data + offM, nCols, 0.0, tmpBuf.data(),
+                nRHS);
+}
+
+template <>
+void BlasSolveCtx<double>::solveLt(const double* data, int64_t offM, int64_t n,
+                                   double* C, int64_t offC, int64_t ldc) {
+    cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans,
+                CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
+}
+
+template <>
+void BlasSolveCtx<float>::solveLt(const float* data, int64_t offM, int64_t n,
+                                  float* C, int64_t offC, int64_t ldc) {
+    cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans,
+                CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
+}
+
+template <>
+void BlasSolveCtx<double>::gemvT(const double* data, int64_t offM,
+                                 int64_t nRows, int64_t nCols, double* A,
+                                 int64_t offA, int64_t lda) {
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, nCols, nRHS, nRows,
+                -1.0, data + offM, nCols, tmpBuf.data(), nRHS, 1.0, A + offA,
+                lda);
+}
+
+template <>
+void BlasSolveCtx<float>::gemvT(const float* data, int64_t offM, int64_t nRows,
+                                int64_t nCols, float* A, int64_t offA,
+                                int64_t lda) {
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, nCols, nRHS, nRows,
+                -1.0, data + offM, nCols, tmpBuf.data(), nRHS, 1.0, A + offA,
+                lda);
+}
+
 NumericCtxBase* BlasSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
                                                          int64_t tempBufSize) {
     if (tIdx == std::type_index(typeid(double))) {
         return new BlasNumericCtx<double>(*this, tempBufSize,
                                           skel.spanStart.size() - 1);
-        /*} else if (tIdx == std::type_index(typeid(float))) {
-            return new BlasNumericCtx<float>(*this, tempBufSize,
-                                               skel.spanStart.size() - 1);*/
+    } else if (tIdx == std::type_index(typeid(float))) {
+        return new BlasNumericCtx<float>(*this, tempBufSize,
+                                         skel.spanStart.size() - 1);
     } else {
         return nullptr;
     }
@@ -401,8 +526,8 @@ SolveCtxBase* BlasSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
                                                      int nRHS) {
     if (tIdx == std::type_index(typeid(double))) {
         return new BlasSolveCtx<double>(*this, nRHS);
-        /*} else if (tIdx == std::type_index(typeid(float))) {
-            return new BlasSolveCtx<float>(*this, nRHS);*/
+    } else if (tIdx == std::type_index(typeid(float))) {
+        return new BlasSolveCtx<float>(*this, nRHS);
     } else {
         return nullptr;
     }

@@ -40,7 +40,8 @@ pair<double, double> benchmarkSolver(const SparseProblem& prob,
     // generate mock data, make positive def
     vector<double> data =
         randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-    solver->factorSkel.damp(data, 0, solver->factorSkel.order() * 1.2);
+    solver->factorSkel.damp(data, double(0),
+                            double(solver->factorSkel.order() * 1.2));
 
     double factorTime;
 #ifdef BASPACHO_USE_CUBLAS

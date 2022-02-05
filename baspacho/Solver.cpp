@@ -33,8 +33,8 @@ Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_,
     initElimination();
 }
 
-void Solver::factorLump(NumericCtx<double>& numCtx, double* data,
-                        int64_t lump) const {
+template <typename T>
+void Solver::factorLump(NumericCtx<T>& numCtx, T* data, int64_t lump) const {
     int64_t lumpStart = factorSkel.lumpStart[lump];
     int64_t lumpSize = factorSkel.lumpStart[lump + 1] - lumpStart;
     int64_t chainColBegin = factorSkel.chainColPtr[lump];
@@ -61,8 +61,8 @@ void Solver::factorLump(NumericCtx<double>& numCtx, double* data,
                 data + belowDiagOffset);
 }
 
-void Solver::eliminateBoard(NumericCtx<double>& numCtx, double* data,
-                            int64_t ptr) const {
+template <typename T>
+void Solver::eliminateBoard(NumericCtx<T>& numCtx, T* data, int64_t ptr) const {
     int64_t origLump = factorSkel.boardColLump[ptr];
     int64_t boardIndexInCol = factorSkel.boardColOrd[ptr];
 
@@ -167,9 +167,9 @@ void Solver::initElimination() {
     }
 }
 
-void Solver::factor(double* data, bool verbose) const {
-    NumericCtxPtr<double> numCtx =
-        symCtx->createNumericCtx<double>(maxElimTempSize);
+template <typename T>
+void Solver::factor(T* data, bool verbose) const {
+    NumericCtxPtr<T> numCtx = symCtx->createNumericCtx<T>(maxElimTempSize);
 
     for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
         if (verbose) {
@@ -202,9 +202,10 @@ void Solver::factor(double* data, bool verbose) const {
     }
 }
 
-void Solver::solveL(const double* matData, double* vecData, int64_t stride,
+template <typename T>
+void Solver::solveL(const T* matData, T* vecData, int64_t stride,
                     int nRHS) const {
-    SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>(nRHS);
+    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
     for (int64_t l = 0; l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
@@ -238,9 +239,10 @@ void Solver::solveL(const double* matData, double* vecData, int64_t stride,
     }
 }
 
-void Solver::solveLt(const double* matData, double* vecData, int64_t stride,
+template <typename T>
+void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
                      int nRHS) const {
-    SolveCtxPtr<double> slvCtx = symCtx->createSolveCtx<double>(nRHS);
+    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
     for (int64_t l = factorSkel.chainColPtr.size() - 2; (int64_t)l >= 0; l--) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
@@ -272,6 +274,17 @@ void Solver::solveLt(const double* matData, double* vecData, int64_t stride,
                         stride);
     }
 }
+
+template void Solver::factor<double>(double* data, bool verbose) const;
+template void Solver::factor<float>(float* data, bool verbose) const;
+template void Solver::solveL<double>(const double* matData, double* vecData,
+                                     int64_t stride, int nRHS) const;
+template void Solver::solveL<float>(const float* matData, float* vecData,
+                                    int64_t stride, int nRHS) const;
+template void Solver::solveLt<double>(const double* matData, double* vecData,
+                                      int64_t stride, int nRHS) const;
+template void Solver::solveLt<float>(const float* matData, float* vecData,
+                                     int64_t stride, int nRHS) const;
 
 void Solver::printStats() const {
     cout << "Matrix stats:" << endl;

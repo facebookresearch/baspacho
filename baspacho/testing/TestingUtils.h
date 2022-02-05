@@ -18,11 +18,11 @@ std::vector<int64_t> randomVec(size_t size, int64_t low, int64_t high,
 std::vector<int64_t> randomVec(size_t size, int64_t low, int64_t high,
                                std::mt19937& gen);
 
-std::vector<double> randomData(size_t size, double low, double high,
-                               int64_t seed);
+template <typename T>
+std::vector<T> randomData(size_t size, T low, T high, int64_t seed);
 
-std::vector<double> randomData(size_t size, double low, double high,
-                               std::mt19937& gen);
+template <typename T>
+std::vector<T> randomData(size_t size, T low, T high, std::mt19937& gen);
 
 std::vector<int64_t> randomPartition(int64_t weight, int64_t low, int64_t high,
                                      int64_t seed);

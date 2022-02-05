@@ -70,7 +70,8 @@ void testSolvers(Data& data) {
         // generate mock data, make positive def
         vector<double> matData =
             randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-        solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
+        solver->factorSkel.damp(matData, double(0),
+                                double(solver->factorSkel.order() * 1.2));
 
         cout << "heating up factor..." << endl;
         solver->factor(matData.data());  // heat up
@@ -119,7 +120,8 @@ void testSolvers(Data& data) {
         // generate mock data, make positive def
         vector<double> matData =
             randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-        solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
+        solver->factorSkel.damp(matData, double(0),
+                                double(solver->factorSkel.order() * 1.2));
 
         {
             cout << "heating up factor..." << endl;
@@ -162,7 +164,8 @@ void testSolvers(Data& data) {
         // generate mock data, make positive def
         vector<double> matData =
             randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-        solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
+        solver->factorSkel.damp(matData, double(0),
+                                double(solver->factorSkel.order() * 1.2));
 
         {
             cout << "heating up factor..." << endl;

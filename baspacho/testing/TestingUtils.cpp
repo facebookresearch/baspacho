@@ -33,21 +33,30 @@ vector<int64_t> randomVec(size_t size, int64_t low, int64_t high,
     return retv;
 }
 
-std::vector<double> randomData(size_t size, double low, double high,
-                               int64_t seed) {
+template <typename T>
+std::vector<T> randomData(size_t size, T low, T high, int64_t seed) {
     mt19937 gen(seed);
     return randomData(size, low, high, gen);
 }
 
-std::vector<double> randomData(size_t size, double low, double high,
-                               std::mt19937& gen) {
-    vector<double> retv(size);
+template <typename T>
+std::vector<T> randomData(size_t size, T low, T high, std::mt19937& gen) {
+    vector<T> retv(size);
     uniform_real_distribution<> dis(low, high);
     for (int64_t i = 0; i < size; i++) {
         retv[i] = dis(gen);
     }
     return retv;
 }
+
+template std::vector<double> randomData(size_t size, double low, double high,
+                                        int64_t seed);
+template std::vector<float> randomData(size_t size, float low, float high,
+                                       int64_t seed);
+template std::vector<double> randomData(size_t size, double low, double high,
+                                        std::mt19937& gen);
+template std::vector<float> randomData(size_t size, float low, float high,
+                                       std::mt19937& gen);
 
 vector<int64_t> randomPartition(int64_t weight, int64_t low, int64_t high,
                                 int64_t seed) {
