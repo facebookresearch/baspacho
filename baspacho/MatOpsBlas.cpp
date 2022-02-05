@@ -11,7 +11,6 @@
 
 #include "mkl.h"
 #define BLAS_INT MKL_INT
-#define BASPACHO_HAVE_GEMM_BATCH
 #define BASPACHO_USE_TRSM_WORAROUND 0
 
 #else
@@ -34,8 +33,7 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
           threadPool(useThreads ? numThreads : 0) {}
 
     virtual NumericCtxBase* createNumericCtxForType(
-        std::type_index tIdx, int64_t tempBufSize,
-        int maxBatchSize = 1) override;
+        std::type_index tIdx, int64_t tempBufSize) override;
 
     virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
                                                 int nRHS) override;
@@ -56,21 +54,10 @@ struct BlasOps : Ops {
 template <typename T>
 struct BlasNumericCtx : CpuBaseNumericCtx<T> {
     BlasNumericCtx(const BlasSymbolicCtx& sym, int64_t bufSize,
-                   int64_t numSpans, int maxBatchSize)
-        : CpuBaseNumericCtx<T>(bufSize * maxBatchSize, numSpans),
-          sym(sym)
-#ifdef BASPACHO_HAVE_GEMM_BATCH
-          ,
-          tempCtxSize(bufSize),
-          maxBatchSize(maxBatchSize)
-#endif
-    {
-#ifndef BASPACHO_HAVE_GEMM_BATCH
-        BASPACHO_CHECK_EQ(maxBatchSize, 1);
-#endif
-    }
+                   int64_t numSpans)
+        : CpuBaseNumericCtx<T>(bufSize, numSpans), sym(sym) {}
 
-    virtual void doElimination(const SymElimCtx& elimData, double* data,
+    virtual void doElimination(const SymElimCtx& elimData, T* data,
                                int64_t lumpsBegin, int64_t lumpsEnd) override {
         const CpuBaseSymElimCtx* pElim =
             dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
@@ -98,7 +85,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         if (elim.colLump.size() > 3 * (elim.rowPtr.size() - 1)) {
             int64_t numSpans = skel.spanStart.size() - 1;
             if (!sym.useThreads) {
-                std::vector<double> tempBuffer(elim.maxBufferSize);
+                std::vector<T> tempBuffer(elim.maxBufferSize);
                 std::vector<int64_t> spanToChainOffset(numSpans);
                 for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
                     eliminateRowChain(elim, skel, data, sRel, spanToChainOffset,
@@ -106,7 +93,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                 }
             } else {
                 struct ElimContext {
-                    std::vector<double> tempBuffer;
+                    std::vector<T> tempBuffer;
                     std::vector<int64_t> spanToChainOffset;
                     ElimContext(int64_t bufSize, int64_t numSpans)
                         : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
@@ -158,8 +145,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         // TSRM should be fast but appears very slow in OpenBLAS
         static constexpr bool slowTrsmWorkaround = BASPACHO_USE_TRSM_WORAROUND;
         if (slowTrsmWorkaround) {
-            using MatCMajD = Eigen::Matrix<double, Eigen::Dynamic,
-                                           Eigen::Dynamic, Eigen::ColMajor>;
+            using MatCMajD = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic,
+                                           Eigen::ColMajor>;
 
             // col-major's upper = (row-major's lower).transpose()
             Eigen::Map<const MatCMajD> matA(A, n, n);
@@ -167,9 +154,9 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
             dispenso::parallel_for(
                 taskSet, dispenso::makeChunkedRange(0, k, 16UL),
                 [&](int64_t k1, int64_t k2) {
-                    Eigen::Map<MatRMaj<double>> matB(B + n * k1, k2 - k1, n);
-                    matA.triangularView<Eigen::Upper>()
-                        .solveInPlace<Eigen::OnTheRight>(matB);
+                    Eigen::Map<MatRMaj<T>> matB(B + n * k1, k2 - k1, n);
+                    matA.template triangularView<Eigen::Upper>()
+                        .template solveInPlace<Eigen::OnTheRight>(matB);
                 });
             return;
         }
@@ -206,71 +193,6 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         }
     }
 
-    virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
-                                     const T* data, int64_t* offsets,
-                                     int batchSize) {
-#ifndef BASPACHO_HAVE_GEMM_BATCH
-        UNUSED(ms, ns, ks, data, offsets, batchSize);
-        BASPACHO_CHECK(!"Batching not supported");
-#else
-        OpInstance timer(sym.sygeStat);
-        BASPACHO_CHECK_LE(batchSize, maxBatchSize);
-
-        // for testing: serial execution of the batch
-        /*tempBufPtrs.clear();
-        double* ptr = tempBuffer.data();
-        for (int i = 0; i < batchSize; i++) {
-            BASPACHO_CHECK_LE(ms[i] * ns[i], tempCtxSize);
-            this->gemm(ms[i], ns[i], ks[i], data + offsets[i],
-                       data + offsets[i], ptr);
-            tempBufPtrs.push_back(ptr);
-            ptr += ms[i] * ns[i];
-        }*/
-        CBLAS_TRANSPOSE* argTransAs =
-            (CBLAS_TRANSPOSE*)alloca(batchSize * sizeof(CBLAS_TRANSPOSE));
-        CBLAS_TRANSPOSE* argTransBs =
-            (CBLAS_TRANSPOSE*)alloca(batchSize * sizeof(CBLAS_TRANSPOSE));
-        BLAS_INT* argMs = (BLAS_INT*)alloca(batchSize * sizeof(BLAS_INT));
-        BLAS_INT* argNs = (BLAS_INT*)alloca(batchSize * sizeof(BLAS_INT));
-        BLAS_INT* argKs = (BLAS_INT*)alloca(batchSize * sizeof(BLAS_INT));
-        double* argAlphas = (double*)alloca(batchSize * sizeof(double));
-        double* argBetas = (double*)alloca(batchSize * sizeof(double));
-        const double** argAs =
-            (const double**)alloca(batchSize * sizeof(const double*));
-        double** argCs = (double**)alloca(batchSize * sizeof(double*));
-        BLAS_INT* argGroupSize =
-            (BLAS_INT*)alloca(batchSize * sizeof(BLAS_INT));
-
-        tempBufPtrs.clear();
-        double* ptr = tempBuffer.data();
-        for (int i = 0; i < batchSize; i++) {
-            argTransAs[i] = CblasConjTrans;
-            argTransBs[i] = CblasNoTrans;
-            argMs[i] = ms[i];
-            argNs[i] = ns[i];
-            argKs[i] = ks[i];
-            argAlphas[i] = 1.0;
-            argBetas[i] = 0.0;
-            argAs[i] = data + offsets[i];
-            argCs[i] = ptr;
-            argGroupSize[i] = 1;
-
-            BASPACHO_CHECK_LE(ms[i] * ns[i], tempCtxSize);
-            tempBufPtrs.push_back(ptr);
-            ptr += ms[i] * ns[i];
-        }
-        const double** argBs = argAs;
-        BLAS_INT* argLdAs = argKs;
-        BLAS_INT* argLdBs = argKs;
-        BLAS_INT* argLdCs = argMs;
-        BLAS_INT argNumGroups = batchSize;
-        cblas_dgemm_batch(CblasColMajor, argTransAs, argTransBs, argMs, argNs,
-                          argKs, argAlphas, argAs, argLdAs, argAs, argLdBs,
-                          argBetas, argCs, argLdCs, argNumGroups, argGroupSize);
-        sym.gemmCalls++;
-#endif
-    }
-
     virtual void prepareAssemble(int64_t targetLump) override {
         const CoalescedBlockMatrixSkel& skel = sym.skel;
 
@@ -284,8 +206,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
     virtual void assemble(T* data, int64_t rectRowBegin,
                           int64_t dstStride,  //
                           int64_t srcColDataOffset, int64_t srcRectWidth,
-                          int64_t numBlockRows, int64_t numBlockCols,
-                          int numBatch = -1) override {
+                          int64_t numBlockRows, int64_t numBlockCols) override {
         OpInstance timer(sym.asmblStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
@@ -293,15 +214,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         const int64_t* pToSpan = skel.chainRowSpan.data() + srcColDataOffset;
         const int64_t* pSpanToChainOffset = spanToChainOffset.data();
         const int64_t* pSpanOffsetInLump = skel.spanOffsetInLump.data();
-
-#ifdef BASPACHO_HAVE_GEMM_BATCH
-        BASPACHO_CHECK_LT(numBatch, (int64_t)tempBuffer.size());
-        const double* matRectPtr =
-            numBatch == -1 ? tempBuffer.data() : tempBufPtrs[numBatch];
-#else
-        BASPACHO_CHECK_EQ(numBatch, -1);  // Batching not supported
-        const double* matRectPtr = tempBuffer.data();
-#endif
+        const T* matRectPtr = tempBuffer.data();
 
         if (!sym.useThreads) {
             // non-threaded reference implementation:
@@ -310,7 +223,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                 int64_t rSize = chainRowsTillEnd[r] - rBegin - rectRowBegin;
                 int64_t rParam = pToSpan[r];
                 int64_t rOffset = pSpanToChainOffset[rParam];
-                const double* matRowPtr = matRectPtr + rBegin * srcRectWidth;
+                const T* matRowPtr = matRectPtr + rBegin * srcRectWidth;
 
                 int64_t cEnd = std::min(numBlockCols, r + 1);
                 for (int64_t c = 0; c < cEnd; c++) {
@@ -318,8 +231,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                     int64_t cSize = chainRowsTillEnd[c] - cStart - rectRowBegin;
                     int64_t offset = rOffset + pSpanOffsetInLump[pToSpan[c]];
 
-                    double* dst = data + offset;
-                    const double* src = matRowPtr + cStart;
+                    T* dst = data + offset;
+                    const T* src = matRowPtr + cStart;
                     stridedMatSub(dst, dstStride, src, srcRectWidth, rSize,
                                   cSize);
                 }
@@ -335,8 +248,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                             chainRowsTillEnd[r] - rBegin - rectRowBegin;
                         int64_t rParam = pToSpan[r];
                         int64_t rOffset = pSpanToChainOffset[rParam];
-                        const double* matRowPtr =
-                            matRectPtr + rBegin * srcRectWidth;
+                        const T* matRowPtr = matRectPtr + rBegin * srcRectWidth;
 
                         int64_t cEnd = std::min(numBlockCols, r + 1);
                         int64_t nextCStart =
@@ -348,8 +260,8 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                             int64_t offset =
                                 rOffset + pSpanOffsetInLump[pToSpan[c]];
 
-                            double* dst = data + offset;
-                            const double* src = matRowPtr + cStart;
+                            T* dst = data + offset;
+                            const T* src = matRowPtr + cStart;
                             stridedMatSub(dst, dstStride, src, srcRectWidth,
                                           rSize, cSize);
                         }
@@ -367,11 +279,6 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
     using CpuBaseNumericCtx<T>::spanToChainOffset;
 
     const BlasSymbolicCtx& sym;
-#ifdef BASPACHO_HAVE_GEMM_BATCH
-    std::vector<double*> tempBufPtrs;
-    int64_t tempCtxSize;
-    int maxBatchSize;
-#endif
 };
 
 template <typename T>
@@ -393,11 +300,11 @@ struct BlasSolveCtx : SolveCtx<T> {
                     tmpBuf.data(), nRHS);
     }
 
-    static inline void stridedTransSub(double* dst, int64_t dstStride,
-                                       const double* src, int64_t srcStride,
-                                       int64_t rSize, int64_t cSize) {
+    static inline void stridedTransSub(T* dst, int64_t dstStride, const T* src,
+                                       int64_t srcStride, int64_t rSize,
+                                       int64_t cSize) {
         for (uint j = 0; j < rSize; j++) {
-            double* pDst = dst + j;
+            T* pDst = dst + j;
             for (uint i = 0; i < cSize; i++) {
                 *pDst -= src[i];
                 pDst += dstStride;
@@ -439,11 +346,11 @@ struct BlasSolveCtx : SolveCtx<T> {
                     A + offA, lda);
     }
 
-    static inline void stridedTransSet(double* dst, int64_t dstStride,
-                                       const double* src, int64_t srcStride,
-                                       int64_t rSize, int64_t cSize) {
+    static inline void stridedTransSet(T* dst, int64_t dstStride, const T* src,
+                                       int64_t srcStride, int64_t rSize,
+                                       int64_t cSize) {
         for (uint j = 0; j < rSize; j++) {
-            double* pDst = dst + j;
+            T* pDst = dst + j;
             for (uint i = 0; i < cSize; i++) {
                 *pDst = src[i];
                 pDst += dstStride;
@@ -478,13 +385,12 @@ struct BlasSolveCtx : SolveCtx<T> {
 };
 
 NumericCtxBase* BlasSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
-                                                         int64_t tempBufSize,
-                                                         int maxBatchSize) {
+                                                         int64_t tempBufSize) {
     if (tIdx == std::type_index(typeid(double))) {
-        return new BlasNumericCtx<double>(
-            *this, tempBufSize, skel.spanStart.size() - 1, maxBatchSize);
+        return new BlasNumericCtx<double>(*this, tempBufSize,
+                                          skel.spanStart.size() - 1);
         /*} else if (tIdx == std::type_index(typeid(float))) {
-            return new SimpleNumericCtx<float>(*this, tempBufSize,
+            return new BlasNumericCtx<float>(*this, tempBufSize,
                                                skel.spanStart.size() - 1);*/
     } else {
         return nullptr;
@@ -496,7 +402,7 @@ SolveCtxBase* BlasSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
     if (tIdx == std::type_index(typeid(double))) {
         return new BlasSolveCtx<double>(*this, nRHS);
         /*} else if (tIdx == std::type_index(typeid(float))) {
-            return new SimpleSolveCtx<float>(*this, nRHS);*/
+            return new BlasSolveCtx<float>(*this, nRHS);*/
     } else {
         return nullptr;
     }

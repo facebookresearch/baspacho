@@ -60,7 +60,7 @@ void testSolvers(Data& data) {
     // cout << "Building ss..." << endl;
     SparseStructure origSs = columnsToCscStruct(colBlocks).transpose();
 
-    if (0) {
+    if (1) {
         cout << "===========================================" << endl;
         cout << "Testing Baspacho/BLAS (on full Points+Cameras system)" << endl;
         auto startAnalysis = hrc::now();
@@ -71,6 +71,11 @@ void testSolvers(Data& data) {
         vector<double> matData =
             randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
         solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
+
+        cout << "heating up factor..." << endl;
+        solver->factor(matData.data());  // heat up
+        solver->resetStats();
+        cout << "running real benchmark..." << endl;
 
         auto startFactor = hrc::now();
         solver->factor(matData.data());
@@ -121,6 +126,7 @@ void testSolvers(Data& data) {
             DevMirror<double> matDataGpu(matData);
             solver->factor(matDataGpu.ptr);
             solver->resetStats();
+            cout << "running real benchmark..." << endl;
         }
 
         double factorTime;
@@ -158,6 +164,14 @@ void testSolvers(Data& data) {
             randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
         solver->factorSkel.damp(matData, 0, solver->factorSkel.order() * 1.2);
 
+        {
+            cout << "heating up factor..." << endl;
+            DevMirror<double> matDataGpu(matData);
+            solver->factor(matDataGpu.ptr);
+            solver->resetStats();
+            cout << "running real benchmark..." << endl;
+        }
+
         double factorTime;
         {
             DevMirror<double> matDataGpu(matData);
@@ -177,6 +191,11 @@ void testSolvers(Data& data) {
     {
         cout << "===========================================" << endl;
         cout << "Testing CHOLMOD (on reduced Camera-Camera matrix)" << endl;
+        {
+            cout << "heating up factor..." << endl;
+            benchmarkCholmodSolve(camSz, camCamSs, false);
+            cout << "running real benchmark..." << endl;
+        }
         auto [aTime, fTime] = benchmarkCholmodSolve(camSz, camCamSs, true);
         cout << "Cam-Cam Analysis Time: " << aTime << "s" << endl;
         cout << "Cam-Cam Factor Time..: " << fTime << "s" << endl;

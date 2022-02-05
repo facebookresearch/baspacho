@@ -46,15 +46,13 @@ struct SymbolicCtx {
                                              int64_t lumpsEnd) = 0;
 
     virtual NumericCtxBase* createNumericCtxForType(std::type_index tIdx,
-                                                    int64_t tempBufSize,
-                                                    int maxBatchSize = 1) = 0;
+                                                    int64_t tempBufSize) = 0;
 
     virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
                                                 int nRHS) = 0;
 
     template <typename T>
-    NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize,
-                                      int maxBatchSize = 1);
+    NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize);
 
     template <typename T>
     SolveCtxPtr<T> createSolveCtx(int nRHS);
@@ -90,20 +88,15 @@ struct NumericCtx : NumericCtxBase {
     // solve: X * A.lowerHalf().transpose() = B (in place, B becomes X)
     virtual void trsm(int64_t n, int64_t k, const T* A, T* B) = 0;
 
+    // computes (A|B) * A', upper diag part of A*A' doesn't matter
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) = 0;
-
-    // computes (A|B) * A', upper diag part doesn't matter
-    virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
-                                     const T* data, int64_t* offsets,
-                                     int batchSize) = 0;
 
     virtual void prepareAssemble(int64_t targetLump) = 0;
 
     virtual void assemble(T* data, int64_t rectRowBegin, int64_t dstStride,
                           int64_t srcColDataOffset, int64_t srcRectWidth,
-                          int64_t numBlockRows, int64_t numBlockCols,
-                          int numBatch = -1) = 0;
+                          int64_t numBlockRows, int64_t numBlockCols) = 0;
 };
 
 // methods (and possibly context) for solve operations
@@ -130,11 +123,9 @@ struct SolveCtx : SolveCtxBase {
 };
 
 template <typename T>
-NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize,
-                                               int maxBatchSize) {
+NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize) {
     static const std::type_index T_tIdx(typeid(T));
-    NumericCtxBase* ctx =
-        createNumericCtxForType(T_tIdx, tempBufSize, maxBatchSize);
+    NumericCtxBase* ctx = createNumericCtxForType(T_tIdx, tempBufSize);
     NumericCtx<T>* typedCtx = dynamic_cast<NumericCtx<T>*>(ctx);
     BASPACHO_CHECK_NOTNULL(typedCtx);
     return NumericCtxPtr<T>(typedCtx);

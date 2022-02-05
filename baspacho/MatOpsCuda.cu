@@ -93,8 +93,7 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     }
 
     virtual NumericCtxBase* createNumericCtxForType(
-        std::type_index tIdx, int64_t tempBufSize,
-        int maxBatchSize = 1) override;
+        std::type_index tIdx, int64_t tempBufSize) override;
 
     virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
                                                 int nRHS) override;
@@ -399,13 +398,6 @@ struct CudaNumericCtx : NumericCtx<T> {
         sym.gemmCalls++;
     }
 
-    virtual void saveSyrkGemmBatched(int64_t* ms, int64_t* ns, int64_t* ks,
-                                     const T* data, int64_t* offsets,
-                                     int batchSize) {
-        UNUSED(ms, ns, ks, data, offsets, batchSize);
-        BASPACHO_CHECK(!"Batching not supported");
-    }
-
     virtual void prepareAssemble(int64_t targetLump) override {
         const CoalescedBlockMatrixSkel& skel = sym.skel;
 
@@ -423,9 +415,7 @@ struct CudaNumericCtx : NumericCtx<T> {
     virtual void assemble(T* data, int64_t rectRowBegin,
                           int64_t dstStride,  //
                           int64_t srcColDataOffset, int64_t srcRectWidth,
-                          int64_t numBlockRows, int64_t numBlockCols,
-                          int numBatch = -1) override {
-        BASPACHO_CHECK_EQ(numBatch, -1);  // batching not supported
+                          int64_t numBlockRows, int64_t numBlockCols) override {
         OpInstance timer(sym.asmblStat);
         const int64_t* pChainRowsTillEnd =
             sym.devChainRowsTillEnd.ptr + srcColDataOffset;
@@ -590,9 +580,7 @@ struct CudaSolveCtx : SolveCtx<T> {
 };
 
 NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
-                                                         int64_t tempBufSize,
-                                                         int maxBatchSize) {
-    UNUSED(maxBatchSize);
+                                                         int64_t tempBufSize) {
     if (tIdx == std::type_index(typeid(double))) {
         return new CudaNumericCtx<double>(*this, tempBufSize,
                                           skel.spanStart.size() - 1);

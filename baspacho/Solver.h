@@ -29,10 +29,6 @@ struct Solver {
 
     void factor(double* data, bool verbose = false) const;
 
-    void factorXp(double* data, bool verbose = false) const;
-
-    void factorXp2(double* data, bool verbose = false) const;
-
     void initElimination();
 
     int64_t boardElimTempSize(int64_t lump, int64_t boardIndexInSN) const;
