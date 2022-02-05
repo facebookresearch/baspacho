@@ -328,8 +328,8 @@ struct CudaNumericCtx : NumericCtx<T> {
             sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
             sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
 
-        /*cuCHECK(cudaDeviceSynchronize());
-        cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
+        cuCHECK(cudaDeviceSynchronize());
+        /*cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
              << "s" << endl;*/
 
 #if 0

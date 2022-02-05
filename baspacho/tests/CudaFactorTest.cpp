@@ -186,7 +186,7 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
         SparseStructure sortedSs = ss;
 
         vector<int64_t> paramSize =
-            randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
+            randomVec(sortedSs.ptrs.size() - 1, 3, 3, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
         et.computeMerges(/* compute sparse elim ranges = */ true);
@@ -219,6 +219,11 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
 
         Eigen::MatrixXd computedMat = solver.factorSkel.densify(data);
 
+        cout << "Error: "
+             << Eigen::MatrixXd(
+                    (verifyMat - computedMat).triangularView<Eigen::Lower>())
+                    .norm()
+             << endl;
         ASSERT_NEAR(
             Eigen::MatrixXd(
                 (verifyMat - computedMat).triangularView<Eigen::Lower>())
