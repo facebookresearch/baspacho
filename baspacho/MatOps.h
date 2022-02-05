@@ -83,10 +83,11 @@ struct NumericCtx : NumericCtxBase {
                                int64_t lumpsBegin, int64_t lumpsEnd) = 0;
 
     // dense Cholesky on dense row-major matrix A (in place)
-    virtual void potrf(int64_t n, T* A) = 0;
+    virtual void potrf(int64_t n, T* data, int64_t offA) = 0;
 
     // solve: X * A.lowerHalf().transpose() = B (in place, B becomes X)
-    virtual void trsm(int64_t n, int64_t k, const T* A, T* B) = 0;
+    virtual void trsm(int64_t n, int64_t k, T* data, int64_t offA,
+                      int64_t offB) = 0;
 
     // computes (A|B) * A', upper diag part of A*A' doesn't matter
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,

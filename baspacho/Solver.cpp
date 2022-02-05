@@ -41,7 +41,7 @@ void Solver::factorLump(NumericCtx<T>& numCtx, T* data, int64_t lump) const {
     int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
 
     // compute lower diag cholesky dec on diagonal block
-    numCtx.potrf(lumpSize, data + diagBlockOffset);
+    numCtx.potrf(lumpSize, data, diagBlockOffset);
 
     int64_t boardColBegin = factorSkel.boardColPtr[lump];
     int64_t boardColEnd = factorSkel.boardColPtr[lump + 1];
@@ -57,8 +57,8 @@ void Solver::factorLump(NumericCtx<T>& numCtx, T* data, int64_t lump) const {
         return;
     }
 
-    numCtx.trsm(lumpSize, numRowsBelowDiag, data + diagBlockOffset,
-                data + belowDiagOffset);
+    numCtx.trsm(lumpSize, numRowsBelowDiag, data, diagBlockOffset,
+                belowDiagOffset);
 }
 
 template <typename T>

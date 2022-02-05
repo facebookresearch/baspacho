@@ -353,9 +353,10 @@ struct CudaNumericCtx : NumericCtx<T> {
         cuCHECK(cudaDeviceSynchronize());
     }
 
-    virtual void potrf(int64_t n, T* A) override;
+    virtual void potrf(int64_t n, T* data, int64_t offA) override;
 
-    virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override;
+    virtual void trsm(int64_t n, int64_t k, T* data, int64_t offA,
+                      int64_t offB) override;
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override;
@@ -403,13 +404,14 @@ struct CudaNumericCtx : NumericCtx<T> {
 };
 
 template <>
-void CudaNumericCtx<double>::potrf(int64_t n, double* A) {
+void CudaNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
     OpInstance timer(sym.potrfStat);
     sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
     int workspaceSize;
-    cusolverCHECK(cusolverDnDpotrf_bufferSize(
-        sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, A, n, &workspaceSize));
+    cusolverCHECK(cusolverDnDpotrf_bufferSize(sym.cusolverDnH,
+                                              CUBLAS_FILL_MODE_UPPER, n,
+                                              data + offA, n, &workspaceSize));
 
     double* workspace;
     int* devInfo;
@@ -417,7 +419,8 @@ void CudaNumericCtx<double>::potrf(int64_t n, double* A) {
     cuCHECK(cudaMalloc((void**)&devInfo, 1 * sizeof(int)));
 
     cusolverCHECK(cusolverDnDpotrf(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n,
-                                   A, n, workspace, workspaceSize, devInfo));
+                                   data + offA, n, workspace, workspaceSize,
+                                   devInfo));
 
     int info;
     cuCHECK(
@@ -427,13 +430,14 @@ void CudaNumericCtx<double>::potrf(int64_t n, double* A) {
 }
 
 template <>
-void CudaNumericCtx<float>::potrf(int64_t n, float* A) {
+void CudaNumericCtx<float>::potrf(int64_t n, float* data, int64_t offA) {
     OpInstance timer(sym.potrfStat);
     sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
     int workspaceSize;
-    cusolverCHECK(cusolverDnSpotrf_bufferSize(
-        sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, A, n, &workspaceSize));
+    cusolverCHECK(cusolverDnSpotrf_bufferSize(sym.cusolverDnH,
+                                              CUBLAS_FILL_MODE_UPPER, n,
+                                              data + offA, n, &workspaceSize));
 
     float* workspace;
     int* devInfo;
@@ -441,7 +445,8 @@ void CudaNumericCtx<float>::potrf(int64_t n, float* A) {
     cuCHECK(cudaMalloc((void**)&devInfo, 1 * sizeof(int)));
 
     cusolverCHECK(cusolverDnSpotrf(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n,
-                                   A, n, workspace, workspaceSize, devInfo));
+                                   data + offA, n, workspace, workspaceSize,
+                                   devInfo));
 
     int info;
     cuCHECK(
@@ -451,25 +456,25 @@ void CudaNumericCtx<float>::potrf(int64_t n, float* A) {
 }
 
 template <>
-void CudaNumericCtx<double>::trsm(int64_t n, int64_t k, const double* A,
-                                  double* B) {
+void CudaNumericCtx<double>::trsm(int64_t n, int64_t k, double* data,
+                                  int64_t offA, int64_t offB) {
     OpInstance timer(sym.trsmStat);
 
     double alpha(1.0);
-    cublasCHECK(cublasDtrsm(sym.cublasH, CUBLAS_SIDE_LEFT,
-                            CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
-                            CUBLAS_DIAG_NON_UNIT, n, k, &alpha, A, n, B, n));
+    cublasCHECK(cublasDtrsm(
+        sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
+        CUBLAS_DIAG_NON_UNIT, n, k, &alpha, data + offA, n, data + offB, n));
 }
 
 template <>
-void CudaNumericCtx<float>::trsm(int64_t n, int64_t k, const float* A,
-                                 float* B) {
+void CudaNumericCtx<float>::trsm(int64_t n, int64_t k, float* data,
+                                 int64_t offA, int64_t offB) {
     OpInstance timer(sym.trsmStat);
 
     float alpha(1.0);
-    cublasCHECK(cublasStrsm(sym.cublasH, CUBLAS_SIDE_LEFT,
-                            CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
-                            CUBLAS_DIAG_NON_UNIT, n, k, &alpha, A, n, B, n));
+    cublasCHECK(cublasStrsm(
+        sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
+        CUBLAS_DIAG_NON_UNIT, n, k, &alpha, data + offA, n, data + offB, n));
 }
 
 template <>

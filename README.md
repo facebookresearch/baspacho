@@ -81,7 +81,7 @@ a few possibilities are:
 For the full list check CMake docs at:
 https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors
 
-### Reordering algorithms Approximate Minimum Degree (AMD)
+### Reordering algorithm Approximate Minimum Degree (AMD)
 
 BaSpaCho can use either the implementation in Eigen of AMD (by default), or the version in library
 AMD as part of SuiteSparse. Add `-DBASPACHO_USE_SUITESPARSE_AMD=1` to the build step to use the
@@ -104,11 +104,11 @@ implementation in SuiteSparse instead of Eigen.
 - [ ] implement specialized solve for the case of "sparse elimination ranges" where the current
       per-supernode solve would be quite slow
 - [ ] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
-    possibly with mixed-precision preconditioner (fast "rough" factor as float, iterate
-    on a double vector for improved precision)
+      possibly with mixed-precision preconditioner (fast "rough" factor as float, iterate
+      on a double vector for improved precision)
 - [ ] investigate possible support of update/downdate ops (note that such support in CHOLMOD
-    is only for simplicial decomposition, or decompositions are automatically converted to
-    simplicial)
+      is only for simplicial decomposition, or decompositions are automatically converted to
+      simplicial)
 
 ## Caveats
 

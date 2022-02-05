@@ -132,9 +132,10 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         }
     }
 
-    virtual void potrf(int64_t n, T* A) override;
+    virtual void potrf(int64_t n, T* data, int64_t offA) override;
 
-    virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override;
+    virtual void trsm(int64_t n, int64_t k, T* data, int64_t offA,
+                      int64_t offB) override;
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                               int64_t offset) override;
@@ -228,24 +229,24 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 };
 
 template <>
-void BlasNumericCtx<double>::potrf(int64_t n, double* A) {
+void BlasNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
     OpInstance timer(sym.potrfStat);
     sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
-    LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', n, A, n);
+    LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', n, data + offA, n);
 }
 
 template <>
-void BlasNumericCtx<float>::potrf(int64_t n, float* A) {
+void BlasNumericCtx<float>::potrf(int64_t n, float* data, int64_t offA) {
     OpInstance timer(sym.potrfStat);
     sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
-    LAPACKE_spotrf(LAPACK_COL_MAJOR, 'U', n, A, n);
+    LAPACKE_spotrf(LAPACK_COL_MAJOR, 'U', n, data + offA, n);
 }
 
 template <>
-void BlasNumericCtx<double>::trsm(int64_t n, int64_t k, const double* A,
-                                  double* B) {
+void BlasNumericCtx<double>::trsm(int64_t n, int64_t k, double* data,
+                                  int64_t offA, int64_t offB) {
     OpInstance timer(sym.trsmStat);
 
     // TSRM should be fast but appears very slow in OpenBLAS
@@ -255,12 +256,13 @@ void BlasNumericCtx<double>::trsm(int64_t n, int64_t k, const double* A,
                                        Eigen::ColMajor>;
 
         // col-major's upper = (row-major's lower).transpose()
-        Eigen::Map<const MatCMajD> matA(A, n, n);
+        Eigen::Map<const MatCMajD> matA(data + offA, n, n);
         dispenso::TaskSet taskSet(sym.threadPool);
         dispenso::parallel_for(
             taskSet, dispenso::makeChunkedRange(0, k, 16UL),
             [&](int64_t k1, int64_t k2) {
-                Eigen::Map<MatRMaj<double>> matB(B + n * k1, k2 - k1, n);
+                Eigen::Map<MatRMaj<double>> matB(data + offB + n * k1, k2 - k1,
+                                                 n);
                 matA.template triangularView<Eigen::Upper>()
                     .template solveInPlace<Eigen::OnTheRight>(matB);
             });
@@ -268,12 +270,12 @@ void BlasNumericCtx<double>::trsm(int64_t n, int64_t k, const double* A,
     }
 
     cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
-                CblasNonUnit, n, k, 1.0, A, n, B, n);
+                CblasNonUnit, n, k, 1.0, data + offA, n, data + offB, n);
 }
 
 template <>
-void BlasNumericCtx<float>::trsm(int64_t n, int64_t k, const float* A,
-                                 float* B) {
+void BlasNumericCtx<float>::trsm(int64_t n, int64_t k, float* data,
+                                 int64_t offA, int64_t offB) {
     OpInstance timer(sym.trsmStat);
 
     // TSRM should be fast but appears very slow in OpenBLAS
@@ -283,12 +285,13 @@ void BlasNumericCtx<float>::trsm(int64_t n, int64_t k, const float* A,
                                        Eigen::ColMajor>;
 
         // col-major's upper = (row-major's lower).transpose()
-        Eigen::Map<const MatCMajD> matA(A, n, n);
+        Eigen::Map<const MatCMajD> matA(data + offA, n, n);
         dispenso::TaskSet taskSet(sym.threadPool);
         dispenso::parallel_for(
             taskSet, dispenso::makeChunkedRange(0, k, 16UL),
             [&](int64_t k1, int64_t k2) {
-                Eigen::Map<MatRMaj<float>> matB(B + n * k1, k2 - k1, n);
+                Eigen::Map<MatRMaj<float>> matB(data + offB + n * k1, k2 - k1,
+                                                n);
                 matA.template triangularView<Eigen::Upper>()
                     .template solveInPlace<Eigen::OnTheRight>(matB);
             });
@@ -296,7 +299,7 @@ void BlasNumericCtx<float>::trsm(int64_t n, int64_t k, const float* A,
     }
 
     cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
-                CblasNonUnit, n, k, 1.0, A, n, B, n);
+                CblasNonUnit, n, k, 1.0, data + offA, n, data + offB, n);
 }
 
 template <>

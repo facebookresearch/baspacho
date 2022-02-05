@@ -134,23 +134,24 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
         }
     }
 
-    virtual void potrf(int64_t n, T* A) override {
+    virtual void potrf(int64_t n, T* data, int64_t offA) override {
         OpInstance timer(sym.potrfStat);
         sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
-        Eigen::Map<MatRMaj<T>> matA(A, n, n);
+        Eigen::Map<MatRMaj<T>> matA(data + offA, n, n);
         Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(matA);
     }
 
-    virtual void trsm(int64_t n, int64_t k, const T* A, T* B) override {
+    virtual void trsm(int64_t n, int64_t k, T* data, int64_t offA,
+                      int64_t offB) override {
         OpInstance timer(sym.trsmStat);
 
         using MatCMajD =
             Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 
         // col-major's upper = (row-major's lower).transpose()
-        Eigen::Map<const MatCMajD> matA(A, n, n);
-        Eigen::Map<MatRMaj<T>> matB(B, k, n);
+        Eigen::Map<const MatCMajD> matA(data + offA, n, n);
+        Eigen::Map<MatRMaj<T>> matB(data + offB, k, n);
         matA.template triangularView<Eigen::Upper>()
             .template solveInPlace<Eigen::OnTheRight>(matB);
     }
