@@ -100,6 +100,8 @@ implementation in SuiteSparse instead of Eigen.
 - [ ] small optimizer demo on BAL data
 
 ### Longer term todo:
+- [ ] handle singularity reporting size of non-SPD minor, possibly discard non-definite sparse-elim
+      diagonal blocks 
 - [ ] better heuristics in Node merge, test more configurations
 - [ ] implement specialized solve for the case of "sparse elimination ranges" where the current
       per-supernode solve would be quite slow

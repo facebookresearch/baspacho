@@ -32,8 +32,9 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
           useThreads(numThreads > 1),
           threadPool(useThreads ? numThreads : 0) {}
 
-    virtual NumericCtxBase* createNumericCtxForType(
-        std::type_index tIdx, int64_t tempBufSize) override;
+    virtual NumericCtxBase* createNumericCtxForType(std::type_index tIdx,
+                                                    int64_t tempBufSize,
+                                                    int batchSize) override;
 
     virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
                                                 int nRHS) override;
@@ -513,7 +514,9 @@ void BlasSolveCtx<float>::gemvT(const float* data, int64_t offM, int64_t nRows,
 }
 
 NumericCtxBase* BlasSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
-                                                         int64_t tempBufSize) {
+                                                         int64_t tempBufSize,
+                                                         int batchSize) {
+    BASPACHO_CHECK_EQ(batchSize, 1);
     if (tIdx == std::type_index(typeid(double))) {
         return new BlasNumericCtx<double>(*this, tempBufSize,
                                           skel.spanStart.size() - 1);

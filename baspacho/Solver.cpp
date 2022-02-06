@@ -169,7 +169,8 @@ void Solver::initElimination() {
 
 template <typename T>
 void Solver::factor(T* data, bool verbose) const {
-    NumericCtxPtr<T> numCtx = symCtx->createNumericCtx<T>(maxElimTempSize);
+    NumericCtxPtr<T> numCtx =
+        symCtx->createNumericCtx<T>(maxElimTempSize, data);
 
     for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
         if (verbose) {
@@ -277,14 +278,30 @@ void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
 
 template void Solver::factor<double>(double* data, bool verbose) const;
 template void Solver::factor<float>(float* data, bool verbose) const;
+template void Solver::factor<vector<double*>>(vector<double*>* data,
+                                              bool verbose) const;
+template void Solver::factor<vector<float*>>(vector<float*>* data,
+                                             bool verbose) const;
 template void Solver::solveL<double>(const double* matData, double* vecData,
                                      int64_t stride, int nRHS) const;
 template void Solver::solveL<float>(const float* matData, float* vecData,
                                     int64_t stride, int nRHS) const;
+template void Solver::solveL<vector<double*>>(const vector<double*>* matData,
+                                              vector<double*>* vecData,
+                                              int64_t stride, int nRHS) const;
+template void Solver::solveL<vector<float*>>(const vector<float*>* matData,
+                                             vector<float*>* vecData,
+                                             int64_t stride, int nRHS) const;
 template void Solver::solveLt<double>(const double* matData, double* vecData,
                                       int64_t stride, int nRHS) const;
 template void Solver::solveLt<float>(const float* matData, float* vecData,
                                      int64_t stride, int nRHS) const;
+template void Solver::solveLt<vector<double*>>(const vector<double*>* matData,
+                                               vector<double*>* vecData,
+                                               int64_t stride, int nRHS) const;
+template void Solver::solveLt<vector<float*>>(const vector<float*>* matData,
+                                              vector<float*>* vecData,
+                                              int64_t stride, int nRHS) const;
 
 void Solver::printStats() const {
     cout << "Matrix stats:" << endl;

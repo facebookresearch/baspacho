@@ -84,3 +84,23 @@ struct DevMirror {
     }
     T* ptr = nullptr;
 };
+
+// utility class to mirror an std::vector of pointers, applying an offset
+template <typename T>
+struct DevPtrMirror {
+    DevPtrMirror(const std::vector<T*>& vec, int64_t offset = 0) {
+        T** vecCopy = (T**)alloca(vec.size() * sizeof(T*));
+        for (size_t i = 0; i < vec.size(); i++) {
+            vecCopy[i] = vec[i] + offset;
+        }
+        cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T*)));
+        cuCHECK(cudaMemcpy(ptr, vecCopy, vec.size() * sizeof(T*),
+                           cudaMemcpyHostToDevice));
+    }
+    ~DevPtrMirror() {
+        if (ptr) {
+            cuCHECK(cudaFree(ptr));
+        }
+    }
+    T** ptr = nullptr;
+};

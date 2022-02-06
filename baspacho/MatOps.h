@@ -1,3 +1,5 @@
+#include <cxxabi.h>
+
 #include <memory>
 #include <typeindex>
 
@@ -46,13 +48,14 @@ struct SymbolicCtx {
                                              int64_t lumpsEnd) = 0;
 
     virtual NumericCtxBase* createNumericCtxForType(std::type_index tIdx,
-                                                    int64_t tempBufSize) = 0;
+                                                    int64_t tempBufSize,
+                                                    int batchSize) = 0;
 
     virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
                                                 int nRHS) = 0;
 
     template <typename T>
-    NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize);
+    NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize, T* data = nullptr);
 
     template <typename T>
     SolveCtxPtr<T> createSolveCtx(int nRHS);
@@ -123,10 +126,32 @@ struct SolveCtx : SolveCtxBase {
                               int64_t numColItems) = 0;
 };
 
+// introspection shortcuts
 template <typename T>
-NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize) {
+std::string prettyTypeName(const T& t) {
+    char* c_str =
+        abi::__cxa_demangle(typeid(t).name(), nullptr, nullptr, nullptr);
+    std::string retv(c_str);
+    free(c_str);
+    return retv;
+}
+
+template <typename T>
+struct BatchSizeHelper {
+    static int get(T*) { return 1; }
+};
+
+template <typename T>
+struct BatchSizeHelper<std::vector<T>> {
+    static int get(std::vector<T>* data) { return data->size(); }
+};
+
+template <typename T>
+NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize, T* data) {
     static const std::type_index T_tIdx(typeid(T));
-    NumericCtxBase* ctx = createNumericCtxForType(T_tIdx, tempBufSize);
+    int batchSize = BatchSizeHelper<T>::get(data);
+    NumericCtxBase* ctx =
+        createNumericCtxForType(T_tIdx, tempBufSize, batchSize);
     NumericCtx<T>* typedCtx = dynamic_cast<NumericCtx<T>*>(ctx);
     BASPACHO_CHECK_NOTNULL(typedCtx);
     return NumericCtxPtr<T>(typedCtx);

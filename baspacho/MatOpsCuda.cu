@@ -92,8 +92,9 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         return SymElimCtxPtr(elim);
     }
 
-    virtual NumericCtxBase* createNumericCtxForType(
-        std::type_index tIdx, int64_t tempBufSize) override;
+    virtual NumericCtxBase* createNumericCtxForType(std::type_index tIdx,
+                                                    int64_t tempBufSize,
+                                                    int batchSize) override;
 
     virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
                                                 int nRHS) override;
@@ -262,12 +263,48 @@ __device__ static inline void stridedMatSubDev(T* dst, int64_t dstStride,
     }
 }
 
-template <typename T>
-__global__ void assemble_kernel(
-    int64_t numBlockRows, int64_t numBlockCols, int64_t rectRowBegin,
-    int64_t srcRectWidth, int64_t dstStride, const int64_t* pChainRowsTillEnd,
-    const int64_t* pToSpan, const int64_t* pSpanToChainOffset,
-    const int64_t* pSpanOffsetInLump, const T* matRectPtr, T* data) {
+struct Plain {
+    __device__ bool verify() { return true; }
+    template <typename T>
+    __device__ T* get(T* ptr) {
+        return ptr;
+    }
+};
+
+struct Batched {
+    int batchSize;
+    int batchIndex;
+    __device__ bool verify() {
+        batchIndex = blockIdx.y * blockDim.y + threadIdx.y;
+        return batchIndex < batchSize;
+    }
+    template <typename T>
+    __device__ T* get(T* const* ptr) {
+        return ptr[batchIndex];
+    }
+    template <typename T>
+    __device__ const T* get(const T* const* ptr) {
+        return ptr[batchIndex];
+    }
+};
+
+template <typename TT, typename B>
+__global__ void assemble_kernel(int64_t numBlockRows, int64_t numBlockCols,
+                                int64_t rectRowBegin, int64_t srcRectWidth,
+                                int64_t dstStride,
+                                const int64_t* pChainRowsTillEnd,
+                                const int64_t* pToSpan,
+                                const int64_t* pSpanToChainOffset,
+                                const int64_t* pSpanOffsetInLump,
+                                const TT* matRectPtrB, TT* dataB, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = std::remove_cv_t<
+        std::remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    const T* matRectPtr = batch.get(matRectPtrB);
+    T* data = batch.get(dataB);
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i > numBlockRows * numBlockCols) {
         return;
@@ -386,14 +423,14 @@ struct CudaNumericCtx : NumericCtx<T> {
         const int64_t* pSpanToChainOffset = devSpanToChainOffset;
         const int64_t* pSpanOffsetInLump = sym.devSpanOffsetInLump.ptr;
 
-        const T* matRectPtr = devTempBuffer;
-
         int wgs = 32;
         int numGroups = (numBlockRows * numBlockCols + wgs - 1) / wgs;
         assemble_kernel<T><<<numGroups, wgs>>>(
             numBlockRows, numBlockCols, rectRowBegin, srcRectWidth, dstStride,
             pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
-            matRectPtr, data);
+            devTempBuffer, data, Plain{});
+
+        cuCHECK(cudaDeviceSynchronize());
     }
 
     T* devTempBuffer;
@@ -503,6 +540,190 @@ void CudaNumericCtx<float>::saveSyrkGemm(int64_t m, int64_t n, int64_t k,
     sym.gemmCalls++;
 }
 
+template <typename T>
+std::string printVec(const std::vector<T>& ints) {
+    std::stringstream ss;
+    ss << "[";
+    bool first = true;
+    for (auto c : ints) {
+        ss << (first ? "" : ", ") << c;
+        first = false;
+    }
+    ss << "]";
+    return ss.str();
+}
+
+template <typename T>
+struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
+    CudaNumericCtx(const CudaSymbolicCtx& sym, int64_t bufSize,
+                   int64_t numSpans, int batchSize)
+        : spanToChainOffset(numSpans),
+          devTempBufs(batchSize, nullptr),
+          sym(sym) {
+        for (int i = 0; i < batchSize; i++) {
+            cuCHECK(cudaMalloc((void**)&devTempBufs[i], bufSize * sizeof(T)));
+        }
+        devTempBufsDev.load(devTempBufs);
+        cuCHECK(cudaMalloc((void**)&devSpanToChainOffset,
+                           spanToChainOffset.size() * sizeof(int64_t)));
+    }
+
+    virtual ~CudaNumericCtx() override {
+        for (size_t i = 0; i < devTempBufs.size(); i++) {
+            if (devTempBufs[i]) {
+                cuCHECK(cudaFree(devTempBufs[i]));
+            }
+        }
+        if (devSpanToChainOffset) {
+            cuCHECK(cudaFree(devSpanToChainOffset));
+        }
+    }
+
+    virtual void doElimination(const SymElimCtx& elimData, vector<T*>* data,
+                               int64_t lumpsBegin, int64_t lumpsEnd) override {
+        BASPACHO_CHECK(!"Not implemented!");
+#if 0
+        const CudaSymElimCtx* pElim =
+            dynamic_cast<const CudaSymElimCtx*>(&elimData);
+        BASPACHO_CHECK_NOTNULL(pElim);
+        const CudaSymElimCtx& elim = *pElim;
+
+        OpInstance timer(elim.elimStat);
+
+        int wgs = 32;
+        int numGroups = (lumpsEnd - lumpsBegin + wgs - 1) / wgs;
+        factor_lumps_kernel<T><<<numGroups, wgs>>>(
+            sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+            sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
+            sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
+
+        cuCHECK(cudaDeviceSynchronize());
+        /*cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
+             << "s" << endl;*/
+
+#if 0
+        // double inner loop
+        sparse_elim_2loops_kernel<T><<<numGroups, wgs>>>(
+            sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
+            sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
+            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
+            lumpsBegin, lumpsEnd);
+#else
+        int wgs2 = 32;
+        int numGroups2 = (elim.numBlockPairs + wgs2 - 1) / wgs2;
+        sparse_elim_straight_kernel<T><<<numGroups2, wgs2>>>(
+            sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
+            sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
+            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
+            lumpsBegin, lumpsEnd, elim.makeBlockPairEnumStraight.ptr,
+            elim.numBlockPairs);
+#endif
+
+        cuCHECK(cudaDeviceSynchronize());
+#endif
+    }
+
+    virtual void potrf(int64_t n, vector<T*>* data, int64_t offA) override {
+        OpInstance timer(sym.potrfStat);
+        DevPtrMirror<T> A(*data, offA);
+
+        int* devInfo;
+        cuCHECK(cudaMalloc((void**)&devInfo, data->size() * sizeof(int)));
+
+        cusolverCHECK(cusolverDnDpotrfBatched(sym.cusolverDnH,
+                                              CUBLAS_FILL_MODE_UPPER, n, A.ptr,
+                                              n, devInfo, data->size()));
+
+        vector<int> info(data->size());
+        cuCHECK(cudaMemcpy(info.data(), devInfo, data->size() * sizeof(int),
+                           cudaMemcpyDeviceToHost));
+        cuCHECK(cudaFree(devInfo));
+
+        // TODO: error handling
+        // cout << "info: " << printVec(info) << endl;
+    }
+
+    virtual void trsm(int64_t n, int64_t k, vector<T*>* data, int64_t offA,
+                      int64_t offB) override {
+        OpInstance timer(sym.trsmStat);
+        DevPtrMirror<T> A(*data, offA);
+        DevPtrMirror<T> B(*data, offB);
+
+        double alpha(1.0);
+        cublasCHECK(cublasDtrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT,
+                                       CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
+                                       CUBLAS_DIAG_NON_UNIT, n, k, &alpha,
+                                       A.ptr, n, B.ptr, n, data->size()));
+    }
+
+    virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k,
+                              const vector<T*>* data, int64_t offset) override {
+        BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
+        OpInstance timer(sym.sygeStat);
+        DevPtrMirror<T> A(*data, offset);
+
+        double alpha(1.0), beta(0.0);
+        cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m,
+                                       n, k, &alpha, A.ptr, k, A.ptr, k, &beta,
+                                       devTempBufsDev.ptr, m, data->size()));
+
+        sym.gemmCalls++;
+    }
+
+    virtual void prepareAssemble(int64_t targetLump) override {
+        const CoalescedBlockMatrixSkel& skel = sym.skel;
+
+        // FIXME: compute on CPU and copy, not ideal
+        for (int64_t i = skel.chainColPtr[targetLump],
+                     iEnd = skel.chainColPtr[targetLump + 1];
+             i < iEnd; i++) {
+            spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
+        }
+        cuCHECK(cudaMemcpy(devSpanToChainOffset, spanToChainOffset.data(),
+                           spanToChainOffset.size() * sizeof(int64_t),
+                           cudaMemcpyHostToDevice));
+    }
+
+    virtual void assemble(vector<T*>* data, int64_t rectRowBegin,
+                          int64_t dstStride,  //
+                          int64_t srcColDataOffset, int64_t srcRectWidth,
+                          int64_t numBlockRows, int64_t numBlockCols) override {
+        BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
+        OpInstance timer(sym.asmblStat);
+        DevPtrMirror<T> dataDev(*data, 0);
+        const int64_t* pChainRowsTillEnd =
+            sym.devChainRowsTillEnd.ptr + srcColDataOffset;
+        const int64_t* pToSpan = sym.devChainRowSpan.ptr + srcColDataOffset;
+        const int64_t* pSpanToChainOffset = devSpanToChainOffset;
+        const int64_t* pSpanOffsetInLump = sym.devSpanOffsetInLump.ptr;
+
+        int batchWgs = 32;
+        while (batchWgs / 2 >= data->size()) {
+            batchWgs /= 2;
+        }
+        int batchGroups = (data->size() + batchWgs - 1) / batchWgs;
+        int wgs = 32 / batchWgs;
+        int numGroups = (numBlockRows * numBlockCols + wgs - 1) / wgs;
+        dim3 gridDim(numGroups, batchGroups);
+        dim3 blockDim(wgs, batchWgs);
+        assemble_kernel<T*><<<gridDim, blockDim>>>(
+            numBlockRows, numBlockCols, rectRowBegin, srcRectWidth, dstStride,
+            pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
+            devTempBufsDev.ptr, dataDev.ptr,
+            Batched{.batchSize = (int)data->size()});
+
+        cuCHECK(cudaDeviceSynchronize());
+    }
+
+    std::vector<T*> devTempBufs;
+    DevMirror<T*> devTempBufsDev;
+    int64_t* devSpanToChainOffset;
+    std::vector<int64_t> spanToChainOffset;
+
+    const CudaSymbolicCtx& sym;
+};
+
+// SolveCtx
 template <typename T>
 __device__ static inline void stridedTransSub(T* dst, int64_t dstStride,
                                               const T* src, int64_t srcStride,
@@ -719,13 +940,19 @@ void CudaSolveCtx<float>::gemvT(const float* data, int64_t offM, int64_t nRows,
 }
 
 NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
-                                                         int64_t tempBufSize) {
+                                                         int64_t tempBufSize,
+                                                         int batchSize) {
     if (tIdx == std::type_index(typeid(double))) {
+        BASPACHO_CHECK_EQ(batchSize, 1);
         return new CudaNumericCtx<double>(*this, tempBufSize,
                                           skel.spanStart.size() - 1);
     } else if (tIdx == std::type_index(typeid(float))) {
+        BASPACHO_CHECK_EQ(batchSize, 1);
         return new CudaNumericCtx<float>(*this, tempBufSize,
                                          skel.spanStart.size() - 1);
+    } else if (tIdx == std::type_index(typeid(vector<double*>))) {
+        return new CudaNumericCtx<vector<double*>>(
+            *this, tempBufSize, skel.spanStart.size() - 1, batchSize);
     } else {
         return nullptr;
     }

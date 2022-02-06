@@ -30,8 +30,9 @@ struct SimpleSymbolicCtx : CpuBaseSymbolicCtx {
     SimpleSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
         : CpuBaseSymbolicCtx(skel) {}
 
-    virtual NumericCtxBase* createNumericCtxForType(
-        std::type_index tIdx, int64_t tempBufSize) override;
+    virtual NumericCtxBase* createNumericCtxForType(std::type_index tIdx,
+                                                    int64_t tempBufSize,
+                                                    int batchSize) override;
 
     virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
                                                 int nRHS) override;
@@ -312,8 +313,10 @@ struct SimpleSolveCtx : SolveCtx<T> {
     vector<T> tmpBuf;
 };
 
-NumericCtxBase* SimpleSymbolicCtx::createNumericCtxForType(
-    std::type_index tIdx, int64_t tempBufSize) {
+NumericCtxBase* SimpleSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
+                                                           int64_t tempBufSize,
+                                                           int batchSize) {
+    BASPACHO_CHECK_EQ(batchSize, 1);
     if (tIdx == std::type_index(typeid(double))) {
         return new SimpleNumericCtx<double>(*this, tempBufSize,
                                             skel.spanStart.size() - 1);

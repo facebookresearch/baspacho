@@ -20,7 +20,7 @@ if(BASPACHO_USE_CUBLAS)
   set(BASPACHO_CUDA_ARCHITECTURES "75")
 
   list(APPEND CUDA_NVCC_FLAGS
-       -Xcompiler -Wall,-Wextra,-Werror,-Wno-unknown-pragmas
+       # -Xcompiler -Wall,-Wextra,-Werror,-Wno-unknown-pragmas
        --expt-relaxed-constexpr)
   message("* CUDA Includes : " ${CUDAToolkit_INCLUDE_DIRS})
   message("* CUDA Libraries: " ${CUDAToolkit_LIBRARY_DIR})
@@ -269,5 +269,9 @@ if(BASPACHO_USE_CUBLAS)
   add_baspacho_test(
     CudaSolveTest
     baspacho/tests/CudaSolveTest.cpp
+  )
+  add_baspacho_test(
+    BatchedCudaFactorTest
+    baspacho/tests/BatchedCudaFactorTest.cpp
   )
 endif()
