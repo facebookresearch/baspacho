@@ -274,4 +274,8 @@ if(BASPACHO_USE_CUBLAS)
     BatchedCudaFactorTest
     baspacho/tests/BatchedCudaFactorTest.cpp
   )
+  add_baspacho_test(
+    BatchedCudaSolveTest
+    baspacho/tests/BatchedCudaSolveTest.cpp
+  )
 endif()

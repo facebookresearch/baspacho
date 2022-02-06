@@ -92,11 +92,11 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         return SymElimCtxPtr(elim);
     }
 
-    virtual NumericCtxBase* createNumericCtxForType(std::type_index tIdx,
+    virtual NumericCtxBase* createNumericCtxForType(type_index tIdx,
                                                     int64_t tempBufSize,
                                                     int batchSize) override;
 
-    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
+    virtual SolveCtxBase* createSolveCtxForType(type_index tIdx,
                                                 int nRHS) override;
 
     cublasHandle_t cublasH = nullptr;
@@ -132,8 +132,7 @@ __global__ static inline void factor_lumps_kernel(
     if (!batch.verify()) {
         return;
     }
-    using T = std::remove_cv_t<
-        std::remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
     T* data = batch.get(dataB);
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -216,8 +215,7 @@ __global__ static inline void sparse_elim_2loops_kernel(
     if (!batch.verify()) {
         return;
     }
-    using T = std::remove_cv_t<
-        std::remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
     T* data = batch.get(dataB);
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -254,8 +252,7 @@ __global__ static inline void sparse_elim_straight_kernel(
     if (!batch.verify()) {
         return;
     }
-    using T = std::remove_cv_t<
-        std::remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
     T* data = batch.get(dataB);
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -321,8 +318,7 @@ __global__ void assemble_kernel(int64_t numBlockRows, int64_t numBlockCols,
     if (!batch.verify()) {
         return;
     }
-    using T = std::remove_cv_t<
-        std::remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
     const T* matRectPtr = batch.get(matRectPtrB);
     T* data = batch.get(dataB);
 
@@ -456,7 +452,7 @@ struct CudaNumericCtx : NumericCtx<T> {
 
     T* devTempBuffer;
     int64_t* devSpanToChainOffset;
-    std::vector<int64_t> spanToChainOffset;
+    vector<int64_t> spanToChainOffset;
 
     const CudaSymbolicCtx& sym;
 };
@@ -464,7 +460,7 @@ struct CudaNumericCtx : NumericCtx<T> {
 template <>
 void CudaNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
     OpInstance timer(sym.potrfStat);
-    sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
+    sym.potrfBiggestN = max(sym.potrfBiggestN, n);
 
     int workspaceSize;
     cusolverCHECK(cusolverDnDpotrf_bufferSize(sym.cusolverDnH,
@@ -490,7 +486,7 @@ void CudaNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
 template <>
 void CudaNumericCtx<float>::potrf(int64_t n, float* data, int64_t offA) {
     OpInstance timer(sym.potrfStat);
-    sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
+    sym.potrfBiggestN = max(sym.potrfBiggestN, n);
 
     int workspaceSize;
     cusolverCHECK(cusolverDnSpotrf_bufferSize(sym.cusolverDnH,
@@ -562,8 +558,8 @@ void CudaNumericCtx<float>::saveSyrkGemm(int64_t m, int64_t n, int64_t k,
 }
 
 template <typename T>
-std::string printVec(const std::vector<T>& ints) {
-    std::stringstream ss;
+string printVec(const vector<T>& ints) {
+    stringstream ss;
     ss << "[";
     bool first = true;
     for (auto c : ints) {
@@ -707,10 +703,10 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         cuCHECK(cudaDeviceSynchronize());
     }
 
-    std::vector<T*> devTempBufs;
+    vector<T*> devTempBufs;
     DevMirror<T*> devTempBufsDev;
     int64_t* devSpanToChainOffset;
-    std::vector<int64_t> spanToChainOffset;
+    vector<int64_t> spanToChainOffset;
 
     const CudaSymbolicCtx& sym;
 };
@@ -846,12 +842,19 @@ __device__ static inline void stridedTransSet(T* dst, int64_t dstStride,
     }
 }
 
-template <typename T>
+template <typename TT, typename B>
 __global__ void assembleVec_kernel(const int64_t* chainRowsTillEnd,
                                    const int64_t* toSpan,
-                                   const int64_t* spanStarts, const T* A,
-                                   int64_t numColItems, T* C, int64_t ldc,
-                                   int64_t nRHS) {
+                                   const int64_t* spanStarts, const TT* AB,
+                                   int64_t numColItems, TT* CB, int64_t ldc,
+                                   int64_t nRHS, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(CB)[0])>>;
+    T* C = batch.get(CB);
+    const T* A = batch.get(AB);
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i > numColItems) {
         return;
@@ -865,12 +868,19 @@ __global__ void assembleVec_kernel(const int64_t* chainRowsTillEnd,
                     nRHS);
 }
 
-template <typename T>
+template <typename TT, typename B>
 __global__ void assembleVecT_kernel(const int64_t* chainRowsTillEnd,
                                     const int64_t* toSpan,
-                                    const int64_t* spanStarts, const T* C,
-                                    int64_t ldc, int64_t nRHS, T* A,
-                                    int64_t numColItems) {
+                                    const int64_t* spanStarts, const TT* CB,
+                                    int64_t ldc, int64_t nRHS, TT* AB,
+                                    int64_t numColItems, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(AB)[0])>>;
+    const T* C = batch.get(CB);
+    T* A = batch.get(AB);
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i > numColItems) {
         return;
@@ -898,21 +908,10 @@ struct CudaSolveCtx : SolveCtx<T> {
     }
 
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
-                        int64_t offC, int64_t ldc) override {
-        T alpha(1.0);
-        cublasCHECK(cublasDtrsm(sym.cublasH, CUBLAS_SIDE_LEFT,
-                                CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
-                                CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha,
-                                data + offM, n, C + offC, ldc));
-    }
+                        int64_t offC, int64_t ldc) override;
 
     virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
-                      const T* A, int64_t offA, int64_t lda) override {
-        T alpha(1.0), beta(0.0);
-        cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, nRHS,
-                                nRows, nCols, &alpha, A + offA, lda,
-                                data + offM, nCols, &beta, devSolveBuf, nRHS));
-    }
+                      const T* A, int64_t offA, int64_t lda) override;
 
     virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
                              int64_t ldc) override {
@@ -921,26 +920,15 @@ struct CudaSolveCtx : SolveCtx<T> {
         assembleVec_kernel<T><<<numGroups, wgs>>>(
             sym.devChainRowsTillEnd.ptr + chainColPtr,
             sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr,
-            devSolveBuf, numColItems, C, ldc, nRHS);
+            devSolveBuf, numColItems, C, ldc, nRHS, Plain{});
+        cuCHECK(cudaDeviceSynchronize());
     }
 
     virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
-                         int64_t offC, int64_t ldc) override {
-        T alpha(1.0);
-        cublasCHECK(cublasDtrsm(sym.cublasH, CUBLAS_SIDE_LEFT,
-                                CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N,
-                                CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha,
-                                data + offM, n, C + offC, ldc));
-    }
+                         int64_t offC, int64_t ldc) override;
 
     virtual void gemvT(const T* data, int64_t offM, int64_t nRows,
-                       int64_t nCols, T* A, int64_t offA,
-                       int64_t lda) override {
-        T alpha(-1.0), beta(1.0);
-        cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_N, CUBLAS_OP_C, nCols,
-                                nRHS, nRows, &alpha, data + offM, nCols,
-                                devSolveBuf, nRHS, &beta, A + offA, lda));
-    }
+                       int64_t nCols, T* A, int64_t offA, int64_t lda) override;
 
     virtual void assembleVecT(const T* C, int64_t ldc, int64_t chainColPtr,
                               int64_t numColItems) override {
@@ -949,7 +937,8 @@ struct CudaSolveCtx : SolveCtx<T> {
         assembleVecT_kernel<T><<<numGroups, wgs>>>(
             sym.devChainRowsTillEnd.ptr + chainColPtr,
             sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr, C, ldc,
-            nRHS, devSolveBuf, numColItems);
+            nRHS, devSolveBuf, numColItems, Plain{});
+        cuCHECK(cudaDeviceSynchronize());
     }
 
     const CudaSymbolicCtx& sym;
@@ -1033,21 +1022,214 @@ void CudaSolveCtx<float>::gemvT(const float* data, int64_t offM, int64_t nRows,
                             nRHS, &beta, A + offA, lda));
 }
 
-NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
+// solve context, batched version
+template <typename T>
+struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
+    CudaSolveCtx(const CudaSymbolicCtx& sym, int64_t nRHS, int batchSize = 8)
+        : sym(sym), nRHS(nRHS), devSolveBufs(batchSize, nullptr) {
+        for (int i = 0; i < batchSize; i++) {
+            cuCHECK(cudaMalloc((void**)&devSolveBufs[i],
+                               sym.skel.order() * nRHS * sizeof(T)));
+        }
+        devSolveBufsDev.load(devSolveBufs);
+    }
+    virtual ~CudaSolveCtx() override {
+        for (size_t i = 0; i < devSolveBufs.size(); i++) {
+            if (devSolveBufs[i]) {
+                cuCHECK(cudaFree(devSolveBufs[i]));
+            }
+        }
+    }
+
+    virtual void solveL(const vector<T*>* data, int64_t offM, int64_t n,
+                        vector<T*>* C, int64_t offC, int64_t ldc) override;
+
+    virtual void gemv(const vector<T*>* data, int64_t offM, int64_t nRows,
+                      int64_t nCols, const vector<T*>* A, int64_t offA,
+                      int64_t lda) override;
+
+    virtual void assembleVec(int64_t chainColPtr, int64_t numColItems,
+                             vector<T*>* C, int64_t ldc) override {
+        DevPtrMirror<T> Cs(*C, 0);
+        int batchWgs = 32;
+        while (batchWgs / 2 >= C->size()) {
+            batchWgs /= 2;
+        }
+        int batchGroups = (C->size() + batchWgs - 1) / batchWgs;
+        int wgs = 32 / batchWgs;
+        int numGroups = (numColItems + wgs - 1) / wgs;
+        dim3 gridDim(numGroups, batchGroups);
+        dim3 blockDim(wgs, batchWgs);
+        assembleVec_kernel<T*><<<gridDim, blockDim>>>(
+            sym.devChainRowsTillEnd.ptr + chainColPtr,
+            sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr,
+            devSolveBufsDev.ptr, numColItems, Cs.ptr, ldc, nRHS,
+            Batched{.batchSize = (int)C->size()});
+        cuCHECK(cudaDeviceSynchronize());
+    }
+
+    virtual void solveLt(const vector<T*>* data, int64_t offM, int64_t n,
+                         vector<T*>* C, int64_t offC, int64_t ldc) override;
+
+    virtual void gemvT(const vector<T*>* data, int64_t offM, int64_t nRows,
+                       int64_t nCols, vector<T*>* A, int64_t offA,
+                       int64_t lda) override;
+
+    virtual void assembleVecT(const vector<T*>* C, int64_t ldc,
+                              int64_t chainColPtr,
+                              int64_t numColItems) override {
+        DevPtrMirror<T> Cs(*C, 0);
+        int batchWgs = 32;
+        while (batchWgs / 2 >= C->size()) {
+            batchWgs /= 2;
+        }
+        int batchGroups = (C->size() + batchWgs - 1) / batchWgs;
+        int wgs = 32 / batchWgs;
+        int numGroups = (numColItems + wgs - 1) / wgs;
+        dim3 gridDim(numGroups, batchGroups);
+        dim3 blockDim(wgs, batchWgs);
+        assembleVecT_kernel<T*><<<gridDim, blockDim>>>(
+            sym.devChainRowsTillEnd.ptr + chainColPtr,
+            sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr, Cs.ptr,
+            ldc, nRHS, devSolveBufsDev.ptr, numColItems,
+            Batched{.batchSize = (int)C->size()});
+        cuCHECK(cudaDeviceSynchronize());
+    }
+
+    const CudaSymbolicCtx& sym;
+    int64_t nRHS;
+    vector<T*> devSolveBufs;
+    DevMirror<T*> devSolveBufsDev;
+};
+
+template <>
+void CudaSolveCtx<vector<double*>>::solveL(const vector<double*>* data,
+                                           int64_t offM, int64_t n,
+                                           vector<double*>* C, int64_t offC,
+                                           int64_t ldc) {
+    DevPtrMirror<double> Ms(*data, offM);
+    DevPtrMirror<double> Cs(*C, offC);
+    double alpha(1.0);
+    cublasCHECK(cublasDtrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT,
+                                   CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
+                                   CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha,
+                                   Ms.ptr, n, Cs.ptr, ldc, data->size()));
+}
+
+template <>
+void CudaSolveCtx<vector<float*>>::solveL(const vector<float*>* data,
+                                          int64_t offM, int64_t n,
+                                          vector<float*>* C, int64_t offC,
+                                          int64_t ldc) {
+    DevPtrMirror<float> Ms(*data, offM);
+    DevPtrMirror<float> Cs(*C, offC);
+    float alpha(1.0);
+    cublasCHECK(cublasStrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT,
+                                   CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
+                                   CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha,
+                                   Ms.ptr, n, Cs.ptr, ldc, data->size()));
+}
+
+template <>
+void CudaSolveCtx<vector<double*>>::gemv(const vector<double*>* data,
+                                         int64_t offM, int64_t nRows,
+                                         int64_t nCols,
+                                         const vector<double*>* A, int64_t offA,
+                                         int64_t lda) {
+    DevPtrMirror<double> Ms(*data, offM);
+    DevPtrMirror<double> As(*A, offA);
+    double alpha(1.0), beta(0.0);
+    cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, nRHS,
+                                   nRows, nCols, &alpha, As.ptr, lda, Ms.ptr,
+                                   nCols, &beta, devSolveBufsDev.ptr, nRHS,
+                                   data->size()));
+}
+
+template <>
+void CudaSolveCtx<vector<float*>>::gemv(const vector<float*>* data,
+                                        int64_t offM, int64_t nRows,
+                                        int64_t nCols, const vector<float*>* A,
+                                        int64_t offA, int64_t lda) {
+    DevPtrMirror<float> Ms(*data, offM);
+    DevPtrMirror<float> As(*A, offA);
+    float alpha(1.0), beta(0.0);
+    cublasCHECK(cublasSgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, nRHS,
+                                   nRows, nCols, &alpha, As.ptr, lda, Ms.ptr,
+                                   nCols, &beta, devSolveBufsDev.ptr, nRHS,
+                                   data->size()));
+}
+
+template <>
+void CudaSolveCtx<vector<double*>>::solveLt(const vector<double*>* data,
+                                            int64_t offM, int64_t n,
+                                            vector<double*>* C, int64_t offC,
+                                            int64_t ldc) {
+    DevPtrMirror<double> Ms(*data, offM);
+    DevPtrMirror<double> Cs(*C, offC);
+    double alpha(1.0);
+    cublasCHECK(cublasDtrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT,
+                                   CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N,
+                                   CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha,
+                                   Ms.ptr, n, Cs.ptr, ldc, data->size()));
+}
+
+template <>
+void CudaSolveCtx<vector<float*>>::solveLt(const vector<float*>* data,
+                                           int64_t offM, int64_t n,
+                                           vector<float*>* C, int64_t offC,
+                                           int64_t ldc) {
+    DevPtrMirror<float> Ms(*data, offM);
+    DevPtrMirror<float> Cs(*C, offC);
+    float alpha(1.0);
+    cublasCHECK(cublasStrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT,
+                                   CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N,
+                                   CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha,
+                                   Ms.ptr, n, Cs.ptr, ldc, data->size()));
+}
+
+template <>
+void CudaSolveCtx<vector<double*>>::gemvT(const vector<double*>* data,
+                                          int64_t offM, int64_t nRows,
+                                          int64_t nCols, vector<double*>* A,
+                                          int64_t offA, int64_t lda) {
+    DevPtrMirror<double> Ms(*data, offM);
+    DevPtrMirror<double> As(*A, offA);
+    double alpha(-1.0), beta(1.0);
+    cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_N, CUBLAS_OP_C, nCols,
+                                   nRHS, nRows, &alpha, Ms.ptr, nCols,
+                                   devSolveBufsDev.ptr, nRHS, &beta, As.ptr,
+                                   lda, data->size()));
+}
+
+template <>
+void CudaSolveCtx<vector<float*>>::gemvT(const vector<float*>* data,
+                                         int64_t offM, int64_t nRows,
+                                         int64_t nCols, vector<float*>* A,
+                                         int64_t offA, int64_t lda) {
+    DevPtrMirror<float> Ms(*data, offM);
+    DevPtrMirror<float> As(*A, offA);
+    float alpha(-1.0), beta(1.0);
+    cublasCHECK(cublasSgemmBatched(sym.cublasH, CUBLAS_OP_N, CUBLAS_OP_C, nCols,
+                                   nRHS, nRows, &alpha, Ms.ptr, nCols,
+                                   devSolveBufsDev.ptr, nRHS, &beta, As.ptr,
+                                   lda, data->size()));
+}
+
+NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(type_index tIdx,
                                                          int64_t tempBufSize,
                                                          int batchSize) {
-    if (tIdx == std::type_index(typeid(double))) {
+    if (tIdx == type_index(typeid(double))) {
         BASPACHO_CHECK_EQ(batchSize, 1);
         return new CudaNumericCtx<double>(*this, tempBufSize,
                                           skel.spanStart.size() - 1);
-    } else if (tIdx == std::type_index(typeid(float))) {
+    } else if (tIdx == type_index(typeid(float))) {
         BASPACHO_CHECK_EQ(batchSize, 1);
         return new CudaNumericCtx<float>(*this, tempBufSize,
                                          skel.spanStart.size() - 1);
-    } else if (tIdx == std::type_index(typeid(vector<double*>))) {
+    } else if (tIdx == type_index(typeid(vector<double*>))) {
         return new CudaNumericCtx<vector<double*>>(
             *this, tempBufSize, skel.spanStart.size() - 1, batchSize);
-    } else if (tIdx == std::type_index(typeid(vector<float*>))) {
+    } else if (tIdx == type_index(typeid(vector<float*>))) {
         return new CudaNumericCtx<vector<float*>>(
             *this, tempBufSize, skel.spanStart.size() - 1, batchSize);
     } else {
@@ -1055,12 +1237,16 @@ NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
     }
 }
 
-SolveCtxBase* CudaSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
+SolveCtxBase* CudaSymbolicCtx::createSolveCtxForType(type_index tIdx,
                                                      int nRHS) {
-    if (tIdx == std::type_index(typeid(double))) {
+    if (tIdx == type_index(typeid(double))) {
         return new CudaSolveCtx<double>(*this, nRHS);
-    } else if (tIdx == std::type_index(typeid(float))) {
+    } else if (tIdx == type_index(typeid(float))) {
         return new CudaSolveCtx<float>(*this, nRHS);
+    } else if (tIdx == type_index(typeid(vector<double*>))) {
+        return new CudaSolveCtx<vector<double*>>(*this, nRHS);
+    } else if (tIdx == type_index(typeid(vector<float*>))) {
+        return new CudaSolveCtx<vector<float*>>(*this, nRHS);
     } else {
         return nullptr;
     }

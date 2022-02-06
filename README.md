@@ -95,7 +95,7 @@ implementation in SuiteSparse instead of Eigen.
 - [X] Cuda: test atomics vs magic-locked block updates (result: magic lock of blocks does not work
       in Cuda unless very expensive synchronized ops are used, making it not competitive)
 - [X] Cuda: solve methods
-- [ ] Cuda: batched mode
+- [X] Cuda: batched mode
 - [ ] Benchmark results (bench + BAL comparing sparse elimination with optimizers)
 - [ ] small optimizer demo on BAL data
 
