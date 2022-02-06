@@ -32,6 +32,7 @@ Libraries fetched automatical by build:
 * Sophus (only used in BA demo)
 
 Optional libraries:
+* CUDA toolkit (tested with CUDA 11.5), if not available must explicitly disable GPU support, see below.
 * AMD, from SuiteSparse, can be used instead of Eigen for reordering algorithm.
 * CHOLMOD, from SuiteSparse, used in benchmark as a reference for performance of sparse solvers.
 

@@ -199,9 +199,13 @@ void testSolvers(Data& data) {
             benchmarkCholmodSolve(camSz, camCamSs, false);
             cout << "running real benchmark..." << endl;
         }
-        auto [aTime, fTime] = benchmarkCholmodSolve(camSz, camCamSs, true);
-        cout << "Cam-Cam Analysis Time: " << aTime << "s" << endl;
-        cout << "Cam-Cam Factor Time..: " << fTime << "s" << endl;
+        auto results = benchmarkCholmodSolve(camSz, camCamSs, true);
+        cout << "Cam-Cam Analysis Time: " << results.analysisTime << "s"
+             << endl;
+        cout << "Cam-Cam Factor Time..: " << results.factorTime << "s" << endl;
+        cout << "Cam-Cam Solve-1 Time.: " << results.solve1Time << "s" << endl;
+        cout << "Cam-Cam Solve-" << results.nRHS
+             << " Time.: " << results.solveNRHSTime << "s" << endl;
     }
 #endif  // BASPACHO_HAVE_CHOLMOD
 }

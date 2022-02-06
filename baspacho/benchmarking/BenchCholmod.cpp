@@ -15,8 +15,9 @@ using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
-std::pair<double, double> benchmarkCholmodSolve(
-    const vector<int64_t>& paramSize, const SparseStructure& ss, int verbose) {
+CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
+                                          const SparseStructure& ss,
+                                          int verbose) {
     BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
     vector<int64_t> rowPtr, colInd;
     vector<double> val;
@@ -51,6 +52,20 @@ std::pair<double, double> benchmarkCholmodSolve(
     }
     if (verbose >= 2) {
         std::cout << "to csr done." << std::endl;
+    }
+
+    int nRHS = 10;
+    vector<double> vecData(rowPtr.size() - 1);
+    vector<double> vecDataMany(nRHS * vecData.size());
+    for (size_t i = 0; i < vecData.size(); i++) {
+        vecData[i] = unif(gen);
+    }
+    for (size_t i = 0; i < vecDataMany.size(); i++) {
+        vecDataMany[i] = unif(gen);
+    }
+
+    if (verbose >= 2) {
+        std::cout << "vec gen done." << std::endl;
     }
 
     cholmod_common cc_;
@@ -181,10 +196,59 @@ std::pair<double, double> benchmarkCholmodSolve(
             exit(1);
     }
 
+    // solve, nRHS = 1
+    double solve1Time;
+    {
+        cholmod_dense b;
+        b.nrow = vecData.size();
+        b.ncol = 1;
+        b.nzmax = b.nrow * b.ncol;
+        b.d = vecData.size();  // leading dimension
+        b.x = (void*)(vecData.data());
+        b.z = nullptr;
+        b.xtype = CHOLMOD_REAL;
+        auto startSolve1 = hrc::now();
+        cholmod_dense* x = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
+        solve1Time = tdelta(hrc::now() - startSolve1).count();
+        if (!x) {
+            std::cerr << "Cholmod solve failed! nRHS = " << 1 << std::endl;
+            exit(1);
+        }
+        cholmod_l_free_dense(&x, &cc_);
+    }
+
+    // solve nRHS = 10
+    double solveNRHSTime;
+    {
+        cholmod_dense b;
+        b.nrow = vecData.size();
+        b.ncol = nRHS;
+        b.nzmax = b.nrow * b.ncol;
+        b.d = vecData.size();  // leading dimension
+        b.x = (void*)(vecDataMany.data());
+        b.z = nullptr;
+        b.xtype = CHOLMOD_REAL;
+        auto startSolveNRHS = hrc::now();
+        cholmod_dense* x = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
+        solveNRHSTime = tdelta(hrc::now() - startSolveNRHS).count();
+        if (!x) {
+            std::cerr << "Cholmod solve failed! nRHS = " << nRHS << std::endl;
+            exit(1);
+        }
+        cholmod_l_free_dense(&x, &cc_);
+    }
+
     if (cholmodFactor_ != nullptr) {
         cholmod_l_free_factor(&cholmodFactor_, &cc_);
     }
     cholmod_l_finish(&cc_);
 
-    return std::make_pair(analysisTime, factorTime);
+    CholmodBenchResults retv;
+    retv.analysisTime = analysisTime;
+    retv.factorTime = factorTime;
+    retv.solve1Time = solve1Time;
+    retv.solveNRHSTime = solveNRHSTime;
+    retv.nRHS = nRHS;
+
+    return retv;
 }

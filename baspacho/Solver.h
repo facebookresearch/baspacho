@@ -25,6 +25,9 @@ struct Solver {
     void factor(T* data, bool verbose = false) const;
 
     template <typename T>
+    void solve(const T* matData, T* vecData, int64_t stride, int nRHS) const;
+
+    template <typename T>
     void solveL(const T* matData, T* vecData, int64_t stride, int nRHS) const;
 
     template <typename T>
@@ -40,6 +43,14 @@ struct Solver {
 
     template <typename T>
     void eliminateBoard(NumericCtx<T>& numCtx, T* data, int64_t ptr) const;
+
+    template <typename T>
+    void internalSolveL(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
+                        int64_t stride) const;
+
+    template <typename T>
+    void internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
+                         int64_t stride) const;
 
    public:
     CoalescedBlockMatrixSkel factorSkel;

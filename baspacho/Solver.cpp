@@ -204,17 +204,38 @@ void Solver::factor(T* data, bool verbose) const {
 }
 
 template <typename T>
+void Solver::solve(const T* matData, T* vecData, int64_t stride,
+                   int nRHS) const {
+    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
+    internalSolveLt(*slvCtx, matData, vecData, stride);
+    internalSolveL(*slvCtx, matData, vecData, stride);
+}
+
+template <typename T>
 void Solver::solveL(const T* matData, T* vecData, int64_t stride,
                     int nRHS) const {
     SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
+    internalSolveL(*slvCtx, matData, vecData, stride);
+}
+
+template <typename T>
+void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
+                     int nRHS) const {
+    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
+    internalSolveLt(*slvCtx, matData, vecData, stride);
+}
+
+template <typename T>
+void Solver::internalSolveL(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
+                            int64_t stride) const {
     for (int64_t l = 0; l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
         int64_t chainColBegin = factorSkel.chainColPtr[l];
         int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
 
-        slvCtx->solveL(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
-                       stride);
+        slvCtx.solveL(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
+                      stride);
 
         int64_t boardColBegin = factorSkel.boardColPtr[l];
         int64_t boardColEnd = factorSkel.boardColPtr[l + 1];
@@ -231,19 +252,18 @@ void Solver::solveL(const T* matData, T* vecData, int64_t stride,
             continue;
         }
 
-        slvCtx->gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
-                     vecData, lumpStart, stride);
+        slvCtx.gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
+                    vecData, lumpStart, stride);
 
         int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
-        slvCtx->assembleVec(chainColPtr, numColChains - belowDiagChainColOrd,
-                            vecData, stride);
+        slvCtx.assembleVec(chainColPtr, numColChains - belowDiagChainColOrd,
+                           vecData, stride);
     }
 }
 
 template <typename T>
-void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
-                     int nRHS) const {
-    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
+void Solver::internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
+                             int64_t stride) const {
     for (int64_t l = factorSkel.chainColPtr.size() - 2; (int64_t)l >= 0; l--) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
@@ -263,16 +283,16 @@ void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
 
         if (numRowsBelowDiag > 0) {
             int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
-            slvCtx->assembleVecT(vecData, stride, chainColPtr,
-                                 numColChains - belowDiagChainColOrd);
+            slvCtx.assembleVecT(vecData, stride, chainColPtr,
+                                numColChains - belowDiagChainColOrd);
 
-            slvCtx->gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
-                          vecData, lumpStart, stride);
+            slvCtx.gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
+                         vecData, lumpStart, stride);
         }
 
         int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
-        slvCtx->solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
-                        stride);
+        slvCtx.solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
+                       stride);
     }
 }
 
@@ -282,6 +302,16 @@ template void Solver::factor<vector<double*>>(vector<double*>* data,
                                               bool verbose) const;
 template void Solver::factor<vector<float*>>(vector<float*>* data,
                                              bool verbose) const;
+template void Solver::solve<double>(const double* matData, double* vecData,
+                                    int64_t stride, int nRHS) const;
+template void Solver::solve<float>(const float* matData, float* vecData,
+                                   int64_t stride, int nRHS) const;
+template void Solver::solve<vector<double*>>(const vector<double*>* matData,
+                                             vector<double*>* vecData,
+                                             int64_t stride, int nRHS) const;
+template void Solver::solve<vector<float*>>(const vector<float*>* matData,
+                                            vector<float*>* vecData,
+                                            int64_t stride, int nRHS) const;
 template void Solver::solveL<double>(const double* matData, double* vecData,
                                      int64_t stride, int nRHS) const;
 template void Solver::solveL<float>(const float* matData, float* vecData,
