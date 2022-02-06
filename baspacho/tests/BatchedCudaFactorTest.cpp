@@ -48,37 +48,37 @@ void testBatchedCoalescedFactor(OpsPtr&& ops, int batchSize) {
     CoalescedBlockMatrixSkel factorSkel(spanStart, lumpToSpan, groupedSs.ptrs,
                                         groupedSs.inds);
 
+    Solver solver(std::move(factorSkel), {}, {}, std::move(ops));
+
+    // generate a batch of data
     vector<vector<T>> datas(batchSize);
-    for (int i = 0; i < batchSize; i++) {
-        datas[i] = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 37 + i);
-        factorSkel.damp(datas[i], T(0), T(factorSkel.order() * 1.3));
+    for (int q = 0; q < batchSize; q++) {
+        datas[q] =
+            randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
+        solver.factorSkel.damp(datas[q], T(0),
+                               T(solver.factorSkel.order() * 1.3));
     }
     vector<vector<T>> datasBackup = datas;
-
-    Solver solver(std::move(factorSkel), {}, {}, std::move(ops));
 
     // call factor on gpu data
     {
         vector<DevMirror<T>> datasGpu(batchSize);
         vector<T*> datasPtr(batchSize);
-        for (int i = 0; i < batchSize; i++) {
-            datasGpu[i].load(datas[i]);
-            datasPtr[i] = datasGpu[i].ptr;
+        for (int q = 0; q < batchSize; q++) {
+            datasGpu[q].load(datas[q]);
+            datasPtr[q] = datasGpu[q].ptr;
         }
         solver.factor(&datasPtr);
-        for (int i = 0; i < batchSize; i++) {
-            datasGpu[i].get(datas[i]);
+        for (int q = 0; q < batchSize; q++) {
+            datasGpu[q].get(datas[q]);
         }
     }
 
-    for (int i = 0; i < batchSize; i++) {
-        Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[i]);
-        // cout << "Orign:\n" << verifyMat << endl;
+    for (int q = 0; q < batchSize; q++) {
+        Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[q]);
         { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat); }
 
-        Matrix<T> computedMat = solver.factorSkel.densify(datas[i]);
-        /*cout << "Verif:\n" << verifyMat << endl;
-        cout << "Cmptd:\n" << computedMat << endl;*/
+        Matrix<T> computedMat = solver.factorSkel.densify(datas[q]);
 
         ASSERT_NEAR(Matrix<T>((verifyMat - computedMat)
                                   .template triangularView<Eigen::Lower>())
@@ -91,13 +91,13 @@ TEST(BatchedCudaFactor, CoalescedFactor_double) {
     testBatchedCoalescedFactor<double>(cudaOps(), 8);
 }
 
-#if 0
 TEST(BatchedCudaFactor, CoalescedFactor_float) {
-    testBatchedCoalescedFactor<float>(cudaOps());
+    testBatchedCoalescedFactor<float>(cudaOps(), 8);
 }
 
 template <typename T>
-void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
+void testBatchedCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
+    vector<int64_t> batchSizes = randomVec(20, 3, 31, 37);
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.037, 57 + i);
         SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
@@ -107,7 +107,7 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
         SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
 
         vector<int64_t> paramSize =
-            randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
+            randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
         et.computeMerges(/* compute sparse elim ranges = */ false);
@@ -115,41 +115,59 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
 
         CoalescedBlockMatrixSkel factorSkel(
             et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
-
-        vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
-        factorSkel.damp(data, T(0), T(factorSkel.order() * 1.5));
-
-        Matrix<T> verifyMat = factorSkel.densify(data);
-        Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat);
-
         Solver solver(std::move(factorSkel), {}, {}, genOps());
+
+        // generate a batch of data
+        int batchSize = batchSizes[i];
+        vector<vector<T>> datas(batchSize);
+        for (int q = 0; q < batchSize; q++) {
+            datas[q] =
+                randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
+            solver.factorSkel.damp(datas[q], T(0),
+                                   T(solver.factorSkel.order() * 1.3));
+        }
+        vector<vector<T>> datasBackup = datas;
 
         // call factor on gpu data
         {
-            DevMirror<T> dataGpu(data);
-            solver.factor(dataGpu.ptr);
-            dataGpu.get(data);
+            vector<DevMirror<T>> datasGpu(batchSize);
+            vector<T*> datasPtr(batchSize);
+            for (int q = 0; q < batchSize; q++) {
+                datasGpu[q].load(datas[q]);
+                datasPtr[q] = datasGpu[q].ptr;
+            }
+            solver.factor(&datasPtr);
+
+            for (int q = 0; q < batchSize; q++) {
+                datasGpu[q].get(datas[q]);
+            }
         }
 
-        Matrix<T> computedMat = solver.factorSkel.densify(data);
+        for (int q = 0; q < batchSize; q++) {
+            Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[q]);
+            { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat); }
 
-        ASSERT_NEAR(Matrix<T>((verifyMat - computedMat)
-                                  .template triangularView<Eigen::Lower>())
-                        .norm(),
-                    0, Epsilon<T>::value2);
+            Matrix<T> computedMat = solver.factorSkel.densify(datas[q]);
+
+            ASSERT_NEAR(Matrix<T>((verifyMat - computedMat)
+                                      .template triangularView<Eigen::Lower>())
+                            .norm(),
+                        0, Epsilon<T>::value2);
+        }
     }
 }
 
 TEST(BatchedCudaFactor, CoalescedFactor_Many_double) {
-    testCoalescedFactor_Many<double>([] { return cudaOps(); });
+    testBatchedCoalescedFactor_Many<double>([] { return cudaOps(); });
 }
 
 TEST(BatchedCudaFactor, CoalescedFactor_Many_float) {
-    testCoalescedFactor_Many<float>([] { return cudaOps(); });
+    testBatchedCoalescedFactor_Many<float>([] { return cudaOps(); });
 }
 
 template <typename T>
-void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
+void testBatchedSparseElim_Many(const std::function<OpsPtr()>& genOps) {
+    vector<int64_t> batchSizes = randomVec(20, 3, 31, 137);
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.03, 57 + i);
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
@@ -169,47 +187,67 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         CoalescedBlockMatrixSkel factorSkel(
             et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
 
-        vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
-        factorSkel.damp(data, T(0), T(factorSkel.order() * 1.5));
-
-        Matrix<T> verifyMat = factorSkel.densify(data);
-        Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat);
-
         ASSERT_GE(et.sparseElimRanges.size(), 2);
         int64_t largestIndep = et.sparseElimRanges[1];
         Solver solver(move(factorSkel), move(et.sparseElimRanges), {},
                       genOps());
 
-        NumericCtxPtr<T> numCtx = solver.symCtx->createNumericCtx<T>(0);
+        // generate a batch of data
+        int batchSize = batchSizes[i];
+        vector<vector<T>> datas(batchSize);
+        for (int q = 0; q < batchSize; q++) {
+            datas[q] =
+                randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
+            solver.factorSkel.damp(datas[q], T(0),
+                                   T(solver.factorSkel.order() * 1.3));
+        }
+        vector<vector<T>> datasBackup = datas;
 
-        // call doElimination with data on device
+        // call factor on gpu data
         {
-            DevMirror<T> dataGpu(data);
-            numCtx->doElimination(*solver.elimCtxs[0], dataGpu.ptr, 0,
+            vector<DevMirror<T>> datasGpu(batchSize);
+            vector<T*> datasPtr(batchSize);
+            for (int q = 0; q < batchSize; q++) {
+                datasGpu[q].load(datas[q]);
+                datasPtr[q] = datasGpu[q].ptr;
+            }
+            NumericCtxPtr<vector<T*>> numCtx =
+                solver.symCtx->createNumericCtx<vector<T*>>(0, &datasPtr);
+            numCtx->doElimination(*solver.elimCtxs[0], &datasPtr, 0,
                                   largestIndep);
-            dataGpu.get(data);
+
+            for (int q = 0; q < batchSize; q++) {
+                datasGpu[q].get(datas[q]);
+            }
         }
 
-        Matrix<T> computedMat = solver.factorSkel.densify(data);
+        for (int q = 0; q < batchSize; q++) {
+            Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[q]);
+            { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat); }
 
-        ASSERT_NEAR(Matrix<T>((verifyMat - computedMat)
-                                  .template triangularView<Eigen::Lower>())
-                        .leftCols(largestIndep)
-                        .norm(),
-                    0, Epsilon<T>::value);
+            Matrix<T> computedMat = solver.factorSkel.densify(datas[q]);
+
+            ASSERT_NEAR(Matrix<T>((verifyMat - computedMat)
+                                      .template triangularView<Eigen::Lower>())
+                            .leftCols(largestIndep)
+                            .norm(),
+                        0, Epsilon<T>::value);
+        }
     }
 }
 
 TEST(BatchedCudaFactor, SparseElim_Many_double) {
-    testSparseElim_Many<double>([] { return cudaOps(); });
+    testBatchedSparseElim_Many<double>([] { return cudaOps(); });
 }
 
 TEST(BatchedCudaFactor, SparseElim_Many_float) {
-    testSparseElim_Many<float>([] { return cudaOps(); });
+    testBatchedSparseElim_Many<float>([] { return cudaOps(); });
 }
 
 template <typename T>
-void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
+void testBatchedSparseElimAndFactor_Many(
+    const std::function<OpsPtr()>& genOps) {
+    vector<int64_t> batchSizes = randomVec(20, 3, 31, 1037);
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.03, 57 + i);
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
@@ -229,37 +267,55 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
         CoalescedBlockMatrixSkel factorSkel(
             et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
 
-        vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
-        factorSkel.damp(data, T(0), T(factorSkel.order() * 1.5));
-
-        Matrix<T> verifyMat = factorSkel.densify(data);
-        Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat);
-
         ASSERT_GE(et.sparseElimRanges.size(), 2);
         int64_t largestIndep = et.sparseElimRanges[1];
         Solver solver(move(factorSkel), move(et.sparseElimRanges), {},
                       genOps());
 
+        // generate a batch of data
+        int batchSize = batchSizes[i];
+        vector<vector<T>> datas(batchSize);
+        for (int q = 0; q < batchSize; q++) {
+            datas[q] =
+                randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
+            solver.factorSkel.damp(datas[q], T(0),
+                                   T(solver.factorSkel.order() * 1.3));
+        }
+        vector<vector<T>> datasBackup = datas;
+
         // call factor on gpu data
         {
-            DevMirror<T> dataGpu(data);
-            solver.factor(dataGpu.ptr);
-            dataGpu.get(data);
+            vector<DevMirror<T>> datasGpu(batchSize);
+            vector<T*> datasPtr(batchSize);
+            for (int q = 0; q < batchSize; q++) {
+                datasGpu[q].load(datas[q]);
+                datasPtr[q] = datasGpu[q].ptr;
+            }
+            solver.factor(&datasPtr);
+
+            for (int q = 0; q < batchSize; q++) {
+                datasGpu[q].get(datas[q]);
+            }
         }
 
-        Matrix<T> computedMat = solver.factorSkel.densify(data);
-        ASSERT_NEAR(Matrix<T>((verifyMat - computedMat)
-                                  .template triangularView<Eigen::Lower>())
-                        .norm(),
-                    0, Epsilon<T>::value2);
+        for (int q = 0; q < batchSize; q++) {
+            Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[q]);
+            { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat); }
+
+            Matrix<T> computedMat = solver.factorSkel.densify(datas[q]);
+
+            ASSERT_NEAR(Matrix<T>((verifyMat - computedMat)
+                                      .template triangularView<Eigen::Lower>())
+                            .norm(),
+                        0, Epsilon<T>::value2);
+        }
     }
 }
 
 TEST(BatchedCudaFactor, SparseElimAndFactor_Many_double) {
-    testSparseElimAndFactor_Many<double>([] { return cudaOps(); });
+    testBatchedSparseElimAndFactor_Many<double>([] { return cudaOps(); });
 }
 
 TEST(BatchedCudaFactor, SparseElimAndFactor_Many_float) {
-    testSparseElimAndFactor_Many<float>([] { return cudaOps(); });
+    testBatchedSparseElimAndFactor_Many<float>([] { return cudaOps(); });
 }
-#endif

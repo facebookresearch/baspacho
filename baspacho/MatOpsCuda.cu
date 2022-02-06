@@ -123,12 +123,19 @@ struct CudaOps : Ops {
     }
 };
 
-template <typename T>
+template <typename TT, typename B>
 __global__ static inline void factor_lumps_kernel(
     const int64_t* lumpStart, const int64_t* chainColPtr,
     const int64_t* chainData, const int64_t* boardColPtr,
-    const int64_t* boardChainColOrd, const int64_t* chainRowsTillEnd, T* data,
-    int64_t lumpIndexStart, int64_t lumpIndexEnd) {
+    const int64_t* boardChainColOrd, const int64_t* chainRowsTillEnd, TT* dataB,
+    int64_t lumpIndexStart, int64_t lumpIndexEnd, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = std::remove_cv_t<
+        std::remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    T* data = batch.get(dataB);
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int64_t lump = lumpIndexStart + i;
     if (lump >= lumpIndexEnd) {
@@ -199,13 +206,20 @@ __device__ static inline void do_sparse_elim(
 // per column, and will internally iterate over pairs of blocks (two
 // nested loops). Not meant for performance, but as a simpler testing
 // version of the below "straigthened" kernel.
-template <typename T>
+template <typename TT, typename B>
 __global__ static inline void sparse_elim_2loops_kernel(
     const int64_t* chainColPtr, const int64_t* lumpStart,
     const int64_t* chainRowSpan, const int64_t* spanStart,
     const int64_t* chainData, const int64_t* spanToLump,
-    const int64_t* spanOffsetInLump, T* data, int64_t lumpIndexStart,
-    int64_t lumpIndexEnd) {
+    const int64_t* spanOffsetInLump, TT* dataB, int64_t lumpIndexStart,
+    int64_t lumpIndexEnd, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = std::remove_cv_t<
+        std::remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    T* data = batch.get(dataB);
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int64_t l = lumpIndexStart + i;
     if (l >= lumpIndexEnd) {
@@ -229,14 +243,21 @@ __global__ static inline void sparse_elim_2loops_kernel(
 // lumpIndexStart), and as offset to the found value the index in range
 // 0..nb*(nb+1)/2-1 in the list of *pairs* of blocks in the column. Such
 // index if converted to the ordered pair di/dj
-template <typename T>
+template <typename TT, typename B>
 __global__ static inline void sparse_elim_straight_kernel(
     const int64_t* chainColPtr, const int64_t* lumpStart,
     const int64_t* chainRowSpan, const int64_t* spanStart,
     const int64_t* chainData, const int64_t* spanToLump,
-    const int64_t* spanOffsetInLump, T* data, int64_t lumpIndexStart,
+    const int64_t* spanOffsetInLump, TT* dataB, int64_t lumpIndexStart,
     int64_t lumpIndexEnd, const int64_t* makeBlockPairEnumStraight,
-    int64_t numBlockPairs) {
+    int64_t numBlockPairs, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = std::remove_cv_t<
+        std::remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    T* data = batch.get(dataB);
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= numBlockPairs) {
         return;
@@ -363,10 +384,10 @@ struct CudaNumericCtx : NumericCtx<T> {
         factor_lumps_kernel<T><<<numGroups, wgs>>>(
             sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
             sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
-            sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
+            sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd, Plain{});
 
-        cuCHECK(cudaDeviceSynchronize());
-        /*cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
+        /*cuCHECK(cudaDeviceSynchronize());
+        cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
              << "s" << endl;*/
 
 #if 0
@@ -375,7 +396,7 @@ struct CudaNumericCtx : NumericCtx<T> {
             sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
             sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
-            lumpsBegin, lumpsEnd);
+            lumpsBegin, lumpsEnd, Plain{});
 #else
         int wgs2 = 32;
         int numGroups2 = (elim.numBlockPairs + wgs2 - 1) / wgs2;
@@ -384,7 +405,7 @@ struct CudaNumericCtx : NumericCtx<T> {
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
             sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
             lumpsBegin, lumpsEnd, elim.makeBlockPairEnumStraight.ptr,
-            elim.numBlockPairs);
+            elim.numBlockPairs, Plain{});
 #endif
 
         cuCHECK(cudaDeviceSynchronize());
@@ -581,94 +602,65 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
 
     virtual void doElimination(const SymElimCtx& elimData, vector<T*>* data,
                                int64_t lumpsBegin, int64_t lumpsEnd) override {
-        BASPACHO_CHECK(!"Not implemented!");
-#if 0
         const CudaSymElimCtx* pElim =
             dynamic_cast<const CudaSymElimCtx*>(&elimData);
         BASPACHO_CHECK_NOTNULL(pElim);
         const CudaSymElimCtx& elim = *pElim;
 
         OpInstance timer(elim.elimStat);
+        DevPtrMirror<T> dataDev(*data, 0);
 
-        int wgs = 32;
+        int batchWgs = 32;
+        while (batchWgs / 2 >= data->size()) {
+            batchWgs /= 2;
+        }
+        int batchGroups = (data->size() + batchWgs - 1) / batchWgs;
+        int wgs = 32 / batchWgs;
         int numGroups = (lumpsEnd - lumpsBegin + wgs - 1) / wgs;
-        factor_lumps_kernel<T><<<numGroups, wgs>>>(
+        dim3 gridDim(numGroups, batchGroups);
+        dim3 blockDim(wgs, batchWgs);
+
+        factor_lumps_kernel<T*><<<gridDim, blockDim>>>(
             sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
             sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
-            sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd);
+            sym.devChainRowsTillEnd.ptr, dataDev.ptr, lumpsBegin, lumpsEnd,
+            Batched{.batchSize = (int)data->size()});
 
-        cuCHECK(cudaDeviceSynchronize());
-        /*cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
+        /*cuCHECK(cudaDeviceSynchronize());
+        cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
              << "s" << endl;*/
 
 #if 0
         // double inner loop
-        sparse_elim_2loops_kernel<T><<<numGroups, wgs>>>(
+        sparse_elim_2loops_kernel<T*><<<numGroups, wgs>>>(
             sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
-            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
-            lumpsBegin, lumpsEnd);
+            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, dataDev.ptr,
+            lumpsBegin, lumpsEnd,
+            Batched{.batchSize = (int)data->size()});
 #else
-        int wgs2 = 32;
+        int wgs2 = 32 / batchWgs;
         int numGroups2 = (elim.numBlockPairs + wgs2 - 1) / wgs2;
-        sparse_elim_straight_kernel<T><<<numGroups2, wgs2>>>(
+        dim3 gridDim2(numGroups2, batchGroups);
+        dim3 blockDim2(wgs2, batchWgs);
+        sparse_elim_straight_kernel<T*><<<gridDim2, blockDim2>>>(
             sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
-            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, data,
+            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, dataDev.ptr,
             lumpsBegin, lumpsEnd, elim.makeBlockPairEnumStraight.ptr,
-            elim.numBlockPairs);
+            elim.numBlockPairs, Batched{.batchSize = (int)data->size()});
 #endif
 
         cuCHECK(cudaDeviceSynchronize());
-#endif
     }
 
-    virtual void potrf(int64_t n, vector<T*>* data, int64_t offA) override {
-        OpInstance timer(sym.potrfStat);
-        DevPtrMirror<T> A(*data, offA);
-
-        int* devInfo;
-        cuCHECK(cudaMalloc((void**)&devInfo, data->size() * sizeof(int)));
-
-        cusolverCHECK(cusolverDnDpotrfBatched(sym.cusolverDnH,
-                                              CUBLAS_FILL_MODE_UPPER, n, A.ptr,
-                                              n, devInfo, data->size()));
-
-        vector<int> info(data->size());
-        cuCHECK(cudaMemcpy(info.data(), devInfo, data->size() * sizeof(int),
-                           cudaMemcpyDeviceToHost));
-        cuCHECK(cudaFree(devInfo));
-
-        // TODO: error handling
-        // cout << "info: " << printVec(info) << endl;
-    }
+    virtual void potrf(int64_t n, vector<T*>* data, int64_t offA) override;
 
     virtual void trsm(int64_t n, int64_t k, vector<T*>* data, int64_t offA,
-                      int64_t offB) override {
-        OpInstance timer(sym.trsmStat);
-        DevPtrMirror<T> A(*data, offA);
-        DevPtrMirror<T> B(*data, offB);
-
-        double alpha(1.0);
-        cublasCHECK(cublasDtrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT,
-                                       CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
-                                       CUBLAS_DIAG_NON_UNIT, n, k, &alpha,
-                                       A.ptr, n, B.ptr, n, data->size()));
-    }
+                      int64_t offB) override;
 
     virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k,
-                              const vector<T*>* data, int64_t offset) override {
-        BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
-        OpInstance timer(sym.sygeStat);
-        DevPtrMirror<T> A(*data, offset);
-
-        double alpha(1.0), beta(0.0);
-        cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m,
-                                       n, k, &alpha, A.ptr, k, A.ptr, k, &beta,
-                                       devTempBufsDev.ptr, m, data->size()));
-
-        sym.gemmCalls++;
-    }
+                              const vector<T*>* data, int64_t offset) override;
 
     virtual void prepareAssemble(int64_t targetLump) override {
         const CoalescedBlockMatrixSkel& skel = sym.skel;
@@ -723,7 +715,109 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
     const CudaSymbolicCtx& sym;
 };
 
-// SolveCtx
+template <>
+void CudaNumericCtx<vector<double*>>::potrf(int64_t n, vector<double*>* data,
+                                            int64_t offA) {
+    OpInstance timer(sym.potrfStat);
+    DevPtrMirror<double> A(*data, offA);
+
+    int* devInfo;
+    cuCHECK(cudaMalloc((void**)&devInfo, data->size() * sizeof(int)));
+
+    cusolverCHECK(cusolverDnDpotrfBatched(sym.cusolverDnH,
+                                          CUBLAS_FILL_MODE_UPPER, n, A.ptr, n,
+                                          devInfo, data->size()));
+
+    vector<int> info(data->size());
+    cuCHECK(cudaMemcpy(info.data(), devInfo, data->size() * sizeof(int),
+                       cudaMemcpyDeviceToHost));
+    cuCHECK(cudaFree(devInfo));
+
+    // TODO: add error handling
+    // cout << "info: " << printVec(info) << endl;
+}
+
+template <>
+void CudaNumericCtx<vector<float*>>::potrf(int64_t n, vector<float*>* data,
+                                           int64_t offA) {
+    OpInstance timer(sym.potrfStat);
+    DevPtrMirror<float> A(*data, offA);
+
+    int* devInfo;
+    cuCHECK(cudaMalloc((void**)&devInfo, data->size() * sizeof(int)));
+
+    cusolverCHECK(cusolverDnSpotrfBatched(sym.cusolverDnH,
+                                          CUBLAS_FILL_MODE_UPPER, n, A.ptr, n,
+                                          devInfo, data->size()));
+
+    vector<int> info(data->size());
+    cuCHECK(cudaMemcpy(info.data(), devInfo, data->size() * sizeof(int),
+                       cudaMemcpyDeviceToHost));
+    cuCHECK(cudaFree(devInfo));
+
+    // TODO: add error handling
+    // cout << "info: " << printVec(info) << endl;
+}
+
+template <>
+void CudaNumericCtx<vector<double*>>::trsm(int64_t n, int64_t k,
+                                           vector<double*>* data, int64_t offA,
+                                           int64_t offB) {
+    OpInstance timer(sym.trsmStat);
+    DevPtrMirror<double> A(*data, offA);
+    DevPtrMirror<double> B(*data, offB);
+
+    double alpha(1.0);
+    cublasCHECK(cublasDtrsmBatched(
+        sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
+        CUBLAS_DIAG_NON_UNIT, n, k, &alpha, A.ptr, n, B.ptr, n, data->size()));
+}
+
+template <>
+void CudaNumericCtx<vector<float*>>::trsm(int64_t n, int64_t k,
+                                          vector<float*>* data, int64_t offA,
+                                          int64_t offB) {
+    OpInstance timer(sym.trsmStat);
+    DevPtrMirror<float> A(*data, offA);
+    DevPtrMirror<float> B(*data, offB);
+
+    float alpha(1.0);
+    cublasCHECK(cublasStrsmBatched(
+        sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
+        CUBLAS_DIAG_NON_UNIT, n, k, &alpha, A.ptr, n, B.ptr, n, data->size()));
+}
+
+template <>
+void CudaNumericCtx<vector<double*>>::saveSyrkGemm(int64_t m, int64_t n,
+                                                   int64_t k,
+                                                   const vector<double*>* data,
+                                                   int64_t offset) {
+    BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
+    OpInstance timer(sym.sygeStat);
+    DevPtrMirror<double> A(*data, offset);
+    double alpha(1.0), beta(0.0);
+    cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n,
+                                   k, &alpha, A.ptr, k, A.ptr, k, &beta,
+                                   devTempBufsDev.ptr, m, data->size()));
+    sym.gemmCalls++;
+}
+
+template <>
+void CudaNumericCtx<vector<float*>>::saveSyrkGemm(int64_t m, int64_t n,
+                                                  int64_t k,
+                                                  const vector<float*>* data,
+                                                  int64_t offset) {
+    BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
+    OpInstance timer(sym.sygeStat);
+    DevPtrMirror<float> A(*data, offset);
+    float alpha(1.0), beta(0.0);
+    cublasCHECK(cublasSgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n,
+                                   k, &alpha, A.ptr, k, A.ptr, k, &beta,
+                                   devTempBufsDev.ptr, m, data->size()));
+    sym.gemmCalls++;
+}
+
+// SolveCtx helpers
 template <typename T>
 __device__ static inline void stridedTransSub(T* dst, int64_t dstStride,
                                               const T* src, int64_t srcStride,
@@ -952,6 +1046,9 @@ NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
                                          skel.spanStart.size() - 1);
     } else if (tIdx == std::type_index(typeid(vector<double*>))) {
         return new CudaNumericCtx<vector<double*>>(
+            *this, tempBufSize, skel.spanStart.size() - 1, batchSize);
+    } else if (tIdx == std::type_index(typeid(vector<float*>))) {
+        return new CudaNumericCtx<vector<float*>>(
             *this, tempBufSize, skel.spanStart.size() - 1, batchSize);
     } else {
         return nullptr;
