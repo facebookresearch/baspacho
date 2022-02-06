@@ -37,8 +37,38 @@ struct BenchResults {
     double solve10Time;
 };
 
+// first access to Cuda/Cublas takes a long time
+#ifdef BASPACHO_USE_CUBLAS
+void bangGpu() {
+    static bool doneBang = false;
+    if (!doneBang) {
+        void* ptr;
+        vector<uint8_t> bytes(100000);
+        cuCHECK(cudaMalloc(&ptr, bytes.size() * sizeof(uint8_t)));
+        cuCHECK(cudaMemcpy(ptr, bytes.data(), bytes.size() * sizeof(uint8_t),
+                           cudaMemcpyHostToDevice));
+        cuCHECK(cudaMemcpy(bytes.data(), ptr, bytes.size() * sizeof(uint8_t),
+                           cudaMemcpyDeviceToHost));
+        cuCHECK(cudaFree(ptr));
+        cublasHandle_t cublasH = nullptr;
+        cusolverDnHandle_t cusolverDnH = nullptr;
+        cublasCHECK(cublasCreate(&cublasH));
+        cusolverCHECK(cusolverDnCreate(&cusolverDnH));
+        cublasCHECK(cublasDestroy(cublasH));
+        cusolverCHECK(cusolverDnDestroy(cusolverDnH));
+        doneBang = true;
+    }
+}
+#endif
+
 BenchResults benchmarkSolver(const SparseProblem& prob,
                              const Settings& settings, bool verbose) {
+#ifdef BASPACHO_USE_CUBLAS
+    if (settings.backend == BackendCuda) {
+        bangGpu();
+    }
+#endif
+
     auto startAnalysis = hrc::now();
     SolverPtr solver =
         createSolver(settings, prob.paramSize, prob.sparseStruct);
@@ -94,6 +124,8 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
 
     if (verbose) {
         solver->printStats();
+        cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges)
+             << endl;
         cout << "analysis: " << analysisTime << "s, factor: " << factorTime
              << "s, solve-1: " << solve1Time << "s, solve-10: " << solve10Time
              << "s" << endl
@@ -124,28 +156,30 @@ SparseProblem matGenToSparseProblem(SparseMatGenerator& gen, int64_t pSizeMin,
 map<string, function<SparseProblem(int64_t)>> problemGenerators = {
 
     // random entries
-    {"01_flat_size=1000_fill=0.1_bsize=3",
+    {"10_FLAT_size=1000_fill=0.1_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-    {"02_flat_size=4000_fill=0.01_bsize=3",
+    {"11_FLAT_size=4000_fill=0.01_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(4000, 0.01, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-    {"02b_flat_size=2000_fill=0.03_bsize=2-5",
+    {"12_FLAT_size=2000_fill=0.03_bsize=2-5",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(2000, 0.03, seed);
          return matGenToSparseProblem(gen, 2, 5);
      }},  //
-    {"03a_flat_size=1000_fill=0.1_bsize=3_schursize=50000_schurfill=0.02",
+
+    // random entries + schur
+    {"20_FLAT+SCHUR_size=1000_fill=0.1_bsize=3_schursize=50000_schurfill=0.02",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
          gen.addSchurSet(50000, 0.02);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-    {"03b_flat_size=1000_fill=0.1_bsize=3_schursize=5000_schurfill=0.0002",
+    {"21_FLAT+SCHUR_size=1000_fill=0.1_bsize=3_schursize=5000_schurfill=0.2",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genFlat(1000, 0.1, seed);
          gen.addSchurSet(5000, 0.0002);
@@ -153,25 +187,25 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
      }},  //
 
     // base is grid
-    {"04_grid_size=100x100_fill=1.0_conn=2_bsize=3",
+    {"30_GRID_size=100x100_fill=1.0_conn=2_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen =
              SparseMatGenerator::genGrid(100, 100, 1.0, 2, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-    {"05_grid_size=150x150_fill=1.0_conn=2_bsize=3",
+    {"31_GRID_size=150x150_fill=1.0_conn=2_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen =
              SparseMatGenerator::genGrid(150, 150, 1.0, 2, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-    {"06_grid_size=200x200_fill=0.25_conn=2_bsize=3",
+    {"32_GRID_size=200x200_fill=0.25_conn=2_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen =
              SparseMatGenerator::genGrid(200, 200, 0.25, 2, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-    {"07_grid_size=200x200_fill=0.05_conn=3_bsize=3",
+    {"33_GRID_size=200x200_fill=0.05_conn=3_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen =
              SparseMatGenerator::genGrid(150, 150, 0.05, 3, seed);
@@ -179,13 +213,13 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
      }},  //
 
     // base is meridians
-    {"08_meri_size=1500_n=4_hairlen=600_hairs=2_band=120_fill=0.1_bsize=3",
+    {"40_MERI_size=1500_n=4_hairlen=600_hairs=2_band=120_fill=0.1_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genMeridians(
              4, 1500, 0.5, 120, 600, 2, 2, seed);
          return matGenToSparseProblem(gen, 3, 3);
      }},  //
-    {"09_meri_size=1500_n=7_hairlen=600_hairs=2_band=120_fill=0.1_bsize=3",
+    {"41_MERI_size=1500_n=7_hairlen=600_hairs=2_band=120_fill=0.1_bsize=3",
      [](int64_t seed) -> SparseProblem {
          SparseMatGenerator gen = SparseMatGenerator::genMeridians(
              7, 1500, 0.5, 120, 600, 2, 2, seed);
@@ -224,7 +258,7 @@ map<string, function<BenchResults(const SparseProblem&, bool)>> solvers = {
      [](const SparseProblem& prob, bool verbose) -> BenchResults {
          return benchmarkSolver(
              prob,
-             {.findSparseEliminationRanges = false, .backend = BackendCuda},
+             {.findSparseEliminationRanges = true, .backend = BackendCuda},
              verbose);
      }},
 #endif  // BASPACHO_USE_CUBLAS
@@ -238,6 +272,18 @@ struct BenchmarkSettings {
     regex selectSolvers = regex("");
     regex excludeSolvers;
     string referenceSolver;
+    set<string> operations = {"factor"};
+};
+
+static constexpr char* ANALYSIS = "analysis";
+static constexpr char* FACTOR = "factor";
+static constexpr char* SOLVE_1 = "solve-1";
+static constexpr char* SOLVE_10 = "solve-10";
+map<string, string> timingLabels = {
+    {ANALYSIS, "Symbolic analysis and precomputing of needed indices"},
+    {FACTOR, "Numeric computation of matrix factorization"},
+    {SOLVE_1, "Solve Ax=b with b having one column (nRHS=1)"},
+    {SOLVE_10, "Solve Ax=b with b having 10 columns (nRHS=10)"},
 };
 
 void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
@@ -267,7 +313,7 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
 
         cout << "\nProblem type: " << probName << endl;
 
-        map<string, vector<double>> factorTimings;
+        map<string, map<string, vector<double>>> timingSets;
         int prevLen = 0;
         for (int it = 0; it < settings.numIterations; it++) {
             SparseProblem prob = gen(seed + it * 1000000);
@@ -299,7 +345,13 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
                 }
 
                 auto benchResults = solv(prob, settings.verbose);
-                factorTimings[solvName].push_back(benchResults.factorTime);
+                timingSets[ANALYSIS][solvName].push_back(
+                    benchResults.analysisTime);
+                timingSets[FACTOR][solvName].push_back(benchResults.factorTime);
+                timingSets[SOLVE_1][solvName].push_back(
+                    benchResults.solve1Time);
+                timingSets[SOLVE_10][solvName].push_back(
+                    benchResults.solve10Time);
             }
         }
         stringstream ss;
@@ -310,42 +362,91 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
         int clearSize = max(0, prevLen - (int)str.size());
         cout << "\r" << str << setfill(' ') << setw(clearSize) << "" << endl;
 
-        if (settings.referenceSolver.empty()) {
-            for (auto [solvName, timings] : factorTimings) {
-                cout << solvName << ":\n  " << printVec(timings) << endl;
+        for (auto [label, solverTimings] : timingSets) {
+            if (settings.operations.find(label) == settings.operations.end()) {
+                continue;
             }
-        } else {
-            auto it = factorTimings.find(settings.referenceSolver);
-            BASPACHO_CHECK(it != factorTimings.end());
-            const vector<double>& refTimings = it->second;
-            for (auto [solvName, timings] : factorTimings) {
+            cout << "Operation: " << label << endl;
+            auto it = solverTimings.find(settings.referenceSolver);
+            const vector<double>* refTimings =
+                (it != solverTimings.end()) ? &it->second : nullptr;
+            if (refTimings) {
+                auto& timings = *refTimings;
+                stringstream ss;
+                ss << "- " << settings.referenceSolver
+                   << " (basis for comparison):\n    ";
+                for (size_t i = 0; i < timings.size(); i++) {
+                    stringstream tss;
+                    if (timings[i] > 0.1) {
+                        tss << fixed << setprecision(3) << timings[i] << "s";
+                    } else {
+                        tss << fixed << setprecision(1) << timings[i] * 1000
+                            << "ms";
+                    }
+                    tss << (i == timings.size() - 1 ? "" : ", ");
+                    ss << left << setfill(' ') << setw(20) << tss.str();
+                }
+                cout << ss.str() << endl;
+            }
+            for (auto [solvName, timings] : solverTimings) {
                 if (solvName == settings.referenceSolver) {
                     continue;
                 }
 
                 stringstream ss;
-                ss << "Timings of " << solvName << " vs. "
-                   << settings.referenceSolver << ": [";
-                for (size_t i = 0; i < timings.size(); i++) {
-                    double percent = (timings[i] / refTimings[i] - 1.0) * 100.0;
-                    ss << (i == 0 ? "" : ", ") << (percent > 0 ? "+" : "")
-                       << fixed << std::setprecision(2) << percent << "%";
+                ss << "- " << solvName;
+                if (refTimings) {
+                    ss << " (vs. " << settings.referenceSolver << ")";
                 }
-                ss << "]";
+                ss << ":\n    ";
+                for (size_t i = 0; i < timings.size(); i++) {
+                    stringstream tss;
+                    if (timings[i] > 0.1) {
+                        tss << fixed << setprecision(3) << timings[i] << "s";
+                    } else {
+                        tss << fixed << setprecision(1) << timings[i] * 1000
+                            << "ms";
+                    }
+                    if (refTimings) {
+                        double percent =
+                            (timings[i] / (*refTimings)[i] - 1.0) * 100.0;
+                        tss << " (" << (percent > 0 ? "+" : "") << fixed
+                            << setprecision(2) << percent << "%)";
+                    }
+                    tss << (i == timings.size() - 1 ? "" : ", ");
+                    ss << left << setfill(' ') << setw(20) << tss.str();
+                }
                 cout << ss.str() << endl;
             }
         }
     }
 }
 
-void list() {
-    cout << "Problem generators:" << endl;
-    for (auto [probName, gen] : problemGenerators) {
-        cout << "  " << probName << endl;
+void help() {
+    cout << "This program runs a benchmark of several solver configurations"
+         << "\non different synthetic problem types, printing timings and"
+         << "\nrelative timings for different operations"
+         << "\n -n number    [n]umber of problem per type (default: 5)"
+         << "\n -S regex     regex for selecting [S]olver types"
+         << "\n -E regex     regex for [E]xcluding solver types"
+         << "\n -R regex     [R]egex for selecting problem types"
+         << "\n -X regex     regex for e[X]cluding problem types"
+         << "\n -B solver    solver selected as [B]baseline"
+         << "\n -O ops       comma-sep list of operations (default: factor)"
+         << endl;
+
+    cout << "\nOperations:" << endl;
+    for (const auto& [label, desc] : timingLabels) {
+        cout << "  " << left << setfill(' ') << setw(15) << label << desc
+             << endl;
     }
-    cout << "Solvers:" << endl;
-    for (auto [solvName, solv] : solvers) {
+    cout << "\nSolvers:" << endl;
+    for (const auto& [solvName, solv] : solvers) {
         cout << "  " << solvName << endl;
+    }
+    cout << "\nProblem generators:" << endl;
+    for (const auto& [probName, gen] : problemGenerators) {
+        cout << "  " << probName << endl;
     }
 }
 
@@ -355,8 +456,8 @@ int main(int argc, char* argv[]) {
     settings.verbose = false;
 
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-l")) {
-            list();
+        if (!strcmp(argv[i], "-h")) {
+            help();
             return 0;
         }
         if (!strcmp(argv[i], "-v")) {
@@ -373,6 +474,21 @@ int main(int argc, char* argv[]) {
             settings.excludeSolvers = regex(argv[++i]);
         } else if (!strcmp(argv[i], "-B") && i < argc - 1) {
             settings.referenceSolver = argv[++i];
+        } else if (!strcmp(argv[i], "-O") && i < argc - 1) {
+            stringstream ss(argv[++i]);
+            set<string> result;
+
+            while (ss.good()) {
+                string substr;
+                getline(ss, substr, ',');
+                if (timingLabels.find(substr) == timingLabels.end()) {
+                    cerr << "Operation '" << substr << "' does not exist! (-h)"
+                         << endl;
+                    return 1;
+                }
+                result.insert(substr);
+            }
+            settings.operations = result;
         }
     }
 
