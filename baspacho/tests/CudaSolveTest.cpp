@@ -135,7 +135,7 @@ void testSolveLt_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps,
         SparseStructure sortedSs = ss;
 
         vector<int64_t> paramSize =
-            randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
+            randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
         et.computeMerges(/* compute sparse elim ranges = */ true);
@@ -148,7 +148,7 @@ void testSolveLt_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps,
         factorSkel.damp(data, T(0.0), T(factorSkel.order() * 1.5));
 
         int64_t order = factorSkel.order();
-        vector<T> rhsData = randomData<T>(order * nRHS, -1.0, 1.0, 37);
+        vector<T> rhsData = randomData<T>(order * nRHS, -1.0, 1.0, 37 + i);
         vector<T> rhsVerif(order * nRHS);
         Matrix<T> verifyMat = factorSkel.densify(data);
         Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS) =
@@ -195,7 +195,7 @@ void testSolveL_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps,
         SparseStructure sortedSs = ss;
 
         vector<int64_t> paramSize =
-            randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
+            randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
         et.computeMerges(/* compute sparse elim ranges = */ true);
@@ -208,7 +208,7 @@ void testSolveL_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps,
         factorSkel.damp(data, T(0.0), T(factorSkel.order() * 1.5));
 
         int64_t order = factorSkel.order();
-        vector<T> rhsData = randomData<T>(order * nRHS, -1.0, 1.0, 37);
+        vector<T> rhsData = randomData<T>(order * nRHS, -1.0, 1.0, 37 + i);
         vector<T> rhsVerif(order * nRHS);
         Matrix<T> verifyMat = factorSkel.densify(data);
         Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS) =
@@ -226,23 +226,6 @@ void testSolveL_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps,
             solver.solveL(dataGpu.ptr, rhsDataGpu.ptr, order, nRHS);
             rhsDataGpu.get(rhsData);
         }
-
-        /*int eq = 0;
-        while ((Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS) -
-                Eigen::Map<Matrix<T>>(rhsData.data(), order, nRHS))
-                   .topRows(eq)
-                   .norm() < Epsilon<T>::value) {
-            eq++;
-        }
-
-        cout << "verif:\n"
-             << Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS).topRows(10)
-             << endl;
-        cout << "data:\n"
-             << Eigen::Map<Matrix<T>>(rhsData.data(), order, nRHS).topRows(10)
-             << endl;
-        cout << "ranges: " << printVec(solver.elimLumpRanges) << endl;
-        cout << "eq up to: " << eq << endl;*/
 
         ASSERT_NEAR((Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS) -
                      Eigen::Map<Matrix<T>>(rhsData.data(), order, nRHS))

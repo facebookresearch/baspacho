@@ -1239,6 +1239,33 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
                                   int64_t lumpsEnd, vector<T*>* C,
                                   int64_t ldc) override {
         OpInstance timer(sym.solveSparseLStat);
+
+        DevPtrMirror<T> datas(*data, 0);
+        DevPtrMirror<T> Cs(*C, 0);
+
+        int batchWgs = 32;
+        while (batchWgs / 2 >= C->size()) {
+            batchWgs /= 2;
+        }
+        int batchGroups = (C->size() + batchWgs - 1) / batchWgs;
+        int wgs = 32 / batchWgs;
+        int numGroups = (lumpsEnd - lumpsBegin + wgs - 1) / wgs;
+        dim3 gridDim(numGroups, batchGroups);
+        dim3 blockDim(wgs, batchWgs);
+
+        sparseElim_diagSolveL<T*><<<gridDim, blockDim>>>(
+            sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+            datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
+            Batched{.batchSize = (int)C->size()});
+        cuCHECK(cudaDeviceSynchronize());
+
+        // TODO: consider "straightening" inner loop
+        sparseElim_subDiagMult<T*><<<gridDim, blockDim>>>(
+            sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
+            sym.devChainRowSpan.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr,
+            ldc, nRHS, lumpsBegin, lumpsEnd,
+            Batched{.batchSize = (int)C->size()});
+        cuCHECK(cudaDeviceSynchronize());
     }
 
     virtual void sparseElimSolveLt(const SymElimCtx& elimData,
@@ -1246,6 +1273,33 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
                                    int64_t lumpsEnd, vector<T*>* C,
                                    int64_t ldc) override {
         OpInstance timer(sym.solveSparseLtStat);
+
+        DevPtrMirror<T> datas(*data, 0);
+        DevPtrMirror<T> Cs(*C, 0);
+
+        int batchWgs = 32;
+        while (batchWgs / 2 >= C->size()) {
+            batchWgs /= 2;
+        }
+        int batchGroups = (C->size() + batchWgs - 1) / batchWgs;
+        int wgs = 32 / batchWgs;
+        int numGroups = (lumpsEnd - lumpsBegin + wgs - 1) / wgs;
+        dim3 gridDim(numGroups, batchGroups);
+        dim3 blockDim(wgs, batchWgs);
+
+        // TODO: consider "straightening" inner loop
+        sparseElim_subDiagMultT<T*><<<gridDim, blockDim>>>(
+            sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
+            sym.devChainRowSpan.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr,
+            ldc, nRHS, lumpsBegin, lumpsEnd,
+            Batched{.batchSize = (int)C->size()});
+        cuCHECK(cudaDeviceSynchronize());
+
+        sparseElim_diagSolveLt<T*><<<gridDim, blockDim>>>(
+            sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+            datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
+            Batched{.batchSize = (int)C->size()});
+        cuCHECK(cudaDeviceSynchronize());
     }
 
     virtual void solveL(const vector<T*>* data, int64_t offM, int64_t n,
