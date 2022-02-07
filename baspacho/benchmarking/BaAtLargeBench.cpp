@@ -196,16 +196,17 @@ void testSolvers(Data& data) {
         cout << "Testing CHOLMOD (on reduced Camera-Camera matrix)" << endl;
         {
             cout << "heating up factor..." << endl;
-            benchmarkCholmodSolve(camSz, camCamSs, false);
+            benchmarkCholmodSolve(camSz, camCamSs, {1, 10}, false);
             cout << "running real benchmark..." << endl;
         }
-        auto results = benchmarkCholmodSolve(camSz, camCamSs, true);
+        auto results = benchmarkCholmodSolve(camSz, camCamSs, {1, 10}, true);
         cout << "Cam-Cam Analysis Time: " << results.analysisTime << "s"
              << endl;
         cout << "Cam-Cam Factor Time..: " << results.factorTime << "s" << endl;
-        cout << "Cam-Cam Solve-1 Time.: " << results.solve1Time << "s" << endl;
-        cout << "Cam-Cam Solve-" << results.nRHS
-             << " Time.: " << results.solveNRHSTime << "s" << endl;
+        for (auto [nRHS, timing] : results.solveTimes) {
+            cout << "Cam-Cam Solve-" << nRHS << " Time.: " << timing << "s"
+                 << endl;
+        }
     }
 #endif  // BASPACHO_HAVE_CHOLMOD
 }

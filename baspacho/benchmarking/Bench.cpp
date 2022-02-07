@@ -33,9 +33,7 @@ struct SparseProblem {
 struct BenchResults {
     double analysisTime;
     double factorTime;
-    double solve1Time;
-    double solve2Time;
-    double solve10Time;
+    map<int64_t, double> solveTimes;
 };
 
 // first access to Cuda/Cublas takes a long time
@@ -63,7 +61,9 @@ void bangGpu() {
 #endif
 
 BenchResults benchmarkSolver(const SparseProblem& prob,
-                             const Settings& settings, bool verbose) {
+                             const Settings& settings,
+                             const std::vector<int64_t> nRHSs = {},
+                             bool verbose = true) {
 #ifdef BASPACHO_USE_CUBLAS
     if (settings.backend == BackendCuda) {
         bangGpu();
@@ -80,14 +80,9 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
         randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
     solver->factorSkel.damp(data, double(0),
                             double(solver->factorSkel.order() * 1.2));
-    vector<double> vecData1 =
-        randomData(solver->factorSkel.order(), -1.0, 1.0, 38);
-    vector<double> vecData2 =
-        randomData(2 * solver->factorSkel.order(), -1.0, 1.0, 38);
-    vector<double> vecData10 =
-        randomData(10 * solver->factorSkel.order(), -1.0, 1.0, 38);
 
-    double factorTime, solve1Time = 0, solve2Time = 0, solve10Time = 0;
+    double factorTime;
+    std::map<int64_t, double> solveTimes;
 #ifdef BASPACHO_USE_CUBLAS
     if (settings.backend == BackendCuda) {
         DevMirror dataGpu(data);
@@ -95,24 +90,15 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
         solver->factor(dataGpu.ptr);
         factorTime = tdelta(hrc::now() - startFactor).count();
 
-        DevMirror vecData1Gpu(vecData1);
-        DevMirror vecData2Gpu(vecData2);
-        DevMirror vecData10Gpu(vecData10);
+        for (int64_t nRHS : nRHSs) {
+            vector<double> vecData =
+                randomData(nRHS * solver->order(), -1.0, 1.0, 38);
+            DevMirror vecDataGpu(vecData);
 
-        auto startSolve1 = hrc::now();
-        solver->solve(dataGpu.ptr, vecData1Gpu.ptr, solver->factorSkel.order(),
-                      1);
-        solve1Time = tdelta(hrc::now() - startSolve1).count();
-
-        auto startSolve2 = hrc::now();
-        solver->solve(dataGpu.ptr, vecData2Gpu.ptr, solver->factorSkel.order(),
-                      1);
-        solve2Time = tdelta(hrc::now() - startSolve2).count();
-
-        auto startSolve10 = hrc::now();
-        solver->solve(dataGpu.ptr, vecData10Gpu.ptr, solver->factorSkel.order(),
-                      10);
-        solve10Time = tdelta(hrc::now() - startSolve10).count();
+            auto startSolve = hrc::now();
+            solver->solve(dataGpu.ptr, vecDataGpu.ptr, solver->order(), 1);
+            solveTimes[nRHS] = tdelta(hrc::now() - startSolve).count();
+        }
     } else
 #endif  // BASPACHO_USE_CUBLAS
     {
@@ -120,38 +106,26 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
         solver->factor(data.data(), verbose);
         factorTime = tdelta(hrc::now() - startFactor).count();
 
-        auto startSolve1 = hrc::now();
-        solver->solve(data.data(), vecData1.data(), solver->factorSkel.order(),
-                      1);
-        solve1Time = tdelta(hrc::now() - startSolve1).count();
+        for (int64_t nRHS : nRHSs) {
+            vector<double> vecData =
+                randomData(nRHS * solver->order(), -1.0, 1.0, 38);
 
-        auto startSolve2 = hrc::now();
-        solver->solve(data.data(), vecData2.data(), solver->factorSkel.order(),
-                      2);
-        solve2Time = tdelta(hrc::now() - startSolve2).count();
-
-        auto startSolve10 = hrc::now();
-        solver->solve(data.data(), vecData10.data(), solver->factorSkel.order(),
-                      10);
-        solve10Time = tdelta(hrc::now() - startSolve10).count();
+            auto startSolve = hrc::now();
+            solver->solve(data.data(), vecData.data(), solver->order(), 1);
+            solveTimes[nRHS] = tdelta(hrc::now() - startSolve).count();
+        }
     }
 
     if (verbose) {
         solver->printStats();
         cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges)
              << endl;
-        cout << "analysis: " << analysisTime << "s, factor: " << factorTime
-             << "s, solve-1: " << solve1Time << "s, solve-2: " << solve2Time
-             << "s, solve-10: " << solve10Time << "s" << endl
-             << endl;
     }
 
     BenchResults retv;
     retv.analysisTime = analysisTime;
     retv.factorTime = factorTime;
-    retv.solve1Time = solve1Time;
-    retv.solve2Time = solve2Time;
-    retv.solve10Time = solve10Time;
+    retv.solveTimes = solveTimes;
     return retv;
 }
 
@@ -242,42 +216,36 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
      }},  //
 };
 
-map<string, function<BenchResults(const SparseProblem&, bool)>> solvers = {
+map<string, function<BenchResults(const SparseProblem&,
+                                  const std::vector<int64_t>& nRHSs, bool)>>
+    solvers = {
 #ifdef BASPACHO_HAVE_CHOLMOD
-    {"1_CHOLMOD",
-     [](const SparseProblem& prob, bool verbose) -> BenchResults {
-         auto result =
-             benchmarkCholmodSolve(prob.paramSize, prob.sparseStruct, verbose);
-         BASPACHO_CHECK_EQ(result.nRHS, 10);
-         if (verbose) {
-             cout << "analysis: " << result.analysisTime
-                  << "s, factor: " << result.factorTime
-                  << "s, solve-1: " << result.solve1Time
-                  << "s, solve-2: " << result.solve2Time
-                  << "s, solve-10: " << result.solveNRHSTime << "s" << endl
-                  << endl;
-         }
-         BenchResults retv;
-         retv.analysisTime = result.analysisTime;
-         retv.factorTime = result.factorTime;
-         retv.solve1Time = result.solve1Time;
-         retv.solve2Time = result.solve2Time;
-         retv.solve10Time = result.solveNRHSTime;
-         return retv;
-     }},
+        {"1_CHOLMOD",
+         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
+            bool verbose) -> BenchResults {
+             auto result = benchmarkCholmodSolve(
+                 prob.paramSize, prob.sparseStruct, nRHSs, verbose);
+             BenchResults retv;
+             retv.analysisTime = result.analysisTime;
+             retv.factorTime = result.factorTime;
+             retv.solveTimes = result.solveTimes;
+             return retv;
+         }},
 #endif  // BASPACHO_HAVE_CHOLMOD
-    {"2_BaSpaCho_BLAS_nth=16",
-     [](const SparseProblem& prob, bool verbose) -> BenchResults {
-         return benchmarkSolver(prob, {}, verbose);
-     }},  //
+        {"2_BaSpaCho_BLAS_nth=16",
+         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
+            bool verbose) -> BenchResults {
+             return benchmarkSolver(prob, {}, nRHSs, verbose);
+         }},  //
 #ifdef BASPACHO_USE_CUBLAS
-    {"3_BaSpaCho_CUDA",
-     [](const SparseProblem& prob, bool verbose) -> BenchResults {
-         return benchmarkSolver(
-             prob,
-             {.findSparseEliminationRanges = true, .backend = BackendCuda},
-             verbose);
-     }},
+        {"3_BaSpaCho_CUDA",
+         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
+            bool verbose) -> BenchResults {
+             return benchmarkSolver(
+                 prob,
+                 {.findSparseEliminationRanges = true, .backend = BackendCuda},
+                 nRHSs, verbose);
+         }},
 #endif  // BASPACHO_USE_CUBLAS
 };
 
@@ -289,20 +257,17 @@ struct BenchmarkSettings {
     regex selectSolvers = regex("");
     regex excludeSolvers;
     string referenceSolver;
+    vector<int64_t> nRHSs;
     set<string> operations = {"factor"};
 };
 
-static constexpr char* ANALYSIS = "analysis";
-static constexpr char* FACTOR = "factor";
-static constexpr char* SOLVE_1 = "solve-1";
-static constexpr char* SOLVE_2 = "solve-2";
-static constexpr char* SOLVE_10 = "solve-10";
+static string ANALYSIS = "analysis";
+static string FACTOR = "factor";
+static string SOLVE_ = "solve-";
 map<string, string> timingLabels = {
     {ANALYSIS, "Symbolic analysis and precomputing of needed indices"},
     {FACTOR, "Numeric computation of matrix factorization"},
-    {SOLVE_1, "Solve Ax=b with b having one column (nRHS=1)"},
-    {SOLVE_2, "Solve Ax=b with b having 2 columns (nRHS=2)"},
-    {SOLVE_10, "Solve Ax=b with b having 10 columns (nRHS=10)"},
+    {SOLVE_ + "X", "Solve Ax=b with b having X columns (nRHS=X)"},
 };
 
 void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
@@ -363,16 +328,26 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
                     cout << endl;
                 }
 
-                auto benchResults = solv(prob, settings.verbose);
+                auto benchResults =
+                    solv(prob, settings.nRHSs, settings.verbose);
+
+                if (settings.verbose) {
+                    stringstream ss;
+                    ss << "analysis: " << benchResults.analysisTime
+                       << "s, factor: " << benchResults.factorTime << "s";
+                    for (auto [nRHS, timing] : benchResults.solveTimes) {
+                        ss << ", solve-" << nRHS << ": " << timing << "s";
+                    }
+                    cout << ss.str() << endl << endl;
+                }
+
                 timingSets[ANALYSIS][solvName].push_back(
                     benchResults.analysisTime);
                 timingSets[FACTOR][solvName].push_back(benchResults.factorTime);
-                timingSets[SOLVE_1][solvName].push_back(
-                    benchResults.solve1Time);
-                timingSets[SOLVE_2][solvName].push_back(
-                    benchResults.solve2Time);
-                timingSets[SOLVE_10][solvName].push_back(
-                    benchResults.solve10Time);
+                for (auto [nRHS, timing] : benchResults.solveTimes) {
+                    timingSets[SOLVE_ + to_string(nRHS)][solvName].push_back(
+                        timing);
+                }
             }
         }
         stringstream ss;
@@ -497,19 +472,39 @@ int main(int argc, char* argv[]) {
             settings.referenceSolver = argv[++i];
         } else if (!strcmp(argv[i], "-O") && i < argc - 1) {
             stringstream ss(argv[++i]);
-            set<string> result;
+            set<string> operations;
+            set<int64_t> nRHSs;
 
             while (ss.good()) {
                 string substr;
                 getline(ss, substr, ',');
+                if (substr.rfind(SOLVE_, 0) == 0) {
+                    std::string arg = substr.substr(SOLVE_.size());
+                    try {
+                        size_t endpos;
+                        int64_t nRHS = stoi(arg, &endpos);
+                        if (nRHS < 1 || endpos != arg.size()) {
+                            throw exception();
+                        }
+                        nRHSs.insert(nRHS);
+                        operations.insert(SOLVE_ + to_string(nRHS));
+                    } catch (...) {
+                        cerr << "Invalid argument '" << arg << "' for '"
+                             << SOLVE_ << "' option, must be an integer >=1"
+                             << endl;
+                        return 1;
+                    }
+                    continue;
+                }
                 if (timingLabels.find(substr) == timingLabels.end()) {
                     cerr << "Operation '" << substr << "' does not exist! (-h)"
                          << endl;
                     return 1;
                 }
-                result.insert(substr);
+                operations.insert(substr);
             }
-            settings.operations = result;
+            settings.nRHSs.assign(nRHSs.begin(), nRHSs.end());
+            settings.operations = operations;
         }
     }
 

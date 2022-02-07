@@ -17,6 +17,7 @@ using tdelta = chrono::duration<double>;
 
 CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
                                           const SparseStructure& ss,
+                                          const std::vector<int64_t>& nRHSs,
                                           int verbose) {
     BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
     vector<int64_t> rowPtr, colInd;
@@ -52,24 +53,6 @@ CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
     }
     if (verbose >= 2) {
         std::cout << "to csr done." << std::endl;
-    }
-
-    int nRHS = 10;
-    vector<double> vecData(rowPtr.size() - 1);
-    vector<double> vecData2(2 * vecData.size());
-    vector<double> vecDataMany(nRHS * vecData.size());
-    for (size_t i = 0; i < vecData.size(); i++) {
-        vecData[i] = unif(gen);
-    }
-    for (size_t i = 0; i < vecData2.size(); i++) {
-        vecData2[i] = unif(gen);
-    }
-    for (size_t i = 0; i < vecDataMany.size(); i++) {
-        vecDataMany[i] = unif(gen);
-    }
-
-    if (verbose >= 2) {
-        std::cout << "vec gen done." << std::endl;
     }
 
     cholmod_common cc_;
@@ -200,64 +183,28 @@ CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
             exit(1);
     }
 
-    // solve, nRHS = 1
-    double solve1Time;
-    {
+    // solve, nRHS = ...
+    std::map<int64_t, double> solveTimes;
+    for (int64_t nRHS : nRHSs) {
+        int64_t order = rowPtr.size() - 1;
+        vector<double> vecData(nRHS * order);
+        for (size_t i = 0; i < vecData.size(); i++) {
+            vecData[i] = unif(gen);
+        }
+
         cholmod_dense b;
-        b.nrow = vecData.size();
+        b.nrow = order;
         b.ncol = 1;
         b.nzmax = b.nrow * b.ncol;
-        b.d = vecData.size();  // leading dimension
+        b.d = order;  // leading dimension
         b.x = (void*)(vecData.data());
         b.z = nullptr;
         b.xtype = CHOLMOD_REAL;
         auto startSolve1 = hrc::now();
         cholmod_dense* x = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
-        solve1Time = tdelta(hrc::now() - startSolve1).count();
+        solveTimes[nRHS] = tdelta(hrc::now() - startSolve1).count();
         if (!x) {
             std::cerr << "Cholmod solve failed! nRHS = " << 1 << std::endl;
-            exit(1);
-        }
-        cholmod_l_free_dense(&x, &cc_);
-    }
-
-    // solve nRHS = 2
-    double solve2Time;
-    {
-        cholmod_dense b;
-        b.nrow = vecData.size();
-        b.ncol = 2;
-        b.nzmax = b.nrow * b.ncol;
-        b.d = vecData2.size();  // leading dimension
-        b.x = (void*)(vecData2.data());
-        b.z = nullptr;
-        b.xtype = CHOLMOD_REAL;
-        auto startSolve2 = hrc::now();
-        cholmod_dense* x = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
-        solve2Time = tdelta(hrc::now() - startSolve2).count();
-        if (!x) {
-            std::cerr << "Cholmod solve failed! nRHS = " << nRHS << std::endl;
-            exit(1);
-        }
-        cholmod_l_free_dense(&x, &cc_);
-    }
-
-    // solve nRHS = 10
-    double solveNRHSTime;
-    {
-        cholmod_dense b;
-        b.nrow = vecData.size();
-        b.ncol = nRHS;
-        b.nzmax = b.nrow * b.ncol;
-        b.d = vecData.size();  // leading dimension
-        b.x = (void*)(vecDataMany.data());
-        b.z = nullptr;
-        b.xtype = CHOLMOD_REAL;
-        auto startSolveNRHS = hrc::now();
-        cholmod_dense* x = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
-        solveNRHSTime = tdelta(hrc::now() - startSolveNRHS).count();
-        if (!x) {
-            std::cerr << "Cholmod solve failed! nRHS = " << nRHS << std::endl;
             exit(1);
         }
         cholmod_l_free_dense(&x, &cc_);
@@ -271,10 +218,7 @@ CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
     CholmodBenchResults retv;
     retv.analysisTime = analysisTime;
     retv.factorTime = factorTime;
-    retv.solve1Time = solve1Time;
-    retv.solve2Time = solve2Time;
-    retv.solveNRHSTime = solveNRHSTime;
-    retv.nRHS = nRHS;
+    retv.solveTimes = solveTimes;
 
     return retv;
 }
