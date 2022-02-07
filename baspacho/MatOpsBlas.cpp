@@ -384,6 +384,7 @@ struct BlasSolveCtx : SolveCtx<T> {
     virtual void sparseElimSolveL(const SymElimCtx& elimData, const T* data,
                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
                                   int64_t ldc) override {
+        OpInstance timer(sym.solveSparseLStat);
         const CpuBaseSymElimCtx* pElim =
             dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
         BASPACHO_CHECK_NOTNULL(pElim);
@@ -504,6 +505,7 @@ struct BlasSolveCtx : SolveCtx<T> {
     virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
                                    int64_t lumpsBegin, int64_t lumpsEnd, T* C,
                                    int64_t ldc) override {
+        OpInstance timer(sym.solveSparseLtStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
 
         if (!sym.useThreads) {
@@ -595,6 +597,7 @@ struct BlasSolveCtx : SolveCtx<T> {
 
     virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
                              int64_t ldc) override {
+        OpInstance timer(sym.solveAssVStat);
         const T* A = tmpBuf.data();
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
@@ -634,6 +637,7 @@ struct BlasSolveCtx : SolveCtx<T> {
     virtual void assembleVecT(const T* C, int64_t ldc, /* int64_t nRHS, T* A, */
                               int64_t chainColPtr,
                               int64_t numColItems) override {
+        OpInstance timer(sym.solveAssVTStat);
         T* A = tmpBuf.data();
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
@@ -659,6 +663,7 @@ struct BlasSolveCtx : SolveCtx<T> {
 template <>
 void BlasSolveCtx<double>::solveL(const double* data, int64_t offM, int64_t n,
                                   double* C, int64_t offC, int64_t ldc) {
+    OpInstance timer(sym.solveLStat);
     cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
                 CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
 }
@@ -666,6 +671,7 @@ void BlasSolveCtx<double>::solveL(const double* data, int64_t offM, int64_t n,
 template <>
 void BlasSolveCtx<float>::solveL(const float* data, int64_t offM, int64_t n,
                                  float* C, int64_t offC, int64_t ldc) {
+    OpInstance timer(sym.solveLStat);
     cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasConjTrans,
                 CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
 }
@@ -674,6 +680,7 @@ template <>
 void BlasSolveCtx<double>::gemv(const double* data, int64_t offM, int64_t nRows,
                                 int64_t nCols, const double* A, int64_t offA,
                                 int64_t lda) {
+    OpInstance timer(sym.solveGemvStat);
     cblas_dgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, nRHS, nRows, nCols,
                 1.0, A + offA, lda, data + offM, nCols, 0.0, tmpBuf.data(),
                 nRHS);
@@ -683,6 +690,7 @@ template <>
 void BlasSolveCtx<float>::gemv(const float* data, int64_t offM, int64_t nRows,
                                int64_t nCols, const float* A, int64_t offA,
                                int64_t lda) {
+    OpInstance timer(sym.solveGemvStat);
     cblas_sgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, nRHS, nRows, nCols,
                 1.0, A + offA, lda, data + offM, nCols, 0.0, tmpBuf.data(),
                 nRHS);
@@ -691,6 +699,7 @@ void BlasSolveCtx<float>::gemv(const float* data, int64_t offM, int64_t nRows,
 template <>
 void BlasSolveCtx<double>::solveLt(const double* data, int64_t offM, int64_t n,
                                    double* C, int64_t offC, int64_t ldc) {
+    OpInstance timer(sym.solveLtStat);
     cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans,
                 CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
 }
@@ -698,6 +707,7 @@ void BlasSolveCtx<double>::solveLt(const double* data, int64_t offM, int64_t n,
 template <>
 void BlasSolveCtx<float>::solveLt(const float* data, int64_t offM, int64_t n,
                                   float* C, int64_t offC, int64_t ldc) {
+    OpInstance timer(sym.solveLtStat);
     cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans,
                 CblasNonUnit, n, nRHS, 1.0, data + offM, n, C + offC, ldc);
 }
@@ -706,6 +716,7 @@ template <>
 void BlasSolveCtx<double>::gemvT(const double* data, int64_t offM,
                                  int64_t nRows, int64_t nCols, double* A,
                                  int64_t offA, int64_t lda) {
+    OpInstance timer(sym.solveGemvTStat);
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, nCols, nRHS, nRows,
                 -1.0, data + offM, nCols, tmpBuf.data(), nRHS, 1.0, A + offA,
                 lda);
@@ -715,6 +726,7 @@ template <>
 void BlasSolveCtx<float>::gemvT(const float* data, int64_t offM, int64_t nRows,
                                 int64_t nCols, float* A, int64_t offA,
                                 int64_t lda) {
+    OpInstance timer(sym.solveGemvTStat);
     cblas_sgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, nCols, nRHS, nRows,
                 -1.0, data + offM, nCols, tmpBuf.data(), nRHS, 1.0, A + offA,
                 lda);

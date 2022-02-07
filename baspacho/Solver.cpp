@@ -225,16 +225,24 @@ void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
     internalSolveLt(*slvCtx, matData, vecData, stride);
 }
 
+static constexpr bool SparseElimSolve = true;
+
 template <typename T>
 void Solver::internalSolveL(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
                             int64_t stride) const {
-    for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
-        slvCtx.sparseElimSolveL(*elimCtxs[l], matData, elimLumpRanges[l],
-                                elimLumpRanges[l + 1], vecData, stride);
-    }
+    int64_t denseOpsFromLump;
+    if (SparseElimSolve) {
+        for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
+            slvCtx.sparseElimSolveL(*elimCtxs[l], matData, elimLumpRanges[l],
+                                    elimLumpRanges[l + 1], vecData, stride);
+        }
 
-    int64_t denseOpsFromLump =
-        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
+        denseOpsFromLump = elimLumpRanges.size()
+                               ? elimLumpRanges[elimLumpRanges.size() - 1]
+                               : 0;
+    } else {
+        denseOpsFromLump = 0;
+    }
 
     for (int64_t l = denseOpsFromLump;
          l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
@@ -273,8 +281,14 @@ void Solver::internalSolveL(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
 template <typename T>
 void Solver::internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
                              int64_t stride) const {
-    int64_t denseOpsFromLump =
-        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
+    int64_t denseOpsFromLump;
+    if (SparseElimSolve) {
+        denseOpsFromLump = elimLumpRanges.size()
+                               ? elimLumpRanges[elimLumpRanges.size() - 1]
+                               : 0;
+    } else {
+        denseOpsFromLump = 0;
+    }
 
     for (int64_t l = (int64_t)factorSkel.chainColPtr.size() - 2;
          l >= denseOpsFromLump; l--) {
@@ -308,9 +322,11 @@ void Solver::internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
                        stride);
     }
 
-    for (int64_t l = (int64_t)elimLumpRanges.size() - 2; l >= 0; l--) {
-        slvCtx.sparseElimSolveLt(*elimCtxs[l], matData, elimLumpRanges[l],
-                                 elimLumpRanges[l + 1], vecData, stride);
+    if (SparseElimSolve) {
+        for (int64_t l = (int64_t)elimLumpRanges.size() - 2; l >= 0; l--) {
+            slvCtx.sparseElimSolveLt(*elimCtxs[l], matData, elimLumpRanges[l],
+                                     elimLumpRanges[l + 1], vecData, stride);
+        }
     }
 }
 
@@ -363,13 +379,22 @@ void Solver::printStats() const {
              << elimLumpRanges[l + 1]
              << "]: " << elimCtxs[l]->elimStat.toString() << endl;
     }
-    cout << "Timings and call stats:"
+    cout << "Factor timings and call stats:"
          << "\n  largest node size: " << symCtx->potrfBiggestN
          << "\n  potrf: " << symCtx->potrfStat.toString()
          << "\n  trsm: " << symCtx->trsmStat.toString()  //
          << "\n  syrk/gemm(" << symCtx->syrkCalls << "+" << symCtx->gemmCalls
          << "): " << symCtx->sygeStat.toString()
          << "\n  asmbl: " << symCtx->asmblStat.toString() << endl;
+    cout << "Solve timings and call stats:"
+         << "\n  solveSparseLStat: " << symCtx->solveSparseLStat.toString()
+         << "\n  solveSparseLtStat: " << symCtx->solveSparseLtStat.toString()
+         << "\n  solveLStat: " << symCtx->solveLStat.toString()
+         << "\n  solveLtStat: " << symCtx->solveLtStat.toString()
+         << "\n  solveGemvStat: " << symCtx->solveGemvStat.toString()
+         << "\n  solveGemvTStat: " << symCtx->solveGemvTStat.toString()
+         << "\n  solveAssVStat: " << symCtx->solveAssVStat.toString()
+         << "\n  solveAssVTStat: " << symCtx->solveAssVTStat.toString() << endl;
 }
 
 void Solver::resetStats() {

@@ -235,6 +235,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
     virtual void sparseElimSolveL(const SymElimCtx& elimData, const T* data,
                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
                                   int64_t ldc) override {
+        OpInstance timer(sym.solveSparseLStat);
         const CpuBaseSymElimCtx* pElim =
             dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
         BASPACHO_CHECK_NOTNULL(pElim);
@@ -259,9 +260,6 @@ struct SimpleSolveCtx : SolveCtx<T> {
         // per-row iterations (like during sparse elimination, using elim data):
         // in this way the outer loop can be parallelized
         int64_t numElimRows = elim.rowPtr.size() - 1;
-        int64_t numSpans = skel.spanStart.size() - 1;
-        std::vector<T> tempBuffer(elim.maxBufferSize);
-        std::vector<int64_t> spanToChainOffset(numSpans);
         for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
             int64_t rowSpan = sRel + elim.spanRowBegin;
             int64_t rowSpanStart = skel.spanStart[rowSpan];
@@ -294,6 +292,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
     virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
                                    int64_t lumpsBegin, int64_t lumpsEnd, T* C,
                                    int64_t ldc) override {
+        OpInstance timer(sym.solveSparseLtStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
 
         // outer loop can be parallelized
@@ -330,6 +329,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
                         int64_t offC,
                         int64_t ldc /* , int64_t nRHS */) override {
+        OpInstance timer(sym.solveLStat);
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
         OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
         matA.template triangularView<Eigen::Lower>().solveInPlace(matC);
@@ -337,6 +337,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
 
     virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
                       const T* A, int64_t offA, int64_t lda) override {
+        OpInstance timer(sym.solveGemvStat);
         Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatK<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
         Eigen::Map<MatRMaj<T>> matC(tmpBuf.data(), nRows, nRHS);
@@ -345,6 +346,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
 
     virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
                              int64_t ldc) override {
+        OpInstance timer(sym.solveAssVStat);
         const T* A = tmpBuf.data();
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =
@@ -367,6 +369,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
 
     virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
                          int64_t offC, int64_t ldc) override {
+        OpInstance timer(sym.solveLtStat);
         Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
         OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
         matA.template triangularView<Eigen::Lower>().adjoint().solveInPlace(
@@ -376,6 +379,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
     virtual void gemvT(const T* data, int64_t offM, int64_t nRows,
                        int64_t nCols, T* A, int64_t offA,
                        int64_t lda) override {
+        OpInstance timer(sym.solveGemvTStat);
         Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
         OuterStridedCMajMatM<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
         Eigen::Map<const MatRMaj<T>> matC(tmpBuf.data(), nRows, nRHS);
@@ -384,6 +388,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
 
     virtual void assembleVecT(const T* C, int64_t ldc, int64_t chainColPtr,
                               int64_t numColItems) override {
+        OpInstance timer(sym.solveAssVTStat);
         T* A = tmpBuf.data();
         const CoalescedBlockMatrixSkel& skel = sym.skel;
         const int64_t* chainRowsTillEnd =

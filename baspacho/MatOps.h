@@ -67,6 +67,15 @@ struct SymbolicCtx {
     mutable int64_t gemmCalls = 0;
     mutable int64_t syrkCalls = 0;
     mutable OpStat asmblStat;
+
+    mutable OpStat solveSparseLStat;
+    mutable OpStat solveSparseLtStat;
+    mutable OpStat solveLStat;
+    mutable OpStat solveLtStat;
+    mutable OpStat solveGemvStat;
+    mutable OpStat solveGemvTStat;
+    mutable OpStat solveAssVStat;
+    mutable OpStat solveAssVTStat;
 };
 
 // (symbolic) context for sparse elimination of a range of parameters
