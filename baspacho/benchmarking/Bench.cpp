@@ -95,6 +95,10 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
                 randomData(nRHS * solver->order(), -1.0, 1.0, 38);
             DevMirror vecDataGpu(vecData);
 
+            // heat up
+            solver->solve(dataGpu.ptr, vecDataGpu.ptr, solver->order(), 1);
+            vecDataGpu.load(vecData);
+
             auto startSolve = hrc::now();
             solver->solve(dataGpu.ptr, vecDataGpu.ptr, solver->order(), 1);
             solveTimes[nRHS] = tdelta(hrc::now() - startSolve).count();
@@ -109,6 +113,10 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
         for (int64_t nRHS : nRHSs) {
             vector<double> vecData =
                 randomData(nRHS * solver->order(), -1.0, 1.0, 38);
+
+            // heat up
+            vector<double> vecDataCp = vecData;
+            solver->solve(data.data(), vecDataCp.data(), solver->order(), 1);
 
             auto startSolve = hrc::now();
             solver->solve(data.data(), vecData.data(), solver->order(), 1);
@@ -422,6 +430,7 @@ void help() {
     cout << "This program runs a benchmark of several solver configurations"
          << "\non different synthetic problem types, printing timings and"
          << "\nrelative timings for different operations"
+         << "\n -v           [v]erbose stats for factor/solve runs"
          << "\n -n number    [n]umber of problem per type (default: 5)"
          << "\n -S regex     regex for selecting [S]olver types"
          << "\n -E regex     regex for [E]xcluding solver types"

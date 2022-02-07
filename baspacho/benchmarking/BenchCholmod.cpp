@@ -200,6 +200,14 @@ CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
         b.x = (void*)(vecData.data());
         b.z = nullptr;
         b.xtype = CHOLMOD_REAL;
+
+        // heat up
+        cholmod_dense* h = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
+        if (!h) {
+            std::cerr << "Cholmod solve failed! nRHS = " << 1 << std::endl;
+            exit(1);
+        }
+
         auto startSolve1 = hrc::now();
         cholmod_dense* x = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
         solveTimes[nRHS] = tdelta(hrc::now() - startSolve1).count();
