@@ -165,7 +165,8 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         int64_t largestIndep = et.sparseElimRanges[1];
         Solver solver(move(factorSkel), move(et.sparseElimRanges), {},
                       genOps());
-        NumericCtxPtr<T> numCtx = solver.symCtx->createNumericCtx<T>(0);
+        NumericCtxPtr<T> numCtx =
+            solver.symCtx->createNumericCtx<T>(0, nullptr);
         numCtx->doElimination(*solver.elimCtxs[0], data.data(), 0,
                               largestIndep);
         Matrix<T> computedMat = solver.factorSkel.densify(data);

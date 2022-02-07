@@ -168,7 +168,8 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         Solver solver(move(factorSkel), move(et.sparseElimRanges), {},
                       genOps());
 
-        NumericCtxPtr<T> numCtx = solver.symCtx->createNumericCtx<T>(0);
+        NumericCtxPtr<T> numCtx =
+            solver.symCtx->createNumericCtx<T>(0, nullptr);
 
         // call doElimination with data on device
         {

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 # set the project name
 project(BaSpaCho CXX)
 set(CMAKE_CXX_STANDARD 17)
-set(BASPACHO_CXX_FLAGS -Wall -Wextra) # -pedantic -Werror)
+set(BASPACHO_CXX_FLAGS -Wall -Wextra -pedantic -Werror)
 
 message("* Build type: " ${CMAKE_BUILD_TYPE})
 
@@ -20,7 +20,7 @@ if(BASPACHO_USE_CUBLAS)
   set(BASPACHO_CUDA_ARCHITECTURES "75")
 
   list(APPEND CUDA_NVCC_FLAGS
-       # -Xcompiler -Wall,-Wextra,-Werror,-Wno-unknown-pragmas
+       -Xcompiler -Wall,-Wextra,-Werror,-Wno-unknown-pragmas
        --expt-relaxed-constexpr)
   message("* CUDA Includes : " ${CUDAToolkit_INCLUDE_DIRS})
   message("* CUDA Libraries: " ${CUDAToolkit_LIBRARY_DIR})

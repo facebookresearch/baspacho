@@ -34,8 +34,8 @@ struct SimpleSymbolicCtx : CpuBaseSymbolicCtx {
                                                     int64_t tempBufSize,
                                                     int batchSize) override;
 
-    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
-                                                int nRHS) override;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx, int nRHS,
+                                                int batchSize) override;
 };
 
 // simple ops implemented using Eigen (therefore single thread)
@@ -256,7 +256,8 @@ struct SimpleSolveCtx : SolveCtx<T> {
             diagBlock.template triangularView<Eigen::Lower>().solveInPlace(
                 matC);
 
-#if 1
+#if 0
+            // alternative to the below, keep here for reference
             int64_t colEnd = skel.chainColPtr[lump + 1];
             for (int64_t colPtr = colStart + 1; colPtr < colEnd; colPtr++) {
                 int64_t rowSpan = skel.chainRowSpan[colPtr];
@@ -273,7 +274,6 @@ struct SimpleSolveCtx : SolveCtx<T> {
 #endif
         }
 
-#if 0
         // per-row iterations (like during sparse elimination, using elim data):
         // in this way the outer loop can be parallelized
         int64_t numElimRows = elim.rowPtr.size() - 1;
@@ -304,11 +304,11 @@ struct SimpleSolveCtx : SolveCtx<T> {
                 matQ -= block * matC;
             }
         }
-#endif
     }
 
-    virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
-                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+    virtual void sparseElimSolveLt(const SymElimCtx& /*elimData*/,
+                                   const T* data, int64_t lumpsBegin,
+                                   int64_t lumpsEnd, T* C,
                                    int64_t ldc) override {
         OpInstance timer(sym.solveSparseLtStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
@@ -447,7 +447,9 @@ NumericCtxBase* SimpleSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
 }
 
 SolveCtxBase* SimpleSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
-                                                       int nRHS) {
+                                                       int nRHS,
+                                                       int batchSize) {
+    BASPACHO_CHECK_EQ(batchSize, 1);
     if (tIdx == std::type_index(typeid(double))) {
         return new SimpleSolveCtx<double>(*this, nRHS);
     } else if (tIdx == std::type_index(typeid(float))) {

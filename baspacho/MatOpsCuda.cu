@@ -96,8 +96,8 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
                                                     int64_t tempBufSize,
                                                     int batchSize) override;
 
-    virtual SolveCtxBase* createSolveCtxForType(type_index tIdx,
-                                                int nRHS) override;
+    virtual SolveCtxBase* createSolveCtxForType(type_index tIdx, int nRHS,
+                                                int batchSize) override;
 
     cublasHandle_t cublasH = nullptr;
     cusolverDnHandle_t cusolverDnH = nullptr;
@@ -607,7 +607,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         DevPtrMirror<T> dataDev(*data, 0);
 
         int batchWgs = 32;
-        while (batchWgs / 2 >= data->size()) {
+        while (batchWgs / 2 >= (int)data->size()) {
             batchWgs /= 2;
         }
         int batchGroups = (data->size() + batchWgs - 1) / batchWgs;
@@ -620,7 +620,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
             sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
             sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
             sym.devChainRowsTillEnd.ptr, dataDev.ptr, lumpsBegin, lumpsEnd,
-            Batched{.batchSize = (int)data->size()});
+            Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 
         /*cuCHECK(cudaDeviceSynchronize());
         cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
@@ -633,7 +633,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
             sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, dataDev.ptr,
             lumpsBegin, lumpsEnd,
-            Batched{.batchSize = (int)data->size()});
+            Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 #else
         int wgs2 = 32 / batchWgs;
         int numGroups2 = (elim.numBlockPairs + wgs2 - 1) / wgs2;
@@ -644,7 +644,8 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
             sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, dataDev.ptr,
             lumpsBegin, lumpsEnd, elim.makeBlockPairEnumStraight.ptr,
-            elim.numBlockPairs, Batched{.batchSize = (int)data->size()});
+            elim.numBlockPairs,
+            Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 #endif
 
         cuCHECK(cudaDeviceSynchronize());
@@ -686,7 +687,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         const int64_t* pSpanOffsetInLump = sym.devSpanOffsetInLump.ptr;
 
         int batchWgs = 32;
-        while (batchWgs / 2 >= data->size()) {
+        while (batchWgs / 2 >= (int)data->size()) {
             batchWgs /= 2;
         }
         int batchGroups = (data->size() + batchWgs - 1) / batchWgs;
@@ -698,7 +699,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
             numBlockRows, numBlockCols, rectRowBegin, srcRectWidth, dstStride,
             pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
             devTempBufsDev.ptr, dataDev.ptr,
-            Batched{.batchSize = (int)data->size()});
+            Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 
         cuCHECK(cudaDeviceSynchronize());
     }
@@ -1049,7 +1050,7 @@ struct CudaSolveCtx : SolveCtx<T> {
         }
     }
 
-    virtual void sparseElimSolveL(const SymElimCtx& elimData, const T* data,
+    virtual void sparseElimSolveL(const SymElimCtx& /*elimData*/, const T* data,
                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
                                   int64_t ldc) override {
         OpInstance timer(sym.solveSparseLStat);
@@ -1069,8 +1070,9 @@ struct CudaSolveCtx : SolveCtx<T> {
         cuCHECK(cudaDeviceSynchronize());
     }
 
-    virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
-                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+    virtual void sparseElimSolveLt(const SymElimCtx& /*elimData*/,
+                                   const T* data, int64_t lumpsBegin,
+                                   int64_t lumpsEnd, T* C,
                                    int64_t ldc) override {
         OpInstance timer(sym.solveSparseLtStat);
 
@@ -1218,7 +1220,7 @@ void CudaSolveCtx<float>::gemvT(const float* data, int64_t offM, int64_t nRows,
 // solve context, batched version
 template <typename T>
 struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
-    CudaSolveCtx(const CudaSymbolicCtx& sym, int64_t nRHS, int batchSize = 8)
+    CudaSolveCtx(const CudaSymbolicCtx& sym, int64_t nRHS, int batchSize)
         : sym(sym), nRHS(nRHS), devSolveBufs(batchSize, nullptr) {
         for (int i = 0; i < batchSize; i++) {
             cuCHECK(cudaMalloc((void**)&devSolveBufs[i],
@@ -1234,7 +1236,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         }
     }
 
-    virtual void sparseElimSolveL(const SymElimCtx& elimData,
+    virtual void sparseElimSolveL(const SymElimCtx& /*elimData*/,
                                   const vector<T*>* data, int64_t lumpsBegin,
                                   int64_t lumpsEnd, vector<T*>* C,
                                   int64_t ldc) override {
@@ -1244,7 +1246,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         DevPtrMirror<T> Cs(*C, 0);
 
         int batchWgs = 32;
-        while (batchWgs / 2 >= C->size()) {
+        while (batchWgs / 2 >= (int)C->size()) {
             batchWgs /= 2;
         }
         int batchGroups = (C->size() + batchWgs - 1) / batchWgs;
@@ -1256,7 +1258,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sparseElim_diagSolveL<T*><<<gridDim, blockDim>>>(
             sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
             datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
-            Batched{.batchSize = (int)C->size()});
+            Batched{.batchSize = (int)C->size(), .batchIndex = 0});
         cuCHECK(cudaDeviceSynchronize());
 
         // TODO: consider "straightening" inner loop
@@ -1264,11 +1266,11 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
             sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
             sym.devChainRowSpan.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr,
             ldc, nRHS, lumpsBegin, lumpsEnd,
-            Batched{.batchSize = (int)C->size()});
+            Batched{.batchSize = (int)C->size(), .batchIndex = 0});
         cuCHECK(cudaDeviceSynchronize());
     }
 
-    virtual void sparseElimSolveLt(const SymElimCtx& elimData,
+    virtual void sparseElimSolveLt(const SymElimCtx& /*elimData*/,
                                    const vector<T*>* data, int64_t lumpsBegin,
                                    int64_t lumpsEnd, vector<T*>* C,
                                    int64_t ldc) override {
@@ -1278,7 +1280,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         DevPtrMirror<T> Cs(*C, 0);
 
         int batchWgs = 32;
-        while (batchWgs / 2 >= C->size()) {
+        while (batchWgs / 2 >= (int)C->size()) {
             batchWgs /= 2;
         }
         int batchGroups = (C->size() + batchWgs - 1) / batchWgs;
@@ -1292,13 +1294,13 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
             sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
             sym.devChainRowSpan.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr,
             ldc, nRHS, lumpsBegin, lumpsEnd,
-            Batched{.batchSize = (int)C->size()});
+            Batched{.batchSize = (int)C->size(), .batchIndex = 0});
         cuCHECK(cudaDeviceSynchronize());
 
         sparseElim_diagSolveLt<T*><<<gridDim, blockDim>>>(
             sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
             datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
-            Batched{.batchSize = (int)C->size()});
+            Batched{.batchSize = (int)C->size(), .batchIndex = 0});
         cuCHECK(cudaDeviceSynchronize());
     }
 
@@ -1314,7 +1316,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         OpInstance timer(sym.solveAssVStat);
         DevPtrMirror<T> Cs(*C, 0);
         int batchWgs = 32;
-        while (batchWgs / 2 >= C->size()) {
+        while (batchWgs / 2 >= (int)C->size()) {
             batchWgs /= 2;
         }
         int batchGroups = (C->size() + batchWgs - 1) / batchWgs;
@@ -1326,7 +1328,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
             sym.devChainRowsTillEnd.ptr + chainColPtr,
             sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr,
             devSolveBufsDev.ptr, numColItems, Cs.ptr, ldc, nRHS,
-            Batched{.batchSize = (int)C->size()});
+            Batched{.batchSize = (int)C->size(), .batchIndex = 0});
         cuCHECK(cudaDeviceSynchronize());
     }
 
@@ -1343,7 +1345,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         OpInstance timer(sym.solveAssVTStat);
         DevPtrMirror<T> Cs(*C, 0);
         int batchWgs = 32;
-        while (batchWgs / 2 >= C->size()) {
+        while (batchWgs / 2 >= (int)C->size()) {
             batchWgs /= 2;
         }
         int batchGroups = (C->size() + batchWgs - 1) / batchWgs;
@@ -1355,7 +1357,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
             sym.devChainRowsTillEnd.ptr + chainColPtr,
             sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr, Cs.ptr,
             ldc, nRHS, devSolveBufsDev.ptr, numColItems,
-            Batched{.batchSize = (int)C->size()});
+            Batched{.batchSize = (int)C->size(), .batchIndex = 0});
         cuCHECK(cudaDeviceSynchronize());
     }
 
@@ -1508,16 +1510,18 @@ NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(type_index tIdx,
     }
 }
 
-SolveCtxBase* CudaSymbolicCtx::createSolveCtxForType(type_index tIdx,
-                                                     int nRHS) {
+SolveCtxBase* CudaSymbolicCtx::createSolveCtxForType(type_index tIdx, int nRHS,
+                                                     int batchSize) {
     if (tIdx == type_index(typeid(double))) {
+        BASPACHO_CHECK_EQ(batchSize, 1);
         return new CudaSolveCtx<double>(*this, nRHS);
     } else if (tIdx == type_index(typeid(float))) {
+        BASPACHO_CHECK_EQ(batchSize, 1);
         return new CudaSolveCtx<float>(*this, nRHS);
     } else if (tIdx == type_index(typeid(vector<double*>))) {
-        return new CudaSolveCtx<vector<double*>>(*this, nRHS);
+        return new CudaSolveCtx<vector<double*>>(*this, nRHS, batchSize);
     } else if (tIdx == type_index(typeid(vector<float*>))) {
-        return new CudaSolveCtx<vector<float*>>(*this, nRHS);
+        return new CudaSolveCtx<vector<float*>>(*this, nRHS, batchSize);
     } else {
         return nullptr;
     }

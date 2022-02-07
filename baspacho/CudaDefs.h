@@ -17,14 +17,15 @@ const char* cusolverGetErrorEnum(cusolverStatus_t error);
 
 }  // end namespace BaSpaCho
 
-#define cuCHECK(call)                                                     \
-    do {                                                                  \
-        cudaError_t err = (call);                                         \
-        if (cudaSuccess != err) {                                         \
-            fprintf(stderr, "CUDA Error: %s\n", cudaGetErrorString(err)); \
-            cudaDeviceReset();                                            \
-            abort();                                                      \
-        }                                                                 \
+#define cuCHECK(call)                                                       \
+    do {                                                                    \
+        cudaError_t err = (call);                                           \
+        if (cudaSuccess != err) {                                           \
+            fprintf(stderr, "[%s:%d] CUDA Error: %s\n", __FILE__, __LINE__, \
+                    cudaGetErrorString(err));                               \
+            cudaDeviceReset();                                              \
+            abort();                                                        \
+        }                                                                   \
     } while (0)
 
 #define cublasCHECK(call)                                    \
@@ -60,6 +61,14 @@ const char* cusolverGetErrorEnum(cusolverStatus_t error);
         }                                                      \
     } while (0)
 
+#define CHECK_ALLOCATION(ptr, size)                                        \
+    if (ptr == nullptr) {                                                  \
+        fprintf(stderr, "CUDA: allocation of block of %ld bytes failed\n", \
+                size);                                                     \
+        cudaDeviceReset();                                                 \
+        abort();                                                           \
+    }
+
 // utility class to mirror an std::vector
 template <typename T>
 struct DevMirror {
@@ -75,6 +84,7 @@ struct DevMirror {
     void load(const std::vector<T>& vec) {
         clear();
         cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T)));
+        CHECK_ALLOCATION(ptr, vec.size() * sizeof(T));
         cuCHECK(cudaMemcpy(ptr, vec.data(), vec.size() * sizeof(T),
                            cudaMemcpyHostToDevice));
     }
@@ -94,6 +104,7 @@ struct DevPtrMirror {
             vecCopy[i] = vec[i] + offset;
         }
         cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T*)));
+        CHECK_ALLOCATION(ptr, vec.size() * sizeof(T*));
         cuCHECK(cudaMemcpy(ptr, vecCopy, vec.size() * sizeof(T*),
                            cudaMemcpyHostToDevice));
     }

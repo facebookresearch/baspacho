@@ -194,7 +194,7 @@ CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
 
         cholmod_dense b;
         b.nrow = order;
-        b.ncol = 1;
+        b.ncol = nRHS;
         b.nzmax = b.nrow * b.ncol;
         b.d = order;  // leading dimension
         b.x = (void*)(vecData.data());
@@ -204,15 +204,16 @@ CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
         // heat up
         cholmod_dense* h = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
         if (!h) {
-            std::cerr << "Cholmod solve failed! nRHS = " << 1 << std::endl;
+            std::cerr << "Cholmod solve failed! nRHS = " << nRHS << std::endl;
             exit(1);
         }
+        cholmod_l_free_dense(&h, &cc_);
 
         auto startSolve1 = hrc::now();
         cholmod_dense* x = cholmod_l_solve(CHOLMOD_A, cholmodFactor_, &b, &cc_);
         solveTimes[nRHS] = tdelta(hrc::now() - startSolve1).count();
         if (!x) {
-            std::cerr << "Cholmod solve failed! nRHS = " << 1 << std::endl;
+            std::cerr << "Cholmod solve failed! nRHS = " << nRHS << std::endl;
             exit(1);
         }
         cholmod_l_free_dense(&x, &cc_);

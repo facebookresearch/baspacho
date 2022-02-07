@@ -96,11 +96,11 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
             DevMirror vecDataGpu(vecData);
 
             // heat up
-            solver->solve(dataGpu.ptr, vecDataGpu.ptr, solver->order(), 1);
+            solver->solve(dataGpu.ptr, vecDataGpu.ptr, solver->order(), nRHS);
             vecDataGpu.load(vecData);
 
             auto startSolve = hrc::now();
-            solver->solve(dataGpu.ptr, vecDataGpu.ptr, solver->order(), 1);
+            solver->solve(dataGpu.ptr, vecDataGpu.ptr, solver->order(), nRHS);
             solveTimes[nRHS] = tdelta(hrc::now() - startSolve).count();
         }
     } else
@@ -116,10 +116,10 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
 
             // heat up
             vector<double> vecDataCp = vecData;
-            solver->solve(data.data(), vecDataCp.data(), solver->order(), 1);
+            solver->solve(data.data(), vecDataCp.data(), solver->order(), nRHS);
 
             auto startSolve = hrc::now();
-            solver->solve(data.data(), vecData.data(), solver->order(), 1);
+            solver->solve(data.data(), vecData.data(), solver->order(), nRHS);
             solveTimes[nRHS] = tdelta(hrc::now() - startSolve).count();
         }
     }
@@ -136,6 +136,75 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
     retv.solveTimes = solveTimes;
     return retv;
 }
+
+#ifdef BASPACHO_USE_CUBLAS
+BenchResults benchmarkSolverBatched(const SparseProblem& prob,
+                                    const Settings& settings, int batchSize,
+                                    const std::vector<int64_t> nRHSs = {},
+                                    bool verbose = true) {
+    bangGpu();
+
+    auto startAnalysis = hrc::now();
+    SolverPtr solver =
+        createSolver(settings, prob.paramSize, prob.sparseStruct);
+    double analysisTime = tdelta(hrc::now() - startAnalysis).count();
+
+    // generate mock data, make positive def
+    int order = solver->order();
+    vector<vector<double>> datas(batchSize);
+    vector<DevMirror<double>> datasGpu(batchSize);
+    vector<double*> datasPtr(batchSize);
+    for (int q = 0; q < batchSize; q++) {
+        datas[q] = randomData<double>(solver->factorSkel.dataSize(), -1.0, 1.0,
+                                      37 + q);
+        solver->factorSkel.damp(datas[q], double(0), double(order * 1.3));
+        datasGpu[q].load(datas[q]);
+        datasPtr[q] = datasGpu[q].ptr;
+    }
+
+    double factorTime;
+    std::map<int64_t, double> solveTimes;
+
+    auto startFactor = hrc::now();
+    solver->factor(&datasPtr);
+    factorTime = tdelta(hrc::now() - startFactor).count() / batchSize;
+
+    for (int64_t nRHS : nRHSs) {
+        vector<vector<double>> rhsDatas(batchSize);
+        vector<DevMirror<double>> rhsDatasGpu(batchSize);
+        vector<double*> rhsDatasPtr(batchSize);
+        for (int q = 0; q < batchSize; q++) {
+            rhsDatas[q] =
+                randomData<double>(nRHS * order, -1.0, 1.0, 37 + q + nRHS);
+            rhsDatasGpu[q].load(rhsDatas[q]);
+            rhsDatasPtr[q] = rhsDatasGpu[q].ptr;
+        }
+
+        // heat up
+        solver->solve(&datasPtr, &rhsDatasPtr, solver->order(), nRHS);
+        for (int q = 0; q < batchSize; q++) {
+            rhsDatasGpu[q].load(rhsDatas[q]);
+            rhsDatasPtr[q] = rhsDatasGpu[q].ptr;
+        }
+
+        auto startSolve = hrc::now();
+        solver->solve(&datasPtr, &rhsDatasPtr, solver->order(), nRHS);
+        solveTimes[nRHS] = tdelta(hrc::now() - startSolve).count() / batchSize;
+    }
+
+    if (verbose) {
+        solver->printStats();
+        cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges)
+             << endl;
+    }
+
+    BenchResults retv;
+    retv.analysisTime = analysisTime;
+    retv.factorTime = factorTime;
+    retv.solveTimes = solveTimes;
+    return retv;
+}
+#endif  // BASPACHO_USE_CUBLAS
 
 SparseProblem matGenToSparseProblem(SparseMatGenerator& gen, int64_t pSizeMin,
                                     int64_t pSizeMax) {
@@ -240,7 +309,7 @@ map<string, function<BenchResults(const SparseProblem&,
              return retv;
          }},
 #endif  // BASPACHO_HAVE_CHOLMOD
-        {"2_BaSpaCho_BLAS_nth=16",
+        {"2_BaSpaCho_BLAS_numthreads=16",
          [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
             bool verbose) -> BenchResults {
              return benchmarkSolver(prob, {}, nRHSs, verbose);
@@ -253,6 +322,30 @@ map<string, function<BenchResults(const SparseProblem&,
                  prob,
                  {.findSparseEliminationRanges = true, .backend = BackendCuda},
                  nRHSs, verbose);
+         }},
+        {"4_BaSpaCho_CUDA_batchsize=4",
+         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
+            bool verbose) -> BenchResults {
+             return benchmarkSolverBatched(
+                 prob,
+                 {.findSparseEliminationRanges = true, .backend = BackendCuda},
+                 /* batchsize = */ 4, nRHSs, verbose);
+         }},
+        {"5_BaSpaCho_CUDA_batchsize=8",
+         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
+            bool verbose) -> BenchResults {
+             return benchmarkSolverBatched(
+                 prob,
+                 {.findSparseEliminationRanges = true, .backend = BackendCuda},
+                 /* batchsize = */ 8, nRHSs, verbose);
+         }},
+        {"6_BaSpaCho_CUDA_batchsize=16",
+         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
+            bool verbose) -> BenchResults {
+             return benchmarkSolverBatched(
+                 prob,
+                 {.findSparseEliminationRanges = true, .backend = BackendCuda},
+                 /* batchsize = */ 16, nRHSs, verbose);
          }},
 #endif  // BASPACHO_USE_CUBLAS
 };

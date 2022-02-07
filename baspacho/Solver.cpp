@@ -206,7 +206,7 @@ void Solver::factor(T* data, bool verbose) const {
 template <typename T>
 void Solver::solve(const T* matData, T* vecData, int64_t stride,
                    int nRHS) const {
-    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
+    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
     internalSolveLt(*slvCtx, matData, vecData, stride);
     internalSolveL(*slvCtx, matData, vecData, stride);
 }
@@ -214,14 +214,14 @@ void Solver::solve(const T* matData, T* vecData, int64_t stride,
 template <typename T>
 void Solver::solveL(const T* matData, T* vecData, int64_t stride,
                     int nRHS) const {
-    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
+    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
     internalSolveL(*slvCtx, matData, vecData, stride);
 }
 
 template <typename T>
 void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
                      int nRHS) const {
-    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS);
+    SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
     internalSolveLt(*slvCtx, matData, vecData, stride);
 }
 

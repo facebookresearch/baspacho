@@ -36,8 +36,8 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
                                                     int64_t tempBufSize,
                                                     int batchSize) override;
 
-    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
-                                                int nRHS) override;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx, int nRHS,
+                                                int batchSize) override;
 
     bool useThreads;
     mutable dispenso::ThreadPool threadPool;
@@ -502,8 +502,9 @@ struct BlasSolveCtx : SolveCtx<T> {
         }
     }
 
-    virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
-                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+    virtual void sparseElimSolveLt(const SymElimCtx& /* elimData */,
+                                   const T* data, int64_t lumpsBegin,
+                                   int64_t lumpsEnd, T* C,
                                    int64_t ldc) override {
         OpInstance timer(sym.solveSparseLtStat);
         const CoalescedBlockMatrixSkel& skel = sym.skel;
@@ -748,7 +749,8 @@ NumericCtxBase* BlasSymbolicCtx::createNumericCtxForType(std::type_index tIdx,
 }
 
 SolveCtxBase* BlasSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
-                                                     int nRHS) {
+                                                     int nRHS, int batchSize) {
+    BASPACHO_CHECK_EQ(batchSize, 1);
     if (tIdx == std::type_index(typeid(double))) {
         return new BlasSolveCtx<double>(*this, nRHS);
     } else if (tIdx == std::type_index(typeid(float))) {

@@ -51,14 +51,14 @@ struct SymbolicCtx {
                                                     int64_t tempBufSize,
                                                     int batchSize) = 0;
 
-    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx,
-                                                int nRHS) = 0;
+    virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx, int nRHS,
+                                                int batchSize) = 0;
 
     template <typename T>
-    NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize, T* data = nullptr);
+    NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize, const T* data);
 
     template <typename T>
-    SolveCtxPtr<T> createSolveCtx(int nRHS);
+    SolveCtxPtr<T> createSolveCtx(int nRHS, const T* data);
 
     mutable OpStat potrfStat;
     mutable int64_t potrfBiggestN = 0;
@@ -156,16 +156,17 @@ std::string prettyTypeName(const T& t) {
 
 template <typename T>
 struct BatchSizeHelper {
-    static int get(T*) { return 1; }
+    static int get(const T*) { return 1; }
 };
 
 template <typename T>
 struct BatchSizeHelper<std::vector<T>> {
-    static int get(std::vector<T>* data) { return data->size(); }
+    static int get(const std::vector<T>* data) { return data->size(); }
 };
 
 template <typename T>
-NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize, T* data) {
+NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize,
+                                               const T* data) {
     static const std::type_index T_tIdx(typeid(T));
     int batchSize = BatchSizeHelper<T>::get(data);
     NumericCtxBase* ctx =
@@ -176,9 +177,10 @@ NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize, T* data) {
 }
 
 template <typename T>
-SolveCtxPtr<T> SymbolicCtx::createSolveCtx(int nRHS) {
+SolveCtxPtr<T> SymbolicCtx::createSolveCtx(int nRHS, const T* data) {
     static const std::type_index T_tIdx(typeid(T));
-    SolveCtxBase* ctx = createSolveCtxForType(T_tIdx, nRHS);
+    int batchSize = BatchSizeHelper<T>::get(data);
+    SolveCtxBase* ctx = createSolveCtxForType(T_tIdx, nRHS, batchSize);
     SolveCtx<T>* typedCtx = dynamic_cast<SolveCtx<T>*>(ctx);
     BASPACHO_CHECK_NOTNULL(typedCtx);
     return SolveCtxPtr<T>(typedCtx);
