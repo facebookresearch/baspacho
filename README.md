@@ -90,22 +90,23 @@ implementation in SuiteSparse instead of Eigen.
 
 ## Todo
 - [ ] add continuous integration for testing
-- [ ] document more code (before I forget how it works), and provide better API
+- [ ] document more code (before I forget how it works), and polish API
 - [X] float/double in all backends
 - [X] Cuda: include and test sparse elimination in BAL_bench
 - [X] Cuda: test atomics vs magic-locked block updates (result: magic lock of blocks does not work
       in Cuda unless very expensive synchronized ops are used, making it not competitive)
 - [X] Cuda: solve methods
 - [X] Cuda: batched mode
-- [ ] Benchmark results (bench + BAL comparing sparse elimination with optimizers)
+- [X] implement specialized solve for the case of "sparse elimination ranges" where the current
+      per-supernode solve would be quite slow
+- [X] Benchmark results (bench + BAL comparing sparse elimination with optimizers)
 - [ ] small optimizer demo on BAL data
 
 ### Longer term todo:
 - [ ] handle singularity reporting size of non-SPD minor, possibly discard non-definite sparse-elim
       diagonal blocks 
 - [ ] better heuristics in Node merge, test more configurations
-- [ ] implement specialized solve for the case of "sparse elimination ranges" where the current
-      per-supernode solve would be quite slow
+- [ ] optimize analysis and solve steps
 - [ ] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
       possibly with mixed-precision preconditioner (fast "rough" factor as float, iterate
       on a double vector for improved precision)
@@ -125,4 +126,15 @@ expanded and made more customizable in the future but this is the current status
 * The block-structured type of matrices is builtin in the library, and while this presents advantages in
 common circumstances the library may prove slighly slower if the matrix lacks completely a block structure,
 as the entries will be represented as 1x1 blocks. This is hardly a problem in most practical problems
-because matrices naturally have a block-structure depending on parameters of dimensions >1.
+because matrices naturally have a block-structure depending on parameters of dimensions >1. Also, thread and
+cuda-kernel operations are designed around blocks so it's not ideal if you have some huge parameter blocks,
+the library will work best when the parameter blocks have sizes 1 to 12 (in a factor graph, generally you
+have many parameter blocks of the same type).
+* About determinism: assuming BLAS is deterministic, BaSpaCho will be 100% deterministic on the CPU, but
+not on CUDA if there is any "sparse elimination" set of parameters, because both factor and solve operations
+use atomic addition for parallelism on the GPU. Also, a Cuda architecture >= 6 is needed for atomicAdd
+on double numbers (this is the compute architecture and not the version of Cuda, arch>=6 means you need
+Tesla P100 or GTX 1080-family, or newer, see
+[Cuda Architectures](https://en.wikipedia.org/wiki/CUDA#GPUs_supported)).
+Otherwise you will have to add define `CUDA_DOUBLE_ATOMIC_ADD_WORKAROUND` in order to enable the workaround
+in `CudaAtomic.cuh`.
