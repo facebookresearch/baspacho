@@ -894,6 +894,148 @@ __global__ void assembleVecT_kernel(const int64_t* chainRowsTillEnd,
                     spanSize);
 }
 
+// kernels for sparse-elim solve
+template <typename TT, typename B>
+__global__ void sparseElim_diagSolveL(const int64_t* lumpStarts,
+                                      const int64_t* chainColPtr,
+                                      const int64_t* chainData, const TT* dataB,
+                                      TT* vB, int64_t ldc, int64_t nRHS,
+                                      int64_t lumpIndexStart,
+                                      int64_t lumpIndexEnd, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    const T* data = batch.get(dataB);
+    T* v = batch.get(vB);
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int64_t lump = lumpIndexStart + i;
+    if (lump >= lumpIndexEnd) {
+        return;
+    }
+
+    int64_t lumpStart = lumpStarts[lump];
+    int64_t lumpSize = lumpStarts[lump + 1] - lumpStart;
+    int64_t colStart = chainColPtr[lump];
+    int64_t diagDataPtr = chainData[colStart];
+
+    for (int i = 0; i < nRHS; i++) {
+        solveUpperT(data + diagDataPtr, lumpSize, v + lumpStart + ldc * i);
+    }
+}
+
+template <typename TT, typename B>
+__global__ void sparseElim_subDiagMult(
+    const int64_t* lumpStarts, const int64_t* spanStarts,
+    const int64_t* chainColPtr, const int64_t* chainRowSpan,
+    const int64_t* chainData, const TT* dataB, TT* vB, int64_t ldc,
+    int64_t nRHS, int64_t lumpIndexStart, int64_t lumpIndexEnd, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    const T* data = batch.get(dataB);
+    T* v = batch.get(vB);
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int64_t lump = lumpIndexStart + i;
+    if (lump >= lumpIndexEnd) {
+        return;
+    }
+
+    int64_t lumpStart = lumpStarts[lump];
+    int64_t lumpSize = lumpStarts[lump + 1] - lumpStart;
+    int64_t colStart = chainColPtr[lump];
+    int64_t colEnd = chainColPtr[lump + 1];
+    OuterStridedCMajMatM<T> matC(v + lumpStart, lumpSize, nRHS,
+                                 OuterStride(ldc));
+
+    for (int64_t colPtr = colStart + 1; colPtr < colEnd; colPtr++) {
+        int64_t rowSpan = chainRowSpan[colPtr];
+        int64_t rowSpanStart = spanStarts[rowSpan];
+        int64_t rowSpanSize = spanStarts[rowSpan + 1] - rowSpanStart;
+        int64_t blockPtr = chainData[colPtr];
+        Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize,
+                                           lumpSize);
+        OuterStridedCMajMatM<T> matQ(v + rowSpanStart, rowSpanSize, nRHS,
+                                     OuterStride(ldc));
+        // matQ -= block * matC;
+        locked_sub_AxB(matQ, block, matC);
+    }
+}
+
+// kernels for sparse-elim solve
+template <typename TT, typename B>
+__global__ void sparseElim_diagSolveLt(const int64_t* lumpStarts,
+                                       const int64_t* chainColPtr,
+                                       const int64_t* chainData,
+                                       const TT* dataB, TT* vB, int64_t ldc,
+                                       int64_t nRHS, int64_t lumpIndexStart,
+                                       int64_t lumpIndexEnd, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    const T* data = batch.get(dataB);
+    T* v = batch.get(vB);
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int64_t lump = lumpIndexStart + i;
+    if (lump >= lumpIndexEnd) {
+        return;
+    }
+
+    int64_t lumpStart = lumpStarts[lump];
+    int64_t lumpSize = lumpStarts[lump + 1] - lumpStart;
+    int64_t colStart = chainColPtr[lump];
+    int64_t diagDataPtr = chainData[colStart];
+
+    for (int i = 0; i < nRHS; i++) {
+        solveUpper(data + diagDataPtr, lumpSize, v + lumpStart + ldc * i);
+    }
+}
+
+template <typename TT, typename B>
+__global__ void sparseElim_subDiagMultT(
+    const int64_t* lumpStarts, const int64_t* spanStarts,
+    const int64_t* chainColPtr, const int64_t* chainRowSpan,
+    const int64_t* chainData, const TT* dataB, TT* vB, int64_t ldc,
+    int64_t nRHS, int64_t lumpIndexStart, int64_t lumpIndexEnd, B batch) {
+    if (!batch.verify()) {
+        return;
+    }
+    using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
+    const T* data = batch.get(dataB);
+    T* v = batch.get(vB);
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int64_t lump = lumpIndexStart + i;
+    if (lump >= lumpIndexEnd) {
+        return;
+    }
+
+    int64_t lumpStart = lumpStarts[lump];
+    int64_t lumpSize = lumpStarts[lump + 1] - lumpStart;
+    int64_t colStart = chainColPtr[lump];
+    int64_t colEnd = chainColPtr[lump + 1];
+    OuterStridedCMajMatM<T> matC(v + lumpStart, lumpSize, nRHS,
+                                 OuterStride(ldc));
+
+    for (int64_t colPtr = colStart + 1; colPtr < colEnd; colPtr++) {
+        int64_t rowSpan = chainRowSpan[colPtr];
+        int64_t rowSpanStart = spanStarts[rowSpan];
+        int64_t rowSpanSize = spanStarts[rowSpan + 1] - rowSpanStart;
+        int64_t blockPtr = chainData[colPtr];
+        Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize,
+                                           lumpSize);
+        OuterStridedCMajMatM<T> matQ(v + rowSpanStart, rowSpanSize, nRHS,
+                                     OuterStride(ldc));
+        // matC -= block * matQ;
+        locked_sub_ATxB(matC, block, matQ);
+    }
+}
+
 template <typename T>
 struct CudaSolveCtx : SolveCtx<T> {
     CudaSolveCtx(const CudaSymbolicCtx& sym, int64_t nRHS)
@@ -911,12 +1053,41 @@ struct CudaSolveCtx : SolveCtx<T> {
                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
                                   int64_t ldc) override {
         OpInstance timer(sym.solveSparseLStat);
+
+        int wgs = 32;
+        int numGroups = (lumpsEnd - lumpsBegin + wgs - 1) / wgs;
+        sparseElim_diagSolveL<T><<<numGroups, wgs>>>(
+            sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+            data, C, ldc, nRHS, lumpsBegin, lumpsEnd, Plain{});
+        cuCHECK(cudaDeviceSynchronize());
+
+        // TODO: consider "straightening" inner loop
+        sparseElim_subDiagMult<T><<<numGroups, wgs>>>(
+            sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
+            sym.devChainRowSpan.ptr, sym.devChainData.ptr, data, C, ldc, nRHS,
+            lumpsBegin, lumpsEnd, Plain{});
+        cuCHECK(cudaDeviceSynchronize());
     }
 
     virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
                                    int64_t lumpsBegin, int64_t lumpsEnd, T* C,
                                    int64_t ldc) override {
         OpInstance timer(sym.solveSparseLtStat);
+
+        int wgs = 32;
+        int numGroups = (lumpsEnd - lumpsBegin + wgs - 1) / wgs;
+
+        // TODO: consider "straightening" inner loop
+        sparseElim_subDiagMultT<T><<<numGroups, wgs>>>(
+            sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
+            sym.devChainRowSpan.ptr, sym.devChainData.ptr, data, C, ldc, nRHS,
+            lumpsBegin, lumpsEnd, Plain{});
+        cuCHECK(cudaDeviceSynchronize());
+
+        sparseElim_diagSolveLt<T><<<numGroups, wgs>>>(
+            sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+            data, C, ldc, nRHS, lumpsBegin, lumpsEnd, Plain{});
+        cuCHECK(cudaDeviceSynchronize());
     }
 
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,

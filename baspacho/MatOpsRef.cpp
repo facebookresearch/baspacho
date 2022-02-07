@@ -255,8 +255,25 @@ struct SimpleSolveCtx : SolveCtx<T> {
                                          OuterStride(ldc));
             diagBlock.template triangularView<Eigen::Lower>().solveInPlace(
                 matC);
+
+#if 1
+            int64_t colEnd = skel.chainColPtr[lump + 1];
+            for (int64_t colPtr = colStart + 1; colPtr < colEnd; colPtr++) {
+                int64_t rowSpan = skel.chainRowSpan[colPtr];
+                int64_t rowSpanStart = skel.spanStart[rowSpan];
+                int64_t rowSpanSize =
+                    skel.spanStart[rowSpan + 1] - rowSpanStart;
+                int64_t blockPtr = skel.chainData[colPtr];
+                Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize,
+                                                   lumpSize);
+                OuterStridedCMajMatM<T> matQ(C + rowSpanStart, rowSpanSize,
+                                             nRHS, OuterStride(ldc));
+                matQ -= block * matC;
+            }
+#endif
         }
 
+#if 0
         // per-row iterations (like during sparse elimination, using elim data):
         // in this way the outer loop can be parallelized
         int64_t numElimRows = elim.rowPtr.size() - 1;
@@ -287,6 +304,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
                 matQ -= block * matC;
             }
         }
+#endif
     }
 
     virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,

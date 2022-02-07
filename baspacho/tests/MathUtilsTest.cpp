@@ -68,3 +68,32 @@ TEST(MathUtils, Solve) {
 
     ASSERT_NEAR((verifyVec - computeVec).norm(), 0, 1e-7);
 }
+
+TEST(MathUtils, SolveT) {
+    int n = 10, k = 1;
+    vector<double> data = randomData(n * n, -1.0, 1.0, 37);
+    Eigen::Map<MatRMaj<double>>(data.data(), n, n).diagonal().array() +=
+        n * 0.3;
+    Eigen::Map<MatRMaj<double>> verifyMat(data.data(), n, n);
+
+    cout << "smat:\n" << verifyMat << endl;
+
+    vector<double> vecData = randomData(n * k, -1.0, 1.0, 39);
+
+    MatRMaj<double> verifyVec =
+        Eigen::Map<MatRMaj<double>>(vecData.data(), k, n);
+
+    cout << "orig:\n" << verifyVec << endl;
+
+    verifyMat.template triangularView<Eigen::Lower>()
+        .template solveInPlace<Eigen::OnTheRight>(verifyVec);
+
+    cout << "verif:\n" << verifyVec << endl;
+
+    solveUpper(data.data(), n, vecData.data());
+    MatRMaj<double> computeVec =
+        Eigen::Map<MatRMaj<double>>(vecData.data(), k, n);
+    cout << "comptd:\n" << computeVec << endl;
+
+    ASSERT_NEAR((verifyVec - computeVec).norm(), 0, 1e-7);
+}

@@ -70,4 +70,22 @@ __BASPACHO_HOST_DEVICE__ inline static void solveUpperT(const T* A, int n,
     }
 }
 
+template <typename T>
+__BASPACHO_HOST_DEVICE__ inline static void solveUpper(const T* A, int n,
+                                                       T* v) {
+    const T* b_ii = A + n * n - 1;
+    for (int i = n - 1; i >= 0; i--) {
+        T x = v[i];
+
+        const T* b_ij = b_ii;
+        for (int j = i + 1; j < n; j++) {
+            b_ij += n;
+            x -= (*b_ij) * v[j];
+        }
+
+        v[i] = x / (*b_ii);
+        b_ii -= n + 1;
+    }
+}
+
 }  // end namespace BaSpaCho
