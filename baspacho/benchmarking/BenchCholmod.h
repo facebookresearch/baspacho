@@ -5,6 +5,7 @@ struct CholmodBenchResults {
     double analysisTime;
     double factorTime;
     double solve1Time;
+    double solve2Time;
     double solveNRHSTime;
     int nRHS;
 };

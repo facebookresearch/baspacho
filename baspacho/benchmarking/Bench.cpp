@@ -34,6 +34,7 @@ struct BenchResults {
     double analysisTime;
     double factorTime;
     double solve1Time;
+    double solve2Time;
     double solve10Time;
 };
 
@@ -81,10 +82,12 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
                             double(solver->factorSkel.order() * 1.2));
     vector<double> vecData1 =
         randomData(solver->factorSkel.order(), -1.0, 1.0, 38);
+    vector<double> vecData2 =
+        randomData(2 * solver->factorSkel.order(), -1.0, 1.0, 38);
     vector<double> vecData10 =
         randomData(10 * solver->factorSkel.order(), -1.0, 1.0, 38);
 
-    double factorTime, solve1Time = 0, solve10Time = 0;
+    double factorTime, solve1Time = 0, solve2Time = 0, solve10Time = 0;
 #ifdef BASPACHO_USE_CUBLAS
     if (settings.backend == BackendCuda) {
         DevMirror dataGpu(data);
@@ -93,12 +96,18 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
         factorTime = tdelta(hrc::now() - startFactor).count();
 
         DevMirror vecData1Gpu(vecData1);
+        DevMirror vecData2Gpu(vecData2);
         DevMirror vecData10Gpu(vecData10);
 
         auto startSolve1 = hrc::now();
         solver->solve(dataGpu.ptr, vecData1Gpu.ptr, solver->factorSkel.order(),
                       1);
         solve1Time = tdelta(hrc::now() - startSolve1).count();
+
+        auto startSolve2 = hrc::now();
+        solver->solve(dataGpu.ptr, vecData2Gpu.ptr, solver->factorSkel.order(),
+                      1);
+        solve2Time = tdelta(hrc::now() - startSolve2).count();
 
         auto startSolve10 = hrc::now();
         solver->solve(dataGpu.ptr, vecData10Gpu.ptr, solver->factorSkel.order(),
@@ -116,6 +125,11 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
                       1);
         solve1Time = tdelta(hrc::now() - startSolve1).count();
 
+        auto startSolve2 = hrc::now();
+        solver->solve(data.data(), vecData2.data(), solver->factorSkel.order(),
+                      2);
+        solve2Time = tdelta(hrc::now() - startSolve2).count();
+
         auto startSolve10 = hrc::now();
         solver->solve(data.data(), vecData10.data(), solver->factorSkel.order(),
                       10);
@@ -127,8 +141,8 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
         cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges)
              << endl;
         cout << "analysis: " << analysisTime << "s, factor: " << factorTime
-             << "s, solve-1: " << solve1Time << "s, solve-10: " << solve10Time
-             << "s" << endl
+             << "s, solve-1: " << solve1Time << "s, solve-2: " << solve2Time
+             << "s, solve-10: " << solve10Time << "s" << endl
              << endl;
     }
 
@@ -136,6 +150,7 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
     retv.analysisTime = analysisTime;
     retv.factorTime = factorTime;
     retv.solve1Time = solve1Time;
+    retv.solve2Time = solve2Time;
     retv.solve10Time = solve10Time;
     return retv;
 }
@@ -238,6 +253,7 @@ map<string, function<BenchResults(const SparseProblem&, bool)>> solvers = {
              cout << "analysis: " << result.analysisTime
                   << "s, factor: " << result.factorTime
                   << "s, solve-1: " << result.solve1Time
+                  << "s, solve-2: " << result.solve2Time
                   << "s, solve-10: " << result.solveNRHSTime << "s" << endl
                   << endl;
          }
@@ -245,6 +261,7 @@ map<string, function<BenchResults(const SparseProblem&, bool)>> solvers = {
          retv.analysisTime = result.analysisTime;
          retv.factorTime = result.factorTime;
          retv.solve1Time = result.solve1Time;
+         retv.solve2Time = result.solve2Time;
          retv.solve10Time = result.solveNRHSTime;
          return retv;
      }},
@@ -278,11 +295,13 @@ struct BenchmarkSettings {
 static constexpr char* ANALYSIS = "analysis";
 static constexpr char* FACTOR = "factor";
 static constexpr char* SOLVE_1 = "solve-1";
+static constexpr char* SOLVE_2 = "solve-2";
 static constexpr char* SOLVE_10 = "solve-10";
 map<string, string> timingLabels = {
     {ANALYSIS, "Symbolic analysis and precomputing of needed indices"},
     {FACTOR, "Numeric computation of matrix factorization"},
     {SOLVE_1, "Solve Ax=b with b having one column (nRHS=1)"},
+    {SOLVE_2, "Solve Ax=b with b having 2 columns (nRHS=2)"},
     {SOLVE_10, "Solve Ax=b with b having 10 columns (nRHS=10)"},
 };
 
@@ -350,6 +369,8 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
                 timingSets[FACTOR][solvName].push_back(benchResults.factorTime);
                 timingSets[SOLVE_1][solvName].push_back(
                     benchResults.solve1Time);
+                timingSets[SOLVE_2][solvName].push_back(
+                    benchResults.solve2Time);
                 timingSets[SOLVE_10][solvName].push_back(
                     benchResults.solve10Time);
             }
