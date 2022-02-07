@@ -107,6 +107,15 @@ struct NumericCtx : NumericCtxBase {
 template <typename T>
 struct SolveCtx : SolveCtxBase {
     virtual ~SolveCtx() {}
+
+    virtual void sparseElimSolveL(const SymElimCtx& elimData, const T* data,
+                                  int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+                                  int64_t ldc) = 0;
+
+    virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
+                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+                                   int64_t ldc) = 0;
+
     virtual void solveL(const T* data, int64_t offset, int64_t n, T* C,
                         int64_t offC, int64_t ldc) = 0;
 

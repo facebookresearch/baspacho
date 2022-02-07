@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 # set the project name
 project(BaSpaCho CXX)
 set(CMAKE_CXX_STANDARD 17)
-set(BASPACHO_CXX_FLAGS -Wall -Wextra -pedantic -Werror)
+set(BASPACHO_CXX_FLAGS -Wall -Wextra) # -pedantic -Werror)
 
 message("* Build type: " ${CMAKE_BUILD_TYPE})
 

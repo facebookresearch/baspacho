@@ -33,6 +33,8 @@ struct Solver {
     template <typename T>
     void solveLt(const T* matData, T* vecData, int64_t stride, int nRHS) const;
 
+    int64_t order() const { return factorSkel.order(); }
+
    private:
     void initElimination();
 

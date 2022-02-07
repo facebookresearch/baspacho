@@ -361,11 +361,218 @@ void BlasNumericCtx<float>::saveSyrkGemm(int64_t m, int64_t n, int64_t k,
     }
 }
 
+using OuterStride = Eigen::OuterStride<>;
+template <typename T>
+using OuterStridedMatM = Eigen::Map<
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
+    OuterStride>;
+template <typename T>
+using OuterStridedCMajMatM = Eigen::Map<
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
+    OuterStride>;
+template <typename T>
+using OuterStridedCMajMatK = Eigen::Map<
+    const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
+    OuterStride>;
+
 template <typename T>
 struct BlasSolveCtx : SolveCtx<T> {
     BlasSolveCtx(const BlasSymbolicCtx& sym, int nRHS)
         : sym(sym), nRHS(nRHS), tmpBuf(sym.skel.order() * nRHS) {}
     virtual ~BlasSolveCtx() override {}
+
+    virtual void sparseElimSolveL(const SymElimCtx& elimData, const T* data,
+                                  int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+                                  int64_t ldc) override {
+        const CpuBaseSymElimCtx* pElim =
+            dynamic_cast<const CpuBaseSymElimCtx*>(&elimData);
+        BASPACHO_CHECK_NOTNULL(pElim);
+        const CpuBaseSymElimCtx& elim = *pElim;
+        const CoalescedBlockMatrixSkel& skel = sym.skel;
+
+        if (!sym.useThreads) {
+            for (int64_t lump = lumpsBegin; lump < lumpsEnd; lump++) {
+                int64_t lumpStart = skel.lumpStart[lump];
+                int64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+                int64_t colStart = skel.chainColPtr[lump];
+                int64_t diagDataPtr = skel.chainData[colStart];
+
+                // in-place lower diag cholesky dec on diagonal block
+                Eigen::Map<const MatRMaj<T>> diagBlock(data + diagDataPtr,
+                                                       lumpSize, lumpSize);
+                OuterStridedCMajMatM<T> matC(C + lumpStart, lumpSize, nRHS,
+                                             OuterStride(ldc));
+                diagBlock.template triangularView<Eigen::Lower>().solveInPlace(
+                    matC);
+            }
+        } else {
+            dispenso::TaskSet taskSet(sym.threadPool);
+            dispenso::parallel_for(
+                taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
+                [&](int64_t lBegin, int64_t lEnd) {
+                    for (int64_t lump = lBegin; lump < lEnd; lump++) {
+                        int64_t lumpStart = skel.lumpStart[lump];
+                        int64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+                        int64_t colStart = skel.chainColPtr[lump];
+                        int64_t diagDataPtr = skel.chainData[colStart];
+
+                        // in-place lower diag cholesky dec on diagonal block
+                        Eigen::Map<const MatRMaj<T>> diagBlock(
+                            data + diagDataPtr, lumpSize, lumpSize);
+                        OuterStridedCMajMatM<T> matC(C + lumpStart, lumpSize,
+                                                     nRHS, OuterStride(ldc));
+                        diagBlock.template triangularView<Eigen::Lower>()
+                            .solveInPlace(matC);
+                    }
+                });
+        }
+
+        if (!sym.useThreads) {
+            int64_t numElimRows = elim.rowPtr.size() - 1;
+            for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
+                int64_t rowSpan = sRel + elim.spanRowBegin;
+                int64_t rowSpanStart = skel.spanStart[rowSpan];
+                int64_t rowSpanSize =
+                    skel.spanStart[rowSpan + 1] - rowSpanStart;
+                OuterStridedCMajMatM<T> matQ(C + rowSpanStart, rowSpanSize,
+                                             nRHS, OuterStride(ldc));
+
+                for (int64_t i = elim.rowPtr[sRel],
+                             iEnd = elim.rowPtr[sRel + 1];
+                     i < iEnd; i++) {
+                    int64_t lump = elim.colLump[i];
+                    int64_t lumpStart = skel.lumpStart[lump];
+                    int64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+                    int64_t chainColOrd = elim.chainColOrd[i];
+                    BASPACHO_CHECK_GE(chainColOrd,
+                                      1);  // there must be a diagonal block
+
+                    int64_t ptr = skel.chainColPtr[lump] + chainColOrd;
+                    BASPACHO_CHECK_EQ(skel.chainRowSpan[ptr], rowSpan);
+                    int64_t blockPtr = skel.chainData[ptr];
+
+                    Eigen::Map<const MatRMaj<T>> block(data + blockPtr,
+                                                       rowSpanSize, lumpSize);
+                    OuterStridedCMajMatM<T> matC(C + lumpStart, lumpSize, nRHS,
+                                                 OuterStride(ldc));
+                    matQ -= block * matC;
+                }
+            }
+        } else {
+            int64_t numElimRows = elim.rowPtr.size() - 1;
+            dispenso::TaskSet taskSet(sym.threadPool);
+            dispenso::parallel_for(
+                taskSet, dispenso::makeChunkedRange(0L, numElimRows, 5L),
+                [&, this](int64_t sBegin, int64_t sEnd) {
+                    for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
+                        int64_t rowSpan = sRel + elim.spanRowBegin;
+                        int64_t rowSpanStart = skel.spanStart[rowSpan];
+                        int64_t rowSpanSize =
+                            skel.spanStart[rowSpan + 1] - rowSpanStart;
+                        OuterStridedCMajMatM<T> matQ(C + rowSpanStart,
+                                                     rowSpanSize, nRHS,
+                                                     OuterStride(ldc));
+
+                        for (int64_t i = elim.rowPtr[sRel],
+                                     iEnd = elim.rowPtr[sRel + 1];
+                             i < iEnd; i++) {
+                            int64_t lump = elim.colLump[i];
+                            int64_t lumpStart = skel.lumpStart[lump];
+                            int64_t lumpSize =
+                                skel.lumpStart[lump + 1] - lumpStart;
+                            int64_t chainColOrd = elim.chainColOrd[i];
+                            BASPACHO_CHECK_GE(
+                                chainColOrd,
+                                1);  // there must be a diagonal block
+
+                            int64_t ptr = skel.chainColPtr[lump] + chainColOrd;
+                            BASPACHO_CHECK_EQ(skel.chainRowSpan[ptr], rowSpan);
+                            int64_t blockPtr = skel.chainData[ptr];
+
+                            Eigen::Map<const MatRMaj<T>> block(
+                                data + blockPtr, rowSpanSize, lumpSize);
+                            OuterStridedCMajMatM<T> matC(C + lumpStart,
+                                                         lumpSize, nRHS,
+                                                         OuterStride(ldc));
+                            matQ -= block * matC;
+                        }
+                    }
+                });
+        }
+    }
+
+    virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
+                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+                                   int64_t ldc) override {
+        const CoalescedBlockMatrixSkel& skel = sym.skel;
+
+        if (!sym.useThreads) {
+            for (int64_t lump = lumpsBegin; lump < lumpsEnd; lump++) {
+                int64_t lumpStart = skel.lumpStart[lump];
+                int64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+                int64_t colStart = skel.chainColPtr[lump];
+                int64_t colEnd = skel.chainColPtr[lump + 1];
+                OuterStridedCMajMatM<T> matC(C + lumpStart, lumpSize, nRHS,
+                                             OuterStride(ldc));
+
+                for (int64_t colPtr = colStart + 1; colPtr < colEnd; colPtr++) {
+                    int64_t rowSpan = skel.chainRowSpan[colPtr];
+                    int64_t rowSpanStart = skel.spanStart[rowSpan];
+                    int64_t rowSpanSize =
+                        skel.spanStart[rowSpan + 1] - rowSpanStart;
+                    int64_t blockPtr = skel.chainData[colPtr];
+                    Eigen::Map<const MatRMaj<T>> block(data + blockPtr,
+                                                       rowSpanSize, lumpSize);
+                    OuterStridedCMajMatM<T> matQ(C + rowSpanStart, rowSpanSize,
+                                                 nRHS, OuterStride(ldc));
+                    matC -= block.transpose() * matQ;
+                }
+
+                int64_t diagDataPtr = skel.chainData[colStart];
+                Eigen::Map<const MatRMaj<T>> diagBlock(data + diagDataPtr,
+                                                       lumpSize, lumpSize);
+                diagBlock.template triangularView<Eigen::Lower>()
+                    .adjoint()
+                    .solveInPlace(matC);
+            }
+        } else {
+            dispenso::TaskSet taskSet(sym.threadPool);
+            dispenso::parallel_for(
+                taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
+                [&](int64_t lBegin, int64_t lEnd) {
+                    for (int64_t lump = lBegin; lump < lEnd; lump++) {
+                        int64_t lumpStart = skel.lumpStart[lump];
+                        int64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+                        int64_t colStart = skel.chainColPtr[lump];
+                        int64_t colEnd = skel.chainColPtr[lump + 1];
+                        OuterStridedCMajMatM<T> matC(C + lumpStart, lumpSize,
+                                                     nRHS, OuterStride(ldc));
+
+                        for (int64_t colPtr = colStart + 1; colPtr < colEnd;
+                             colPtr++) {
+                            int64_t rowSpan = skel.chainRowSpan[colPtr];
+                            int64_t rowSpanStart = skel.spanStart[rowSpan];
+                            int64_t rowSpanSize =
+                                skel.spanStart[rowSpan + 1] - rowSpanStart;
+                            int64_t blockPtr = skel.chainData[colPtr];
+                            Eigen::Map<const MatRMaj<T>> block(
+                                data + blockPtr, rowSpanSize, lumpSize);
+                            OuterStridedCMajMatM<T> matQ(C + rowSpanStart,
+                                                         rowSpanSize, nRHS,
+                                                         OuterStride(ldc));
+                            matC -= block.transpose() * matQ;
+                        }
+
+                        int64_t diagDataPtr = skel.chainData[colStart];
+                        Eigen::Map<const MatRMaj<T>> diagBlock(
+                            data + diagDataPtr, lumpSize, lumpSize);
+                        diagBlock.template triangularView<Eigen::Lower>()
+                            .adjoint()
+                            .solveInPlace(matC);
+                    }
+                });
+        }
+    }
 
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
                         int64_t offC, int64_t ldc) override;

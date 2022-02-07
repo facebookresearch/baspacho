@@ -228,7 +228,16 @@ void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
 template <typename T>
 void Solver::internalSolveL(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
                             int64_t stride) const {
-    for (int64_t l = 0; l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
+    for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
+        slvCtx.sparseElimSolveL(*elimCtxs[l], matData, elimLumpRanges[l],
+                                elimLumpRanges[l + 1], vecData, stride);
+    }
+
+    int64_t denseOpsFromLump =
+        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
+
+    for (int64_t l = denseOpsFromLump;
+         l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
         int64_t chainColBegin = factorSkel.chainColPtr[l];
@@ -264,7 +273,11 @@ void Solver::internalSolveL(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
 template <typename T>
 void Solver::internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
                              int64_t stride) const {
-    for (int64_t l = factorSkel.chainColPtr.size() - 2; (int64_t)l >= 0; l--) {
+    int64_t denseOpsFromLump =
+        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
+
+    for (int64_t l = (int64_t)factorSkel.chainColPtr.size() - 2;
+         l >= denseOpsFromLump; l--) {
         int64_t lumpStart = factorSkel.lumpStart[l];
         int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
         int64_t chainColBegin = factorSkel.chainColPtr[l];
@@ -293,6 +306,11 @@ void Solver::internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
         int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
         slvCtx.solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
                        stride);
+    }
+
+    for (int64_t l = (int64_t)elimLumpRanges.size() - 2; l >= 0; l--) {
+        slvCtx.sparseElimSolveLt(*elimCtxs[l], matData, elimLumpRanges[l],
+                                 elimLumpRanges[l + 1], vecData, stride);
     }
 }
 

@@ -907,6 +907,14 @@ struct CudaSolveCtx : SolveCtx<T> {
         }
     }
 
+    virtual void sparseElimSolveL(const SymElimCtx& elimData, const T* data,
+                                  int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+                                  int64_t ldc) override {}
+
+    virtual void sparseElimSolveLt(const SymElimCtx& elimData, const T* data,
+                                   int64_t lumpsBegin, int64_t lumpsEnd, T* C,
+                                   int64_t ldc) override {}
+
     virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
                         int64_t offC, int64_t ldc) override;
 
@@ -1040,6 +1048,16 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
             }
         }
     }
+
+    virtual void sparseElimSolveL(const SymElimCtx& elimData,
+                                  const vector<T*>* data, int64_t lumpsBegin,
+                                  int64_t lumpsEnd, vector<T*>* C,
+                                  int64_t ldc) override {}
+
+    virtual void sparseElimSolveLt(const SymElimCtx& elimData,
+                                   const vector<T*>* data, int64_t lumpsBegin,
+                                   int64_t lumpsEnd, vector<T*>* C,
+                                   int64_t ldc) override {}
 
     virtual void solveL(const vector<T*>* data, int64_t offM, int64_t n,
                         vector<T*>* C, int64_t offC, int64_t ldc) override;
