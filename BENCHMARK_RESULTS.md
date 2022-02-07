@@ -1,6 +1,13 @@
 # Benchmarking
 
-The tests below have been executed on a ThinkStationP720 equipped with
+- [Test types](#test-types)
+- [Factor (OpenBLAS/Cuda 11.5)](#factor-openblascuda-115)
+- [Factor (Intel-MKL)](#factor-intel-mkl)
+- [Solve (OpenBLAS/Cuda 11.5, nRHS = 1, 2, 10)](#solve-openblascuda-115-nrhs--1-2-10)
+- [Solve (Intel-MKL, nRHS = 1, 2, 10)](#solve-intel-mkl-nrhs--1-2-10)
+- [Analysis (OpenBLAS/Cuda 11.5)](#analysis-openblascuda-115)
+
+The tests have been executed on a ThinkStation P720 equipped with
 - RAM: 128Gb
 - CPU: Intel(R) Xeon(R) Silver 4214 CPU @ 2.20GHz
 - GPU: Quadro RTX 5000

@@ -132,9 +132,9 @@ the library will work best when the parameter blocks have sizes 1 to 12 (in a fa
 have many parameter blocks of the same type).
 * About determinism: assuming BLAS is deterministic, BaSpaCho will be 100% deterministic on the CPU, but
 not on CUDA if there is any "sparse elimination" set of parameters, because both factor and solve operations
-use atomic addition for parallelism on the GPU. Also, a Cuda architecture >= 6 is needed for atomicAdd
-on double numbers (this is the compute architecture and not the version of Cuda, arch>=6 means you need
-Tesla P100 or GTX 1080-family, or newer, see
+use atomic addition for parallelism on the GPU. Also, a Cuda architecture >=6 is needed for atomicAdd
+on double numbers (this is the compute hardware architecture and not the version of Cuda, arch >=6 means
+you need Tesla P100 or GTX 1080-family, or newer. See
 [Cuda Architectures](https://en.wikipedia.org/wiki/CUDA#GPUs_supported)).
 Otherwise you will have to add define `CUDA_DOUBLE_ATOMIC_ADD_WORKAROUND` in order to enable the workaround
 in `CudaAtomic.cuh`.
