@@ -35,6 +35,8 @@ struct Solver {
 
     int64_t order() const { return factorSkel.order(); }
 
+    int64_t dataSize() const { return factorSkel.dataSize(); }
+
    private:
     void initElimination();
 

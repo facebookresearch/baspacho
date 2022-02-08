@@ -55,6 +55,28 @@ static Vec3 quatToRodriguez(const Quat& q) {
     return vec * (angle / norm);
 }
 
+void Data::removeBadObservations(int64_t maxNumPts) {
+    if (maxNumPts > 0) {
+        cout << "num Pts: " << points.size() << " -> " << maxNumPts << endl;
+        points.resize(maxNumPts);
+    }
+
+    std::vector<Obs> newObservations;
+    for (auto obs : observations) {
+        if (obs.ptIdx > points.size()) {
+            continue;
+        }
+        Vec3 camPt = cameras[obs.camIdx].T_W_C * points[obs.ptIdx];
+        if (camPt.squaredNorm() < 0.3 || camPt.z() > -0.1) {
+            continue;
+        }
+        newObservations.push_back(obs);
+    }
+    cout << "num Obs: " << observations.size() << " -> "
+         << newObservations.size() << endl;
+    std::swap(observations, newObservations);
+}
+
 void Data::load(const std::string& path, bool verbose) {
     ifstream istream(path);
     if (!istream) {

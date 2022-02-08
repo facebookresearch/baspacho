@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Eigen/Geometry>
-#include <ostream>
+#include <iostream>
 #include <sophus/se3.hpp>
 #include <string>
 #include <vector>
@@ -38,6 +38,8 @@ struct Data {
     std::vector<Cam> cameras;
     std::vector<Vec3> points;
 
+    void removeBadObservations(int64_t maxNumPts = -1);
+
     void load(const std::string& path, bool verbose = false);
 
     void save(const std::string& path, bool verbose = false);
@@ -64,11 +66,11 @@ struct Cost {
         return calibPt - imagePt;
     }
 
-    Eigen::Matrix<double, 2, 1> compute_residual(
-        const Vec2& imagePt, const Vec3& worldPt, const Sophus::SE3d& T_W_C,
-        const Vec3& calib, Eigen::Matrix<double, 2, 3>* point_jacobian,
-        Eigen::Matrix<double, 2, 6>* camera_jacobian,
-        Eigen::Matrix<double, 2, 3>* calib_jacobian) const {
+    static Vec2 compute_residual(const Vec2& imagePt, const Vec3& worldPt,
+                                 const Sophus::SE3d& T_W_C, const Vec3& calib,
+                                 Eigen::Matrix<double, 2, 3>* point_jacobian,
+                                 Eigen::Matrix<double, 2, 6>* camera_jacobian,
+                                 Eigen::Matrix<double, 2, 3>* calib_jacobian) {
         Vec3 camPt = T_W_C * worldPt;
         if (camPt.z() > 0.01) {
             if (point_jacobian) {

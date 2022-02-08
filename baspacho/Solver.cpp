@@ -207,8 +207,8 @@ template <typename T>
 void Solver::solve(const T* matData, T* vecData, int64_t stride,
                    int nRHS) const {
     SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
-    internalSolveLt(*slvCtx, matData, vecData, stride);
     internalSolveL(*slvCtx, matData, vecData, stride);
+    internalSolveLt(*slvCtx, matData, vecData, stride);
 }
 
 template <typename T>

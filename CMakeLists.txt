@@ -60,13 +60,13 @@ if(BASPACHO_USE_SUITESPARSE_AMD)
               PATHS $ENV{AMDDIR} ${LIB_INSTALL_DIR}
               REQUIRED)
   include_directories(${AMD_INCLUDE_DIR})
-  message("* Using Algebraic Minimum Degree (AMD) algorithm from SuiteSparse")
+  message("* Using Approximate Minimum Degree (AMD) algorithm from SuiteSparse")
   message("* Amd Source = " ${AMD_INCLUDE_DIR})
   message("* Amd Libraries = " ${AMD_LIBRARIES})
   add_compile_definitions(BASPACHO_USE_SUITESPARSE_AMD)
 else()
   set(HAVE_AMD 0)
-  message("* Using Algebraic Minimum Degree (AMD) algorithm from Eigen")
+  message("* Using Approximate Minimum Degree (AMD) algorithm from Eigen")
 endif()
 
 
@@ -198,6 +198,9 @@ target_link_libraries (testing BaSpaCho)
 set(BAL_bench_sources
     baspacho/benchmarking/BaAtLarge.cpp
     baspacho/benchmarking/BaAtLargeBench.cpp)
+set(BAL_opt_sources
+    baspacho/benchmarking/BaAtLarge.cpp
+    baspacho/benchmarking/BaAtLargeOptimizer.cpp)
 set(bench_sources
     baspacho/benchmarking/Bench.cpp)
 
@@ -208,6 +211,9 @@ endif()
 
 add_executable(BAL_bench ${BAL_bench_sources})
 target_link_libraries (BAL_bench BaSpaCho testing)
+
+add_executable(BAL_opt ${BAL_opt_sources})
+target_link_libraries (BAL_opt BaSpaCho testing)
 
 add_executable(bench ${bench_sources})
 target_link_libraries (bench BaSpaCho testing)
