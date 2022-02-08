@@ -157,11 +157,46 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
         }
     }
 
+    static inline T* elimDiagBlock(int m, int k, T* A, int lda, T* B) {
+        T* A_row = A;
+        T* B_row = B;
+        for (int i = 0; i < m; i++) {
+            T* C_row = B;
+            for (int j = 0; j <= i; j++) {
+                T& v = A_row[j];
+                for (int q = 0; q < k; q++) {
+                    v -= B_row[q] * C_row[q];
+                }
+                C_row += k;
+            }
+            A_row += lda;
+            B_row += k;
+        }
+        return B_row;
+    }
+
+    static inline T* elimBlock(int m, int n, int k, T* A, int lda, T* B, T* C) {
+        T* A_row = A;
+        T* B_row = B;
+        for (int i = 0; i < m; i++) {
+            T* C_row = C;
+            for (int j = 0; j < n; j++) {
+                T& v = A_row[j];
+                for (int q = 0; q < k; q++) {
+                    v -= B_row[q] * C_row[q];
+                }
+                C_row += k;
+            }
+            A_row += lda;
+            B_row += k;
+        }
+        return B_row;
+    }
+
     static void eliminateRowChain(const CpuBaseSymElimCtx& elim,
                                   const CoalescedBlockMatrixSkel& skel, T* data,
                                   int64_t sRel,
-                                  std::vector<int64_t>& spanToChainOffset,
-                                  std::vector<T>& tempBuffer) {
+                                  std::vector<int64_t>& spanToChainOffset) {
         int64_t s = sRel + elim.spanRowBegin;
         if (elim.rowPtr[sRel] == elim.rowPtr[sRel + 1]) {
             return;
@@ -173,6 +208,10 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
             skel.spanStart[s] - skel.lumpStart[targetLump];
         prepareContextForTargetLump(skel, targetLump, spanToChainOffset);
 
+        const int64_t* pChainRowsTillEnd = skel.chainRowsTillEnd.data();
+        const int64_t* pChainRowSpan = skel.chainRowSpan.data();
+        const int64_t* pSpanToChainOffset = spanToChainOffset.data();
+
         // iterate over chains present in this row
         for (int64_t i = elim.rowPtr[sRel], iEnd = elim.rowPtr[sRel + 1];
              i < iEnd; i++) {
@@ -183,41 +222,38 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
 
             int64_t ptrStart = skel.chainColPtr[lump] + chainColOrd;
             int64_t ptrEnd = skel.chainColPtr[lump + 1];
-            BASPACHO_CHECK_EQ(skel.chainRowSpan[ptrStart], s);
+            BASPACHO_CHECK_EQ(pChainRowSpan[ptrStart], s);
 
-            int64_t nRowsAbove = skel.chainRowsTillEnd[ptrStart - 1];
-            int64_t nRowsChain = skel.chainRowsTillEnd[ptrStart] - nRowsAbove;
-            int64_t nRowsOnward = skel.chainRowsTillEnd[ptrEnd - 1];
-            int64_t dataOffset = skel.chainData[ptrStart];
+            int64_t nRowsAbove = pChainRowsTillEnd[ptrStart - 1];
+            int64_t nRowsChain = pChainRowsTillEnd[ptrStart] - nRowsAbove;
+            int64_t nRowsOnward = pChainRowsTillEnd[ptrEnd - 1];
+            T* origDataStart = data + skel.chainData[ptrStart];
             BASPACHO_CHECK_EQ(nRowsChain,
                               skel.spanStart[s + 1] - skel.spanStart[s]);
             int64_t lumpSize = skel.lumpStart[lump + 1] - skel.lumpStart[lump];
 
-            Eigen::Map<MatRMaj<T>> chainSubMat(data + dataOffset, nRowsChain,
-                                               lumpSize);
-            Eigen::Map<MatRMaj<T>> chainOnwardSubMat(data + dataOffset,
-                                                     nRowsOnward, lumpSize);
-
-            BASPACHO_CHECK_GE((int64_t)tempBuffer.size(),
-                              nRowsOnward * nRowsChain);
-            Eigen::Map<MatRMaj<T>> prod(tempBuffer.data(), nRowsOnward,
-                                        nRowsChain);
-            prod.noalias() = chainOnwardSubMat * chainSubMat.transpose();
+            T* headTargetData = data + spanOffsetInLump +
+                                pSpanToChainOffset[pChainRowSpan[ptrStart]];
+            T* nextDataStart =
+                elimDiagBlock(nRowsChain, lumpSize, headTargetData,
+                              targetLumpSize, origDataStart);
 
             // assemble blocks, iterating on chain and below chains
-            for (int64_t ptr = ptrStart; ptr < ptrEnd; ptr++) {
-                int64_t s2 = skel.chainRowSpan[ptr];
-                int64_t relRow = skel.chainRowsTillEnd[ptr - 1] - nRowsAbove;
-                int64_t s2_size =
-                    skel.chainRowsTillEnd[ptr] - nRowsAbove - relRow;
+            int64_t nextRelRow = pChainRowsTillEnd[ptrStart] - nRowsAbove;
+            for (int64_t ptr = ptrStart + 1; ptr < ptrEnd; ptr++) {
+                int64_t s2 = pChainRowSpan[ptr];
+                int64_t relRow = nextRelRow;
+                nextRelRow = pChainRowsTillEnd[ptr] - nRowsAbove;
+                int64_t s2_size = nextRelRow - relRow;
 
                 // incomment below if check is needed
                 // BASPACHO_CHECK(spanToChainOffset[s2] != kInvalid);
-                T* targetData = data + spanOffsetInLump + spanToChainOffset[s2];
+                T* targetData =
+                    data + spanOffsetInLump + pSpanToChainOffset[s2];
 
-                stridedMatSub(targetData, targetLumpSize,
-                              tempBuffer.data() + nRowsChain * relRow,
-                              nRowsChain, s2_size, nRowsChain);
+                nextDataStart =
+                    elimBlock(s2_size, nRowsChain, lumpSize, targetData,
+                              targetLumpSize, nextDataStart, origDataStart);
             }
         }
     }

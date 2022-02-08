@@ -67,11 +67,9 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
 
         int64_t numElimRows = elim.rowPtr.size() - 1;
         int64_t numSpans = skel.spanStart.size() - 1;
-        std::vector<T> tempBuffer(elim.maxBufferSize);
         std::vector<int64_t> spanToChainOffset(numSpans);
         for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
-            eliminateRowChain(elim, skel, data, sRel, spanToChainOffset,
-                              tempBuffer);
+            eliminateRowChain(elim, skel, data, sRel, spanToChainOffset);
         }
     }
 

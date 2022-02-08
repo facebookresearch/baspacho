@@ -88,18 +88,16 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         if (elim.colLump.size() > 3 * (elim.rowPtr.size() - 1)) {
             int64_t numSpans = skel.spanStart.size() - 1;
             if (!sym.useThreads) {
-                std::vector<T> tempBuffer(elim.maxBufferSize);
                 std::vector<int64_t> spanToChainOffset(numSpans);
                 for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
-                    eliminateRowChain(elim, skel, data, sRel, spanToChainOffset,
-                                      tempBuffer);
+                    eliminateRowChain(elim, skel, data, sRel,
+                                      spanToChainOffset);
                 }
             } else {
                 struct ElimContext {
-                    std::vector<T> tempBuffer;
                     std::vector<int64_t> spanToChainOffset;
                     ElimContext(int64_t bufSize, int64_t numSpans)
-                        : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
+                        : spanToChainOffset(numSpans) {}
                 };
                 vector<ElimContext> contexts;
                 dispenso::TaskSet taskSet(sym.threadPool);
@@ -112,8 +110,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                     [&, this](ElimContext& ctx, int64_t sBegin, int64_t sEnd) {
                         for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
                             eliminateRowChain(elim, skel, data, sRel,
-                                              ctx.spanToChainOffset,
-                                              ctx.tempBuffer);
+                                              ctx.spanToChainOffset);
                         }
                     });
             }
