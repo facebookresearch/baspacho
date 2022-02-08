@@ -188,7 +188,7 @@ SolveCtxPtr<T> SymbolicCtx::createSolveCtx(int nRHS, const T* data) {
 
 OpsPtr simpleOps();
 
-OpsPtr blasOps();
+OpsPtr blasOps(int numThreads = 16);
 
 OpsPtr cudaOps();
 

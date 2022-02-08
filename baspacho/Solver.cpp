@@ -412,7 +412,7 @@ void Solver::resetStats() {
 
 OpsPtr getBackend(const Settings& settings) {
     if (settings.backend == BackendBlas) {
-        return blasOps();
+        return blasOps(settings.numThreads);
     } else if (settings.backend == BackendCuda) {
 #ifdef BASPACHO_USE_CUBLAS
         return cudaOps();

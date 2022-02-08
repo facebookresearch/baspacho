@@ -45,11 +45,13 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
 
 // Blas ops aiming at high performance using BLAS/LAPACK
 struct BlasOps : Ops {
+    BlasOps(int numThreads) : numThreads(numThreads) {}
     virtual SymbolicCtxPtr createSymbolicCtx(
         const CoalescedBlockMatrixSkel& skel) override {
         // todo: use settings
-        return SymbolicCtxPtr(new BlasSymbolicCtx(skel, 16));
+        return SymbolicCtxPtr(new BlasSymbolicCtx(skel, numThreads));
     }
+    int numThreads;
 };
 
 template <typename T>
@@ -760,6 +762,6 @@ SolveCtxBase* BlasSymbolicCtx::createSolveCtxForType(std::type_index tIdx,
     }
 }
 
-OpsPtr blasOps() { return OpsPtr(new BlasOps); }
+OpsPtr blasOps(int numThreads) { return OpsPtr(new BlasOps(numThreads)); }
 
 }  // end namespace BaSpaCho

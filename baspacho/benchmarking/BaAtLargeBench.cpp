@@ -62,9 +62,47 @@ void testSolvers(Data& data) {
 
     if (1) {
         cout << "===========================================" << endl;
-        cout << "Testing Baspacho/BLAS (on full Points+Cameras system)" << endl;
+        cout << "Testing Baspacho/BLAS nThreads=16 (on full Points+Cameras "
+                "system)"
+             << endl;
         auto startAnalysis = hrc::now();
-        auto solver = createSolverSchur({}, paramSize, origSs, {0, numPts});
+        auto solver = createSolverSchur({.numThreads = 16}, paramSize, origSs,
+                                        {0, numPts});
+        double analysisTime = tdelta(hrc::now() - startAnalysis).count();
+
+        // generate mock data, make positive def
+        vector<double> matData =
+            randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
+        solver->factorSkel.damp(matData, double(0),
+                                double(solver->factorSkel.order() * 1.2));
+
+        cout << "heating up factor..." << endl;
+        solver->factor(matData.data());  // heat up
+        solver->resetStats();
+        cout << "running real benchmark..." << endl;
+
+        auto startFactor = hrc::now();
+        solver->factor(matData.data());
+        double factorTime = tdelta(hrc::now() - startFactor).count();
+
+        solver->printStats();
+        double elimTime = solver->elimCtxs[0]->elimStat.totTime;
+        cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
+        cout << "Total Factor Time....: " << factorTime << "s" << endl;
+        cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
+        cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s"
+             << endl
+             << endl;
+    }
+
+    if (1) {
+        cout << "===========================================" << endl;
+        cout << "Testing Baspacho/BLAS nThreads=1 (on full Points+Cameras "
+                "system)"
+             << endl;
+        auto startAnalysis = hrc::now();
+        auto solver = createSolverSchur({.numThreads = 1}, paramSize, origSs,
+                                        {0, numPts});
         double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
         // generate mock data, make positive def
