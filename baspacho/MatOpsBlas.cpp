@@ -96,7 +96,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
             } else {
                 struct ElimContext {
                     std::vector<int64_t> spanToChainOffset;
-                    ElimContext(int64_t bufSize, int64_t numSpans)
+                    ElimContext(int64_t numSpans)
                         : spanToChainOffset(numSpans) {}
                 };
                 vector<ElimContext> contexts;
@@ -104,7 +104,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                 dispenso::parallel_for(
                     taskSet, contexts,
                     [=]() -> ElimContext {
-                        return ElimContext(elim.maxBufferSize, numSpans);
+                        return ElimContext(numSpans);
                     },
                     dispenso::makeChunkedRange(0L, numElimRows, 5L),
                     [&, this](ElimContext& ctx, int64_t sBegin, int64_t sEnd) {

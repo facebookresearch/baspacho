@@ -226,7 +226,6 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
 
             int64_t nRowsAbove = pChainRowsTillEnd[ptrStart - 1];
             int64_t nRowsChain = pChainRowsTillEnd[ptrStart] - nRowsAbove;
-            int64_t nRowsOnward = pChainRowsTillEnd[ptrEnd - 1];
             T* origDataStart = data + skel.chainData[ptrStart];
             BASPACHO_CHECK_EQ(nRowsChain,
                               skel.spanStart[s + 1] - skel.spanStart[s]);
