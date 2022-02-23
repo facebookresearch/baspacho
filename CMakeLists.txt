@@ -51,21 +51,21 @@ endif()
 message("===============[ minimum degree reordering algorithm ]==================")
 set(BASPACHO_USE_SUITESPARSE_AMD OFF CACHE BOOL "If on, will use AMD algorithm in SuiteSparse (must be installed)")
 if(BASPACHO_USE_SUITESPARSE_AMD)
-  set(HAVE_AMD 1)
-  find_path(AMD_INCLUDE_DIR NAMES amd.h
+  set(HAVE_SUITESPARSE_AMD 1)
+  find_path(SUITESPARSE_AMD_INCLUDE_DIR NAMES amd.h
             PATHS $ENV{AMDDIR} ${INCLUDE_INSTALL_DIR}
             PATH_SUFFIXES suitesparse ufsparse
             REQUIRED)
-  find_library(AMD_LIBRARIES amd
+  find_library(SUITESPARSE_AMD_LIBRARIES amd
               PATHS $ENV{AMDDIR} ${LIB_INSTALL_DIR}
               REQUIRED)
-  include_directories(${AMD_INCLUDE_DIR})
+  include_directories(${SUITESPARSE_AMD_INCLUDE_DIR})
   message("* Using Approximate Minimum Degree (AMD) algorithm from SuiteSparse")
-  message("* Amd Source = " ${AMD_INCLUDE_DIR})
-  message("* Amd Libraries = " ${AMD_LIBRARIES})
+  message("* Amd Source = " ${SUITESPARSE_AMD_INCLUDE_DIR})
+  message("* Amd Libraries = " ${SUITESPARSE_AMD_LIBRARIES})
   add_compile_definitions(BASPACHO_USE_SUITESPARSE_AMD)
 else()
-  set(HAVE_AMD 0)
+  set(HAVE_SUITESPARSE_AMD 0)
   message("* Using Approximate Minimum Degree (AMD) algorithm from Eigen")
 endif()
 
@@ -155,73 +155,8 @@ include_directories(${sophus_SOURCE_DIR})
 add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 
-include_directories ("${PROJECT_SOURCE_DIR}")
-
-set(BaSpaCho_sources
-    baspacho/baspacho/CoalescedBlockMatrix.cpp
-    baspacho/baspacho/EliminationTree.cpp
-    baspacho/baspacho/MatOpsBlas.cpp
-    baspacho/baspacho/MatOpsRef.cpp
-    baspacho/baspacho/Solver.cpp
-    baspacho/baspacho/SparseStructure.cpp
-    baspacho/baspacho/Utils.cpp)
-if(BASPACHO_USE_CUBLAS)
-  list(APPEND BaSpaCho_sources
-      baspacho/baspacho/CublasError.cpp
-      baspacho/baspacho/MatOpsCuda.cu)
-endif()
-add_library(BaSpaCho ${BaSpaCho_sources})
-target_link_libraries (BaSpaCho dispenso ${BLAS_LIBRARIES})
-
-if(BASPACHO_USE_CUBLAS)
-  set_target_properties(BaSpaCho PROPERTIES CUDA_ARCHITECTURES ${BASPACHO_CUDA_ARCHITECTURES})
-  target_link_libraries (BaSpaCho CUDA::cublas CUDA::cusolver)
-  target_compile_options(BaSpaCho PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
-                        ${BASPACHO_CXX_FLAGS}
-                        >)
-  target_compile_options(BaSpaCho PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        ${CUDA_NVCC_FLAGS}
-                        >)
-endif()
-
-if(HAVE_AMD)
-  target_link_libraries (BaSpaCho ${AMD_LIBRARIES})
-endif()
-
-add_library(testing
-            baspacho/testing/TestingMatGen.cpp
-            baspacho/testing/TestingUtils.cpp)
-
-target_link_libraries (testing BaSpaCho)
-
-
-set(BAL_bench_sources
-    baspacho/benchmarking/BaAtLarge.cpp
-    baspacho/benchmarking/BaAtLargeBench.cpp)
-set(BAL_opt_sources
-    baspacho/benchmarking/BaAtLarge.cpp
-    baspacho/benchmarking/BaAtLargeOptimizer.cpp)
-set(bench_sources
-    baspacho/benchmarking/Bench.cpp)
-
-if(HAVE_CHOLMOD)
-  list(APPEND BAL_bench_sources baspacho/benchmarking/BenchCholmod.cpp)
-  list(APPEND bench_sources baspacho/benchmarking/BenchCholmod.cpp)
-endif()
-
-add_executable(BAL_bench ${BAL_bench_sources})
-target_link_libraries (BAL_bench BaSpaCho testing)
-
-add_executable(BAL_opt ${BAL_opt_sources})
-target_link_libraries (BAL_opt BaSpaCho testing)
-
-add_executable(bench ${bench_sources})
-target_link_libraries (bench BaSpaCho testing)
-
-if(HAVE_CHOLMOD)
-  target_link_libraries (BAL_bench ${CHOLMOD_LIBRARIES})
-  target_link_libraries (bench ${CHOLMOD_LIBRARIES})
-endif()
+# add root to include path
+include_directories("${PROJECT_SOURCE_DIR}")
 
 
 # unit tests
@@ -238,50 +173,6 @@ function(add_baspacho_test TARGET)
   gtest_discover_tests("${TARGET}")
 endfunction()
 
-add_baspacho_test(
-  AccessorTest
-  baspacho/tests/AccessorTest.cpp
-)
-add_baspacho_test(
-  CoalescedBlockMatrixTest
-  baspacho/tests/CoalescedBlockMatrixTest.cpp
-)
-add_baspacho_test(
-  SparseStructureTest
-  baspacho/tests/SparseStructureTest.cpp
-)
-add_baspacho_test(
-  EliminationTreeTest
-  baspacho/tests/EliminationTreeTest.cpp
-)
-add_baspacho_test(
-  FactorTest
-  baspacho/tests/FactorTest.cpp
-)
-add_baspacho_test(
-  SolveTest
-  baspacho/tests/SolveTest.cpp
-)
-add_baspacho_test(
-  MathUtilsTest
-  baspacho/tests/MathUtilsTest.cpp
-)
 
-if(BASPACHO_USE_CUBLAS)
-  add_baspacho_test(
-    CudaFactorTest
-    baspacho/tests/CudaFactorTest.cpp
-  )
-  add_baspacho_test(
-    CudaSolveTest
-    baspacho/tests/CudaSolveTest.cpp
-  )
-  add_baspacho_test(
-    BatchedCudaFactorTest
-    baspacho/tests/BatchedCudaFactorTest.cpp
-  )
-  add_baspacho_test(
-    BatchedCudaSolveTest
-    baspacho/tests/BatchedCudaSolveTest.cpp
-  )
-endif()
+# add subfolders
+add_subdirectory(baspacho)
