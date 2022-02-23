@@ -3,9 +3,9 @@
 
 #include <chrono>
 
-#include "baspacho/DebugMacros.h"
-#include "baspacho/MatOpsCpuBase.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/MatOpsCpuBase.h"
+#include "baspacho/baspacho/Utils.h"
 
 #ifdef BASPACHO_USE_MKL
 
@@ -15,7 +15,7 @@
 
 #else
 
-#include "baspacho/BlasDefs.h"
+#include "baspacho/baspacho/BlasDefs.h"
 #define BASPACHO_USE_TRSM_WORAROUND 1
 
 #endif
@@ -103,9 +103,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                 dispenso::TaskSet taskSet(sym.threadPool);
                 dispenso::parallel_for(
                     taskSet, contexts,
-                    [=]() -> ElimContext {
-                        return ElimContext(numSpans);
-                    },
+                    [=]() -> ElimContext { return ElimContext(numSpans); },
                     dispenso::makeChunkedRange(0L, numElimRows, 5L),
                     [&, this](ElimContext& ctx, int64_t sBegin, int64_t sEnd) {
                         for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {

@@ -1,9 +1,9 @@
 
 #include <memory>
 
-#include "baspacho/CoalescedBlockMatrix.h"
-#include "baspacho/MatOps.h"
-#include "baspacho/SparseStructure.h"
+#include "baspacho/baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/baspacho/MatOps.h"
+#include "baspacho/baspacho/SparseStructure.h"
 
 namespace BaSpaCho {
 

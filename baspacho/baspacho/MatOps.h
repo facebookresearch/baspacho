@@ -3,7 +3,7 @@
 #include <memory>
 #include <typeindex>
 
-#include "baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/baspacho/CoalescedBlockMatrix.h"
 
 namespace BaSpaCho {
 

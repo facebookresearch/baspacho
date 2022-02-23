@@ -7,9 +7,9 @@
 #include <random>
 #include <sstream>
 
-#include "baspacho/CoalescedBlockMatrix.h"
-#include "baspacho/SparseStructure.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/baspacho/SparseStructure.h"
+#include "baspacho/baspacho/Utils.h"
 #include "baspacho/testing/TestingUtils.h"
 
 using namespace BaSpaCho;

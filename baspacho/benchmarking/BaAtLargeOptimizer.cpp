@@ -2,8 +2,8 @@
 #include <chrono>
 #include <iomanip>
 
-#include "baspacho/Solver.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/Solver.h"
+#include "baspacho/baspacho/Utils.h"
 #include "baspacho/benchmarking/BaAtLarge.h"
 #include "baspacho/testing/TestingUtils.h"
 

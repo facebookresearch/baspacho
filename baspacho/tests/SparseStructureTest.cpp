@@ -1,9 +1,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "baspacho/DebugMacros.h"
-#include "baspacho/SparseStructure.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/SparseStructure.h"
+#include "baspacho/baspacho/Utils.h"
 #include "baspacho/testing/TestingUtils.h"
 
 using namespace BaSpaCho;

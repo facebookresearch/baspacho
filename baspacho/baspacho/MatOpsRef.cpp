@@ -2,9 +2,9 @@
 #include <chrono>
 #include <iostream>
 
-#include "baspacho/DebugMacros.h"
-#include "baspacho/MatOpsCpuBase.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/MatOpsCpuBase.h"
+#include "baspacho/baspacho/Utils.h"
 
 namespace BaSpaCho {
 

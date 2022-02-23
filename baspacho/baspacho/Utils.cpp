@@ -1,11 +1,11 @@
 
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/Utils.h"
 
 #include <ctime>
 #include <iomanip>
 #include <sstream>
 
-#include "baspacho/DebugMacros.h"
+#include "baspacho/baspacho/DebugMacros.h"
 
 namespace BaSpaCho {
 

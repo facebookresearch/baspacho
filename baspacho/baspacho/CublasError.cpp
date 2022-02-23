@@ -1,4 +1,4 @@
-#include "baspacho/CudaDefs.h"
+#include "baspacho/baspacho/CudaDefs.h"
 
 namespace BaSpaCho {
 

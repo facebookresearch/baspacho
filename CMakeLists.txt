@@ -158,17 +158,17 @@ add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 include_directories ("${PROJECT_SOURCE_DIR}")
 
 set(BaSpaCho_sources
-    baspacho/CoalescedBlockMatrix.cpp
-    baspacho/EliminationTree.cpp
-    baspacho/MatOpsBlas.cpp
-    baspacho/MatOpsRef.cpp
-    baspacho/Solver.cpp
-    baspacho/SparseStructure.cpp
-    baspacho/Utils.cpp)
+    baspacho/baspacho/CoalescedBlockMatrix.cpp
+    baspacho/baspacho/EliminationTree.cpp
+    baspacho/baspacho/MatOpsBlas.cpp
+    baspacho/baspacho/MatOpsRef.cpp
+    baspacho/baspacho/Solver.cpp
+    baspacho/baspacho/SparseStructure.cpp
+    baspacho/baspacho/Utils.cpp)
 if(BASPACHO_USE_CUBLAS)
   list(APPEND BaSpaCho_sources
-       baspacho/CublasError.cpp
-       baspacho/MatOpsCuda.cu)
+      baspacho/baspacho/CublasError.cpp
+      baspacho/baspacho/MatOpsCuda.cu)
 endif()
 add_library(BaSpaCho ${BaSpaCho_sources})
 target_link_libraries (BaSpaCho dispenso ${BLAS_LIBRARIES})

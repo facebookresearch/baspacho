@@ -1,17 +1,17 @@
 
 #include <chrono>
 
-#include "baspacho/CoalescedBlockMatrix.h"
-#include "baspacho/DebugMacros.h"
-#include "baspacho/EliminationTree.h"
-#include "baspacho/Solver.h"
-#include "baspacho/SparseStructure.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/EliminationTree.h"
+#include "baspacho/baspacho/Solver.h"
+#include "baspacho/baspacho/SparseStructure.h"
+#include "baspacho/baspacho/Utils.h"
 #include "baspacho/benchmarking/BaAtLarge.h"
 #include "baspacho/testing/TestingUtils.h"
 
 #ifdef BASPACHO_USE_CUBLAS
-#include "baspacho/CudaDefs.h"
+#include "baspacho/baspacho/CudaDefs.h"
 #endif
 
 #ifdef BASPACHO_HAVE_CHOLMOD

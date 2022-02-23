@@ -6,8 +6,8 @@
 #include <numeric>
 #include <sstream>
 
-#include "baspacho/CoalescedBlockMatrix.h"
-#include "baspacho/SparseStructure.h"
+#include "baspacho/baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/baspacho/SparseStructure.h"
 #include "baspacho/testing/TestingUtils.h"
 
 #if 0

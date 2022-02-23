@@ -2,8 +2,8 @@
 #include <Eigen/Geometry>
 #include <tuple>
 
-#include "baspacho/DebugMacros.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/Utils.h"
 
 namespace BaSpaCho {
 

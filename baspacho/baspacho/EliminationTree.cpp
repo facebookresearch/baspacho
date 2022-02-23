@@ -1,11 +1,11 @@
 
-#include "baspacho/EliminationTree.h"
+#include "baspacho/baspacho/EliminationTree.h"
 
 #include <algorithm>
 #include <queue>
 
-#include "baspacho/DebugMacros.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/Utils.h"
 
 namespace BaSpaCho {
 

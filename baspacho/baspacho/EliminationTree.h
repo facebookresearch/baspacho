@@ -1,6 +1,6 @@
 #pragma once
 
-#include "baspacho/SparseStructure.h"
+#include "baspacho/baspacho/SparseStructure.h"
 
 namespace BaSpaCho {
 

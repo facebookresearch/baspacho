@@ -1,7 +1,7 @@
 
 #include "baspacho/testing/TestingMatGen.h"
 
-#include "baspacho/DebugMacros.h"
+#include "baspacho/baspacho/DebugMacros.h"
 
 namespace BaSpaCho::testing {
 using namespace std;

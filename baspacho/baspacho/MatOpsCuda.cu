@@ -4,12 +4,12 @@
 #include <chrono>
 #include <iostream>
 
-#include "baspacho/CudaAtomic.cuh"
-#include "baspacho/CudaDefs.h"
-#include "baspacho/DebugMacros.h"
-#include "baspacho/MatOpsCpuBase.h"
-#include "baspacho/MathUtils.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/CudaAtomic.cuh"
+#include "baspacho/baspacho/CudaDefs.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/MatOpsCpuBase.h"
+#include "baspacho/baspacho/MathUtils.h"
+#include "baspacho/baspacho/Utils.h"
 
 namespace BaSpaCho {
 

@@ -6,7 +6,7 @@
 #include <sstream>
 #include <string>
 
-#include "baspacho/SparseStructure.h"
+#include "baspacho/baspacho/SparseStructure.h"
 
 namespace BaSpaCho::testing {
 

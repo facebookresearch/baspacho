@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "baspacho/MatOps.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/MatOps.h"
+#include "baspacho/baspacho/Utils.h"
 
 namespace BaSpaCho {
 

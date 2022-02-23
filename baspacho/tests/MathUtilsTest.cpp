@@ -4,7 +4,7 @@
 
 #include <Eigen/Eigenvalues>
 
-#include "baspacho/MathUtils.h"
+#include "baspacho/baspacho/MathUtils.h"
 #include "baspacho/testing/TestingUtils.h"
 
 using namespace BaSpaCho;

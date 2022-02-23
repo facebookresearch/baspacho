@@ -1,7 +1,7 @@
 
 #include <map>
 
-#include "baspacho/SparseStructure.h"
+#include "baspacho/baspacho/SparseStructure.h"
 
 struct CholmodBenchResults {
     double analysisTime;

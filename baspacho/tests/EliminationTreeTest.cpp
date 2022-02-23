@@ -7,10 +7,10 @@
 #include <random>
 #include <sstream>
 
-#include "baspacho/CoalescedBlockMatrix.h"
-#include "baspacho/DebugMacros.h"
-#include "baspacho/EliminationTree.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/EliminationTree.h"
+#include "baspacho/baspacho/Utils.h"
 #include "baspacho/testing/TestingUtils.h"
 
 using namespace BaSpaCho;

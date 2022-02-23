@@ -6,13 +6,13 @@
 #include <random>
 #include <regex>
 
-#include "baspacho/DebugMacros.h"
-#include "baspacho/Solver.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/Solver.h"
 #include "baspacho/testing/TestingMatGen.h"
 #include "baspacho/testing/TestingUtils.h"
 
 #ifdef BASPACHO_USE_CUBLAS
-#include "baspacho/CudaDefs.h"
+#include "baspacho/baspacho/CudaDefs.h"
 #endif
 
 #ifdef BASPACHO_HAVE_CHOLMOD

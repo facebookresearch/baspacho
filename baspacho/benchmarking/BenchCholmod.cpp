@@ -7,8 +7,8 @@
 #include <iostream>
 #include <random>
 
-#include "baspacho/DebugMacros.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/Utils.h"
 
 using namespace BaSpaCho;
 using namespace std;

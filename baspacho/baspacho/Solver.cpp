@@ -7,9 +7,9 @@
 #include <iostream>
 #include <numeric>
 
-#include "baspacho/DebugMacros.h"
-#include "baspacho/EliminationTree.h"
-#include "baspacho/Utils.h"
+#include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/EliminationTree.h"
+#include "baspacho/baspacho/Utils.h"
 
 namespace BaSpaCho {
 
