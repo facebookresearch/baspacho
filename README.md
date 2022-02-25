@@ -53,11 +53,11 @@ cmake --build build -v -- -j16 && ctest --test-dir build
 ```
 Benchmarking (using CHOLMOD as baseline):
 ```
-build/bench -B 1_CHOLMOD
+build/baspacho/benchmarking/bench -B 1_CHOLMOD
 ```
 Benchmarking on a problem from [Bundle Adjustment in the Large](https://grail.cs.washington.edu/projects/bal/)
 ```
-build/BAL_bench ~/BAL/problem-871-527480-pre.txt
+build/baspacho/benchmarking/BAL_bench ~/BAL/problem-871-527480-pre.txt
 ```
 Show tests:
 ```
