@@ -8,6 +8,8 @@
 #include <typeindex>
 #include <unordered_set>
 
+#include "baspacho/baspacho/Solver.h"
+
 // Utils
 template <typename T>
 struct VarUtil;
@@ -112,6 +114,8 @@ class FactorStoreBase {
 
     virtual double computeCost() = 0;
 
+    virtual double computeGradHess() = 0;
+
     virtual void registerVariables(
         std::vector<int64_t>& sizes,
         std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
@@ -151,6 +155,8 @@ class FactorStore : public FactorStoreBase {
         return retv;
     }
 
+    virtual double computeGradHess() override {}
+
     virtual void registerVariables(
         std::vector<int64_t>& sizes,
         std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
@@ -186,7 +192,7 @@ class FactorStore : public FactorStoreBase {
                     if (Vj.index >= 0) {
                         int64_t minIndex = std::min(Vi.index, Vj.index);
                         int64_t maxIndex = std::max(Vi.index, Vj.index);
-                        blocks.insert(std::make_pair(minIndex, maxIndex));
+                        blocks.insert(std::make_pair(maxIndex, minIndex));
                     }
                 });
             }
@@ -218,14 +224,35 @@ class Optimizer {
     }
 
     void optimize() {
+        // collect variable sizes and lower off-diagonal blocks
         std::vector<int64_t> sizes;
         std::unordered_set<std::pair<int64_t, int64_t>, pair_hash> blockSet;
         for (auto& [ti, fStore] : factorStores) {
             fStore->registerVariables(sizes, blockSet, variableStores);
         }
-
         std::vector<std::pair<int64_t, int64_t>> blocks(blockSet.begin(),
                                                         blockSet.end());
         std::sort(blocks.begin(), blocks.end());
+
+        // create a csr block structure
+        std::vector<int64_t> ptrs{0}, inds;
+        int64_t curRow = 0;
+        for (auto [row, col] : blocks) {
+            while (curRow < row) {
+                inds.push_back(curRow);  // diagonal
+                ptrs.push_back(inds.size());
+                curRow++;
+            }
+            inds.push_back(inds);
+        }
+        while (curRow < sizes.size()) {
+            inds.push_back(curRow);  // diagonal
+            ptrs.push_back(inds.size());
+            curRow++;
+        }
+
+        // create solver
+        BaSpaCho::SolverPtr solver =
+            createSolverSchur({}, paramSize, blockStructure, {});
     }
 };
