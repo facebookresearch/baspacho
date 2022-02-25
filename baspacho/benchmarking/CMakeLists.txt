@@ -1,12 +1,9 @@
 
-set(BAL_bench_sources
-    BaAtLarge.cpp
-    BaAtLargeBench.cpp)
-set(BAL_opt_sources
-    BaAtLarge.cpp
-    BaAtLargeOptimizer.cpp)
-set(bench_sources
-    Bench.cpp)
+add_library(BAL_utils BaAtLarge.cpp)
+
+set(BAL_bench_sources BaAtLargeBench.cpp)
+set(BAL_opt_sources BaAtLargeOptimizer.cpp)
+set(bench_sources Bench.cpp)
 
 if(HAVE_CHOLMOD)
     list(APPEND BAL_bench_sources
@@ -16,10 +13,10 @@ if(HAVE_CHOLMOD)
 endif()
 
 add_executable(BAL_bench ${BAL_bench_sources})
-target_link_libraries (BAL_bench BaSpaCho testing)
+target_link_libraries (BAL_bench BaSpaCho testing BAL_utils)
 
 add_executable(BAL_opt ${BAL_opt_sources})
-target_link_libraries (BAL_opt BaSpaCho testing)
+target_link_libraries (BAL_opt BaSpaCho testing BAL_utils)
 
 add_executable(bench ${bench_sources})
 target_link_libraries (bench BaSpaCho testing)
