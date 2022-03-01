@@ -225,10 +225,10 @@ class Optimizer {
 
     void optimize() {
         // collect variable sizes and lower off-diagonal blocks
-        std::vector<int64_t> sizes;
+        std::vector<int64_t> paramSize;
         std::unordered_set<std::pair<int64_t, int64_t>, pair_hash> blockSet;
         for (auto& [ti, fStore] : factorStores) {
-            fStore->registerVariables(sizes, blockSet, variableStores);
+            fStore->registerVariables(paramSize, blockSet, variableStores);
         }
         std::vector<std::pair<int64_t, int64_t>> blocks(blockSet.begin(),
                                                         blockSet.end());
@@ -243,16 +243,17 @@ class Optimizer {
                 ptrs.push_back(inds.size());
                 curRow++;
             }
-            inds.push_back(inds);
+            inds.push_back(col);
         }
-        while (curRow < sizes.size()) {
+        while (curRow < paramSize.size()) {
             inds.push_back(curRow);  // diagonal
             ptrs.push_back(inds.size());
             curRow++;
         }
 
         // create solver
-        BaSpaCho::SolverPtr solver =
-            createSolverSchur({}, paramSize, blockStructure, {});
+        BaSpaCho::SolverPtr solver = createSolverSchur(
+            {}, paramSize,
+            BaSpaCho::SparseStructure(std::move(ptrs), std::move(inds)), {});
     }
 };
