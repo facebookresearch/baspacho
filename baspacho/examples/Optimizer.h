@@ -59,13 +59,6 @@ class Variable {
         index = constant ? kConstantVar : kUnsetIndex;
     }
 
-    void registerInto(std::vector<int64_t>& sizes) {
-        if (index == kUnsetIndex) {
-            index = sizes.size();
-            sizes.push_back(TangentDim);
-        }
-    }
-
     bool isOptimized() const { return index >= 0; }
 
     DataType value;
@@ -100,6 +93,15 @@ void forEach(F&& f) {
     }
 }
 
+template <int i, int j, typename F, typename... Args>
+void withTuple(F&& f, Args&&... args) {
+    if constexpr (i < j) {
+        withTuple<i+1, j>(f, args..., IntWrap<i>());
+    } else {
+        f(args...);
+    }
+}
+
 struct pair_hash {
     template <class T1, class T2>
     std::size_t operator()(const std::pair<T1, T2>& pair) const {
@@ -114,7 +116,7 @@ class FactorStoreBase {
 
     virtual double computeCost() = 0;
 
-    virtual double computeGradHess() = 0;
+    virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) = 0;
 
     virtual void registerVariables(
         std::vector<int64_t>& sizes,
@@ -155,7 +157,55 @@ class FactorStore : public FactorStoreBase {
         return retv;
     }
 
-    virtual double computeGradHess() override {}
+    virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) override {
+        double retv = 0;
+        // TODO: make parallel (w locking where necessary)
+        for (auto [factor, args] : boundFactors) {
+            ErrorType err;
+            std::tuple<Eigen::Matrix<double, ErrorSize, Variables::TangentDim>...> jacobians;
+            withTuple<0, sizeof...(Variables)>(  // expanding argument pack...
+                [&](auto... iWraps) {
+                    err = factor(
+                        std::get<decltype(iWraps)::value>(args)->value...,
+                        (std::get<decltype(iWraps)::value>(args)->index == kConstantVar
+                        ? nullptr : &std::get<decltype(iWraps)::value>(jacobians))...
+                    );
+                    retv += err.squaredNorm();
+                });
+
+            forEach<0, sizeof...(Variables)>([&, this](auto iWrap) {
+                static constexpr int i = decltype(iWrap)::value;
+                int64_t iIndex = std::get<i>(args)->index;
+                if(iIndex == kConstantVar) {
+                    return;
+                }
+
+                // Hessian diagonal contribution
+                auto const& iJac = std::get<i>(jacobians);
+                acc.diagBlock(hessData, iIndex) += iJac.transpose() * iJac;
+
+                // gradient contribution
+                static constexpr int iTangentDim = std::remove_reference_t<
+                    decltype(*std::get<i>(args))>::TangentDim;
+                int64_t paramStart = acc.paramStart(iIndex);
+                Eigen::Map<Eigen::Vector<double, iTangentDim>>(gradData + paramStart)
+                    += err.transpose() * iJac;
+
+                forEach<0, i>([&, this](auto jWrap) {
+                    static constexpr int j = decltype(jWrap)::value;
+                    int64_t jIndex = std::get<j>(args)->index;
+                    if(jIndex == kConstantVar) {
+                        return;
+                    }
+
+                    // Hessian off-diagonal contribution
+                    auto const& jJac = std::get<j>(jacobians);
+                    acc.block(hessData, iIndex, jIndex) += iJac.transpose() * jJac;
+                });
+            });
+        }
+        return retv;
+    }
 
     virtual void registerVariables(
         std::vector<int64_t>& sizes,
