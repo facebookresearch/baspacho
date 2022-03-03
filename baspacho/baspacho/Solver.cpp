@@ -453,6 +453,10 @@ SolverPtr createSolverSchur(const Settings& settings,
                             const std::vector<int64_t>& paramSize,
                             const SparseStructure& ss_,
                             const std::vector<int64_t>& elimLumpRanges) {
+    if(elimLumpRanges.empty()) {
+        return createSolver(settings, paramSize, ss_);
+    }
+
     BASPACHO_CHECK_GE((int64_t)elimLumpRanges.size(), 2);
     SparseStructure ss =
         ss_.addIndependentEliminationFill(elimLumpRanges[0], elimLumpRanges[1]);

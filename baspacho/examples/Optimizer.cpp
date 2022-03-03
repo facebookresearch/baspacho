@@ -27,16 +27,17 @@ int main(int argc, char* argv[]) {
     data.load(argv[1], false);
     data.removeBadObservations(data.points.size());
 
+    Optimizer opt;
     vector<Variable<Eigen::Vector3d>> pointVars(data.points.size());
     for (size_t i = 0; i < data.points.size(); i++) {
         pointVars[i].value = data.points[i];
+        opt.registerVariable(pointVars[i]);
     }
+    opt.registeredVariablesToEliminationRange(); // eliminate points
     vector<Variable<Sophus::SE3d>> cameraVars(data.cameras.size());
     for (size_t i = 0; i < data.cameras.size(); i++) {
         cameraVars[i].value = data.cameras[i].T_W_C;
     }
-
-    Optimizer opt;
 
     for (size_t i = 0; i < data.observations.size(); i++) {
         auto& obs = data.observations[i];

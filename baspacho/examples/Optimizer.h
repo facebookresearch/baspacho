@@ -10,7 +10,57 @@
 
 #include "baspacho/baspacho/Solver.h"
 
-// Utils
+// C++ utils for variadic templates
+template <int i>
+struct IntWrap {
+    static constexpr int value = i;
+};
+
+template <int i, int j, typename F>
+void forEach(F&& f) {
+    if constexpr (i < j) {
+        f(IntWrap<i>());
+        forEach<i + 1, j>(f);
+    }
+}
+
+template <int i, int j, typename F, typename... Args>
+void withTuple(F&& f, Args&&... args) {
+    if constexpr (i < j) {
+        withTuple<i+1, j>(f, args..., IntWrap<i>());
+    } else {
+        f(args...);
+    }
+}
+
+// introspection util
+template <typename T>
+std::string prettyTypeName() {
+    char* c_str =
+        abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, nullptr);
+    std::string retv(c_str);
+    free(c_str);
+    return retv;
+}
+
+// typed storage
+template<typename Base>
+struct TypedStore {
+    template<typename Derived>
+    Derived& get() {
+        static const std::type_index ti(typeid(Derived));
+        std::unique_ptr<Base>& pStoreT = stores[ti];
+        if (!pStoreT) {
+            pStoreT.reset(new Derived);
+            std::cout << "New type: " << prettyTypeName<Derived>() << std::endl;
+        }
+        return dynamic_cast<Derived&>(*pStoreT);
+    }
+
+    std::unordered_map<std::type_index, std::unique_ptr<Base>> stores;
+};
+
+// Utils for variable types
 template <typename T>
 struct VarUtil;
 
@@ -19,12 +69,16 @@ struct VarUtil<Eigen::Vector<double, N>> {
     static constexpr int DataDim = N;
     static constexpr int TangentDim = N;
 
-    static void tangentStep(const Eigen::Vector<double, N>& step,
+    static void tangentStep(const Eigen::Map<const Eigen::Vector<double, N>>& step,
                             Eigen::Vector<double, N>& value) {
         value += step;
     }
 
     static double* dataPtr(Eigen::Vector<double, N>& value) {
+        return value.data();
+    }
+
+    static const double* dataPtr(const Eigen::Vector<double, N>& value) {
         return value.data();
     }
 };
@@ -34,12 +88,14 @@ struct VarUtil<Sophus::SE3d> {
     static constexpr int DataDim = 7;
     static constexpr int TangentDim = 6;
 
-    static void tangentStep(const Eigen::Vector<double, TangentDim>& step,
+    static void tangentStep(const Eigen::Map<const Eigen::Vector<double, TangentDim>>& step,
                             Sophus::SE3d& value) {
         value = Sophus::SE3d::exp(step) * value;
     }
 
     static double* dataPtr(Sophus::SE3d& value) { return value.data(); }
+
+    static const double* dataPtr(const Sophus::SE3d& value) { return value.data(); }
 };
 
 // Generic variable class
@@ -69,6 +125,14 @@ class Variable {
 class VariableStoreBase {
    public:
     virtual ~VariableStoreBase() {}
+
+    virtual const double* applyStep(const double* step) = 0;
+
+    virtual int64_t totalSize() const = 0;
+
+    virtual double* backup(double* data) const = 0;
+
+    virtual const double* restore(const double* data) = 0;
 };
 
 template <typename Variable>
@@ -76,31 +140,43 @@ class VariableStore : public VariableStoreBase {
    public:
     virtual ~VariableStore() {}
 
+    virtual const double* applyStep(const double* step) override {
+        for(auto var: variables) {
+            VarUtil<typename Variable::DataType>::tangentStep(
+                Eigen::Map<const Eigen::Vector<double, Variable::TangentDim>>(step), var->value);
+            step += Variable::TangentDim;
+        }
+        return step;
+    }
+
+    virtual int64_t totalSize() const override {
+        return Variable::DataDim * variables.size();
+    }
+
+    virtual double* backup(double* data) const override {
+        for(auto var: variables) {
+            Eigen::Map<Eigen::Vector<double, Variable::DataDim>> dst(data); 
+            Eigen::Map<const Eigen::Vector<double, Variable::DataDim>> src(
+                VarUtil<typename Variable::DataType>::dataPtr(var->value));
+            dst = src;
+            data += Variable::DataDim;
+        }
+        return data;
+    }
+
+    virtual const double* restore(const double* data) override {
+        for(auto var: variables) {
+            Eigen::Map<Eigen::Vector<double, Variable::DataDim>> dst(
+                VarUtil<typename Variable::DataType>::dataPtr(var->value));
+            Eigen::Map<const Eigen::Vector<double, Variable::DataDim>> src(data);
+            dst = src;
+            data += Variable::DataDim;
+        }
+        return data;
+    }
+
     std::vector<Variable*> variables;
 };
-
-// some utils
-template <int i>
-struct IntWrap {
-    static constexpr int value = i;
-};
-
-template <int i, int j, typename F>
-void forEach(F&& f) {
-    if constexpr (i < j) {
-        f(IntWrap<i>());
-        forEach<i + 1, j>(f);
-    }
-}
-
-template <int i, int j, typename F, typename... Args>
-void withTuple(F&& f, Args&&... args) {
-    if constexpr (i < j) {
-        withTuple<i+1, j>(f, args..., IntWrap<i>());
-    } else {
-        f(args...);
-    }
-}
 
 struct pair_hash {
     template <class T1, class T2>
@@ -121,19 +197,8 @@ class FactorStoreBase {
     virtual void registerVariables(
         std::vector<int64_t>& sizes,
         std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
-        std::unordered_map<std::type_index, std::unique_ptr<VariableStoreBase>>&
-            varStores) = 0;
+        TypedStore<VariableStoreBase>& varStores) = 0;
 };
-
-// introspection shortcuts
-template <typename T>
-std::string prettyTypeName() {
-    char* c_str =
-        abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, nullptr);
-    std::string retv(c_str);
-    free(c_str);
-    return retv;
-}
 
 template <typename Factor, typename... Variables>
 class FactorStore : public FactorStoreBase {
@@ -157,7 +222,9 @@ class FactorStore : public FactorStoreBase {
         return retv;
     }
 
-    virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) override {
+    virtual double computeGradHess(double* gradData,
+                                   const BaSpaCho::PermutedCoalescedAccessor& acc,
+                                   double* hessData) override {
         double retv = 0;
         // TODO: make parallel (w locking where necessary)
         for (auto [factor, args] : boundFactors) {
@@ -210,22 +277,12 @@ class FactorStore : public FactorStoreBase {
     virtual void registerVariables(
         std::vector<int64_t>& sizes,
         std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
-        std::unordered_map<std::type_index, std::unique_ptr<VariableStoreBase>>&
-            varStores) {
+        TypedStore<VariableStoreBase>& varStores) {
         forEach<0, sizeof...(Variables)>([&, this](auto iWrap) {
             static constexpr int i = decltype(iWrap)::value;
             using Variable = std::remove_reference_t<decltype(*std::get<i>(
                 boundFactors[0].second))>;
-
-            using VariableStoreT = VariableStore<Variable>;
-            static const std::type_index ti(typeid(VariableStoreT));
-            std::unique_ptr<VariableStoreBase>& pStoreT = varStores[ti];
-            if (!pStoreT) {
-                pStoreT.reset(new VariableStoreT);
-                std::cout << "New var: " << prettyTypeName<VariableStoreT>()
-                          << std::endl;
-            }
-            VariableStoreT& store = dynamic_cast<VariableStoreT&>(*pStoreT);
+            auto& store = varStores.get<VariableStore<Variable>>();
 
             for (auto [factor, args] : boundFactors) {
                 auto& Vi = *std::get<i>(args);
@@ -254,30 +311,70 @@ class FactorStore : public FactorStoreBase {
 
 class Optimizer {
    public:
-    std::unordered_map<std::type_index, std::unique_ptr<FactorStoreBase>>
-        factorStores;
-    std::unordered_map<std::type_index, std::unique_ptr<VariableStoreBase>>
-        variableStores;
+    TypedStore<FactorStoreBase> factorStores;
+    TypedStore<VariableStoreBase> variableStores;
+    std::vector<int64_t> paramSize;
+    std::vector<int64_t> elimRanges;
 
     template <typename Factor, typename... Variables>
     void addFactor(Factor&& f, Variables&... v) {
-        using FactorStoreT = FactorStore<Factor, Variables...>;
-        static const std::type_index ti(typeid(FactorStoreT));
-        std::unique_ptr<FactorStoreBase>& pStoreT = factorStores[ti];
-        if (!pStoreT) {
-            pStoreT.reset(new FactorStoreT);
-            std::cout << "New fac: " << prettyTypeName<FactorStoreT>()
-                      << std::endl;
-        }
-        FactorStoreT& store = dynamic_cast<FactorStoreT&>(*pStoreT);
+        auto& store = factorStores.get<FactorStore<Factor, Variables...>>();
         store.boundFactors.emplace_back(std::move(f), std::make_tuple(&v...));
+    }
+
+    template<typename Variable>
+    void registerVariable(Variable& v) {
+        if (v.index == kUnsetIndex) {
+            v.index = paramSize.size();
+            paramSize.push_back(Variable::TangentDim);
+            variableStores.get<VariableStore<Variable>>().variables.push_back(&v);
+        }
+    }
+
+    void registeredVariablesToEliminationRange() {
+        if(elimRanges.empty()) {
+            elimRanges.push_back(0);
+        }
+        elimRanges.push_back(paramSize.size());
+    }
+
+    double computeGradHess(double* gradData,
+                           const BaSpaCho::PermutedCoalescedAccessor& acc,
+                           double* hessData) {
+        double retv = 0.0;
+        for (auto& [ti, fStore] : factorStores.stores) {
+            retv += fStore->computeGradHess(gradData, acc, hessData);
+        }
+        return retv;
+    }
+    
+    double computeCost() {
+        double retv = 0.0;
+        for (auto& [ti, fStore] : factorStores.stores) {
+            retv += fStore->computeCost();
+        }
+        return retv;
+    }
+
+    void initVariableBackup(std::vector<double>& data) {
+        int64_t size = 0;
+        for (auto& [ti, vStore] : variableStores.stores) {
+            size += vStore->totalSize();
+        }
+        data.resize(size);
+    }
+
+    void backupVariables(std::vector<double>& data) {
+        double* dataPtr = data.data();
+        for (auto& [ti, vStore] : variableStores.stores) {
+            dataPtr = vStore->backup(dataPtr);
+        }
     }
 
     void optimize() {
         // collect variable sizes and lower off-diagonal blocks
-        std::vector<int64_t> paramSize;
         std::unordered_set<std::pair<int64_t, int64_t>, pair_hash> blockSet;
-        for (auto& [ti, fStore] : factorStores) {
+        for (auto& [ti, fStore] : factorStores.stores) {
             fStore->registerVariables(paramSize, blockSet, variableStores);
         }
         std::vector<std::pair<int64_t, int64_t>> blocks(blockSet.begin(),
@@ -304,6 +401,16 @@ class Optimizer {
         // create solver
         BaSpaCho::SolverPtr solver = createSolverSchur(
             {}, paramSize,
-            BaSpaCho::SparseStructure(std::move(ptrs), std::move(inds)), {});
+            BaSpaCho::SparseStructure(std::move(ptrs), std::move(inds)),
+            elimRanges);
+        auto accessor = solver->accessor();
+
+        std::vector<double> grad(solver->order());
+        std::vector<double> hess(solver->dataSize());
+
+        while(true) {
+            computeGradHess(grad.data(), accessor, hess.data());
+            break;
+        }
     }
 };

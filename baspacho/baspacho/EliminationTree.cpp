@@ -104,6 +104,7 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
             for (int64_t k = k0; k < k1; k++) {
                 forbidMerge[get<2>(unmergedHeightNode[k])] = true;
             }
+            cout << "ELIM RANGE: " << k0 << ".." << k1 << endl;
             sparseElimRanges.push_back(k1);
             k0 = k1;
         }
