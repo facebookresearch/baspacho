@@ -15,6 +15,7 @@ endif()
 
 add_library(BaSpaCho
             ${BaSpaCho_sources})
+set_property(TARGET BaSpaCho PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 target_link_libraries(BaSpaCho
                       dispenso
