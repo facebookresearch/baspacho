@@ -9,6 +9,7 @@
 #include <unordered_set>
 
 #include "baspacho/baspacho/Solver.h"
+#include "baspacho/testing/TestingUtils.h"  // temporary
 
 // C++ utils for variadic templates
 template <int i>
@@ -27,7 +28,7 @@ void forEach(F&& f) {
 template <int i, int j, typename F, typename... Args>
 void withTuple(F&& f, Args&&... args) {
     if constexpr (i < j) {
-        withTuple<i+1, j>(f, args..., IntWrap<i>());
+        withTuple<i + 1, j>(f, args..., IntWrap<i>());
     } else {
         f(args...);
     }
@@ -44,9 +45,9 @@ std::string prettyTypeName() {
 }
 
 // typed storage
-template<typename Base>
+template <typename Base>
 struct TypedStore {
-    template<typename Derived>
+    template <typename Derived>
     Derived& get() {
         static const std::type_index ti(typeid(Derived));
         std::unique_ptr<Base>& pStoreT = stores[ti];
@@ -69,7 +70,8 @@ struct VarUtil<Eigen::Vector<double, N>> {
     static constexpr int DataDim = N;
     static constexpr int TangentDim = N;
 
-    static void tangentStep(const Eigen::Map<const Eigen::Vector<double, N>>& step,
+    template <typename VecType>
+    static void tangentStep(const VecType& step,
                             Eigen::Vector<double, N>& value) {
         value += step;
     }
@@ -88,14 +90,16 @@ struct VarUtil<Sophus::SE3d> {
     static constexpr int DataDim = 7;
     static constexpr int TangentDim = 6;
 
-    static void tangentStep(const Eigen::Map<const Eigen::Vector<double, TangentDim>>& step,
-                            Sophus::SE3d& value) {
+    template <typename VecType>
+    static void tangentStep(const VecType& step, Sophus::SE3d& value) {
         value = Sophus::SE3d::exp(step) * value;
     }
 
     static double* dataPtr(Sophus::SE3d& value) { return value.data(); }
 
-    static const double* dataPtr(const Sophus::SE3d& value) { return value.data(); }
+    static const double* dataPtr(const Sophus::SE3d& value) {
+        return value.data();
+    }
 };
 
 // Generic variable class
@@ -126,7 +130,8 @@ class VariableStoreBase {
    public:
     virtual ~VariableStoreBase() {}
 
-    virtual const double* applyStep(const double* step) = 0;
+    virtual void applyStep(const Eigen::VectorXd& step,
+                           const BaSpaCho::PermutedCoalescedAccessor& acc) = 0;
 
     virtual int64_t totalSize() const = 0;
 
@@ -140,22 +145,13 @@ class VariableStore : public VariableStoreBase {
    public:
     virtual ~VariableStore() {}
 
-    virtual const double* applyStep(const double* step) override {
-        for(auto var: variables) {
-            VarUtil<typename Variable::DataType>::tangentStep(
-                Eigen::Map<const Eigen::Vector<double, Variable::TangentDim>>(step), var->value);
-            step += Variable::TangentDim;
-        }
-        return step;
-    }
-
     virtual int64_t totalSize() const override {
         return Variable::DataDim * variables.size();
     }
 
     virtual double* backup(double* data) const override {
-        for(auto var: variables) {
-            Eigen::Map<Eigen::Vector<double, Variable::DataDim>> dst(data); 
+        for (auto var : variables) {
+            Eigen::Map<Eigen::Vector<double, Variable::DataDim>> dst(data);
             Eigen::Map<const Eigen::Vector<double, Variable::DataDim>> src(
                 VarUtil<typename Variable::DataType>::dataPtr(var->value));
             dst = src;
@@ -165,14 +161,25 @@ class VariableStore : public VariableStoreBase {
     }
 
     virtual const double* restore(const double* data) override {
-        for(auto var: variables) {
+        for (auto var : variables) {
             Eigen::Map<Eigen::Vector<double, Variable::DataDim>> dst(
                 VarUtil<typename Variable::DataType>::dataPtr(var->value));
-            Eigen::Map<const Eigen::Vector<double, Variable::DataDim>> src(data);
+            Eigen::Map<const Eigen::Vector<double, Variable::DataDim>> src(
+                data);
             dst = src;
             data += Variable::DataDim;
         }
         return data;
+    }
+
+    virtual void applyStep(
+        const Eigen::VectorXd& step,
+        const BaSpaCho::PermutedCoalescedAccessor& acc) override {
+        for (auto var : variables) {
+            VarUtil<typename Variable::DataType>::tangentStep(
+                step.segment<Variable::TangentDim>(acc.paramStart(var->index)),
+                var->value);
+        }
     }
 
     std::vector<Variable*> variables;
@@ -192,7 +199,9 @@ class FactorStoreBase {
 
     virtual double computeCost() = 0;
 
-    virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) = 0;
+    virtual double computeGradHess(
+        double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
+        double* hessData) = 0;
 
     virtual void registerVariables(
         std::vector<int64_t>& sizes,
@@ -222,28 +231,32 @@ class FactorStore : public FactorStoreBase {
         return retv;
     }
 
-    virtual double computeGradHess(double* gradData,
-                                   const BaSpaCho::PermutedCoalescedAccessor& acc,
-                                   double* hessData) override {
+    virtual double computeGradHess(
+        double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
+        double* hessData) override {
         double retv = 0;
         // TODO: make parallel (w locking where necessary)
         for (auto [factor, args] : boundFactors) {
             ErrorType err;
-            std::tuple<Eigen::Matrix<double, ErrorSize, Variables::TangentDim>...> jacobians;
+            std::tuple<
+                Eigen::Matrix<double, ErrorSize, Variables::TangentDim>...>
+                jacobians;
             withTuple<0, sizeof...(Variables)>(  // expanding argument pack...
                 [&](auto... iWraps) {
                     err = factor(
                         std::get<decltype(iWraps)::value>(args)->value...,
-                        (std::get<decltype(iWraps)::value>(args)->index == kConstantVar
-                        ? nullptr : &std::get<decltype(iWraps)::value>(jacobians))...
-                    );
+                        (std::get<decltype(iWraps)::value>(args)->index ==
+                                 kConstantVar
+                             ? nullptr
+                             : &std::get<decltype(iWraps)::value>(
+                                   jacobians))...);
                     retv += err.squaredNorm();
                 });
 
             forEach<0, sizeof...(Variables)>([&, this](auto iWrap) {
                 static constexpr int i = decltype(iWrap)::value;
                 int64_t iIndex = std::get<i>(args)->index;
-                if(iIndex == kConstantVar) {
+                if (iIndex == kConstantVar) {
                     return;
                 }
 
@@ -252,22 +265,24 @@ class FactorStore : public FactorStoreBase {
                 acc.diagBlock(hessData, iIndex) += iJac.transpose() * iJac;
 
                 // gradient contribution
-                static constexpr int iTangentDim = std::remove_reference_t<
-                    decltype(*std::get<i>(args))>::TangentDim;
+                static constexpr int iTangentDim =
+                    std::remove_reference_t<decltype(*std::get<i>(
+                        args))>::TangentDim;
                 int64_t paramStart = acc.paramStart(iIndex);
-                Eigen::Map<Eigen::Vector<double, iTangentDim>>(gradData + paramStart)
-                    += err.transpose() * iJac;
+                Eigen::Map<Eigen::Vector<double, iTangentDim>>(
+                    gradData + paramStart) += err.transpose() * iJac;
 
                 forEach<0, i>([&, this](auto jWrap) {
                     static constexpr int j = decltype(jWrap)::value;
                     int64_t jIndex = std::get<j>(args)->index;
-                    if(jIndex == kConstantVar) {
+                    if (jIndex == kConstantVar) {
                         return;
                     }
 
                     // Hessian off-diagonal contribution
                     auto const& jJac = std::get<j>(jacobians);
-                    acc.block(hessData, iIndex, jIndex) += iJac.transpose() * jJac;
+                    acc.block(hessData, iIndex, jIndex) +=
+                        iJac.transpose() * jJac;
                 });
             });
         }
@@ -322,17 +337,18 @@ class Optimizer {
         store.boundFactors.emplace_back(std::move(f), std::make_tuple(&v...));
     }
 
-    template<typename Variable>
+    template <typename Variable>
     void registerVariable(Variable& v) {
         if (v.index == kUnsetIndex) {
             v.index = paramSize.size();
             paramSize.push_back(Variable::TangentDim);
-            variableStores.get<VariableStore<Variable>>().variables.push_back(&v);
+            variableStores.get<VariableStore<Variable>>().variables.push_back(
+                &v);
         }
     }
 
     void registeredVariablesToEliminationRange() {
-        if(elimRanges.empty()) {
+        if (elimRanges.empty()) {
             elimRanges.push_back(0);
         }
         elimRanges.push_back(paramSize.size());
@@ -347,7 +363,7 @@ class Optimizer {
         }
         return retv;
     }
-    
+
     double computeCost() {
         double retv = 0.0;
         for (auto& [ti, fStore] : factorStores.stores) {
@@ -356,18 +372,41 @@ class Optimizer {
         return retv;
     }
 
-    void initVariableBackup(std::vector<double>& data) {
+    int64_t variableBackupSize() {
         int64_t size = 0;
         for (auto& [ti, vStore] : variableStores.stores) {
             size += vStore->totalSize();
         }
-        data.resize(size);
+        return size;
     }
 
-    void backupVariables(std::vector<double>& data) {
+    void backupVariables(std::vector<double>& data) const {
         double* dataPtr = data.data();
         for (auto& [ti, vStore] : variableStores.stores) {
             dataPtr = vStore->backup(dataPtr);
+        }
+    }
+
+    void restoreVariables(const std::vector<double>& data) {
+        const double* dataPtr = data.data();
+        for (auto& [ti, vStore] : variableStores.stores) {
+            dataPtr = vStore->restore(dataPtr);
+        }
+    }
+
+    void applyStep(const Eigen::VectorXd& step,
+                   const BaSpaCho::PermutedCoalescedAccessor& acc) {
+        for (auto& [ti, vStore] : variableStores.stores) {
+            vStore->applyStep(step, acc);
+        }
+    }
+
+    void addDamping(Eigen::VectorXd& hess,
+                    const BaSpaCho::PermutedCoalescedAccessor& acc,
+                    int64_t nVars, double lambda) {
+        for (int64_t i = 0; i < nVars; i++) {
+            auto diag = acc.diagBlock(hess.data(), i).diagonal();
+            diag *= (1.0 + lambda);
         }
     }
 
@@ -398,18 +437,68 @@ class Optimizer {
             curRow++;
         }
 
-        // create solver
+        // create sparse linear solver
         BaSpaCho::SolverPtr solver = createSolverSchur(
             {}, paramSize,
             BaSpaCho::SparseStructure(std::move(ptrs), std::move(inds)),
             elimRanges);
         auto accessor = solver->accessor();
 
-        std::vector<double> grad(solver->order());
-        std::vector<double> hess(solver->dataSize());
+        // linear system data
+        std::vector<double> variablesBackup(variableBackupSize());
+        Eigen::VectorXd grad(solver->order());
+        Eigen::VectorXd hess(solver->dataSize());
+        Eigen::VectorXd step(solver->order());
 
-        while(true) {
-            computeGradHess(grad.data(), accessor, hess.data());
+        // iteration loop
+        while (true) {
+            grad.setZero();
+            hess.setZero();
+            double currentCost =
+                computeGradHess(grad.data(), accessor, hess.data());
+            addDamping(hess, accessor, solver->permutation.size(), 1e-4);
+
+            std::cout << "grad:" << grad.transpose() << std::endl;
+            std::vector<double> hessCp(hess.data(), hess.data() + hess.size());
+            Eigen::MatrixXd H = solver->factorSkel.densify(hessCp);
+            H.triangularView<Eigen::Upper>() =
+                H.triangularView<Eigen::Lower>().transpose();
+            std::cout << "hess:\n" << H << std::endl;
+            std::cout << "perm:\n"
+                      << BaSpaCho::testing::printVec(solver->permutation)
+                      << std::endl;
+
+            solver->factor(hess.data());
+
+            step = grad;
+            solver->solve(hess.data(), step.data(), step.size(), 1);
+
+            std::cout << "step:" << step.transpose() << std::endl;
+            std::cout << "H*step:\n" << (H * step).transpose() << std::endl;
+
+            // cost reduction that would occur perfectly quadratic
+            double modelCostReduction = step.dot(grad) * 0.5;
+            step *= -1.0;
+
+            backupVariables(variablesBackup);
+            applyStep(step, accessor);
+
+            std::cout << "prev vars: "
+                      << BaSpaCho::testing::printVec(variablesBackup)
+                      << std::endl;
+
+            {
+                std::vector<double> vdata(variableBackupSize());
+                backupVariables(vdata);
+                std::cout << "new vars: " << BaSpaCho::testing::printVec(vdata)
+                          << std::endl;
+            }
+            // restoreVariables(variablesBackup);
+
+            double newCost = computeCost();
+            std::cout << "Cost: " << currentCost << " -> " << newCost
+                      << std::endl;
+
             break;
         }
     }
