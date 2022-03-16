@@ -7,28 +7,34 @@
 
 namespace BaSpaCho {
 
+// allows to retrieve a block in a coalesced-block matrix
 struct CoalescedAccessor {
-    CoalescedAccessor(const int64_t* spanStart, const int64_t* spanToLump,
-                      const int64_t* lumpStart, const int64_t* spanOffsetInLump,
-                      const int64_t* chainColPtr, const int64_t* chainRowSpan,
-                      const int64_t* chainData)
-        : spanStart(spanStart),
-          spanToLump(spanToLump),
-          lumpStart(lumpStart),
-          spanOffsetInLump(spanOffsetInLump),
-          chainColPtr(chainColPtr),
-          chainRowSpan(chainRowSpan),
-          chainData(chainData) {}
+    // we don't define a constructor to be able to use it as argument of a Cuda kernel
+    void init(const int64_t* spanStart_, const int64_t* spanToLump_,
+              const int64_t* lumpStart_, const int64_t* spanOffsetInLump_,
+              const int64_t* chainColPtr_, const int64_t* chainRowSpan_,
+              const int64_t* chainData_) {
+        spanStart = spanStart_;
+        spanToLump = spanToLump_;
+        lumpStart = lumpStart_;
+        spanOffsetInLump = spanOffsetInLump_;
+        chainColPtr = chainColPtr_;
+        chainRowSpan = chainRowSpan_;
+        chainData = chainData_;
+    }
 
+    __BASPACHO_HOST_DEVICE__
     int64_t paramSize(int64_t blockIndex) const {
         return spanStart[blockIndex + 1] - spanStart[blockIndex];
     }
 
+    __BASPACHO_HOST_DEVICE__
     int64_t paramStart(int64_t blockIndex) const {
         return spanStart[blockIndex];
     }
 
     // returns: pair (offset, stride)
+    __BASPACHO_HOST_DEVICE__
     std::pair<int64_t, int64_t> blockOffset(int64_t rowBlockIndex,
                                             int64_t colBlockIndex) const {
         // BASPACHO_CHECK_GE(rowBlockIndex, colBlockIndex);
@@ -44,6 +50,7 @@ struct CoalescedAccessor {
     }
 
     // returns: pair (offset, stride)
+    __BASPACHO_HOST_DEVICE__
     std::pair<int64_t, int64_t> diagBlockOffset(int64_t blockIndex) const {
         int64_t lump = spanToLump[blockIndex];
         int64_t lumpSize = lumpStart[lump + 1] - lumpStart[lump];
@@ -55,7 +62,8 @@ struct CoalescedAccessor {
 
     template <int rowSize = Eigen::Dynamic, int64_t colSize = Eigen::Dynamic,
               typename T>
-    auto block(T* data, int64_t rowBlockIndex, int64_t colBlockIndex) const {
+    __BASPACHO_HOST_DEVICE__ auto block(T* data, int64_t rowBlockIndex,
+                                        int64_t colBlockIndex) const {
         using namespace Eigen;
         auto [offset, stride] = blockOffset(rowBlockIndex, colBlockIndex);
         if (rowSize != Dynamic) {
@@ -72,7 +80,7 @@ struct CoalescedAccessor {
     }
 
     template <int size = Eigen::Dynamic, typename T>
-    auto diagBlock(T* data, int64_t blockIndex) const {
+    __BASPACHO_HOST_DEVICE__ auto diagBlock(T* data, int64_t blockIndex) const {
         using namespace Eigen;
         auto [offset, stride] = diagBlockOffset(blockIndex);
         if (size != Dynamic) {
@@ -92,19 +100,40 @@ struct CoalescedAccessor {
     const int64_t* chainData;
 };
 
+// allows to retrieve a block in a coalesced-block matrix through a permutation
 struct PermutedCoalescedAccessor {
-    PermutedCoalescedAccessor(const CoalescedAccessor& plainAcc,
-                              const int64_t* permutation)
-        : plainAcc(plainAcc), permutation(permutation) {}
+    // we don't define a constructor to be able to use it as argument of a Cuda kernel
+    void init(const CoalescedAccessor& plainAcc_, const int64_t* permutation_) {
+        plainAcc = plainAcc_;
+        permutation = permutation_;
+    }
 
+    // we don't define a constructor to be able to use it as argument of a Cuda kernel
+    void init(const int64_t* spanStart_, const int64_t* spanToLump_,
+              const int64_t* lumpStart_, const int64_t* spanOffsetInLump_,
+              const int64_t* chainColPtr_, const int64_t* chainRowSpan_,
+              const int64_t* chainData_, const int64_t* permutation_) {
+        plainAcc.spanStart = spanStart_;
+        plainAcc.spanToLump = spanToLump_;
+        plainAcc.lumpStart = lumpStart_;
+        plainAcc.spanOffsetInLump = spanOffsetInLump_;
+        plainAcc.chainColPtr = chainColPtr_;
+        plainAcc.chainRowSpan = chainRowSpan_;
+        plainAcc.chainData = chainData_;
+        permutation = permutation_;
+    }
+
+    __BASPACHO_HOST_DEVICE__
     int64_t paramSize(int64_t blockIndex) const {
         return plainAcc.paramSize(permutation[blockIndex]);
     }
 
+    __BASPACHO_HOST_DEVICE__
     int64_t paramStart(int64_t blockIndex) const {
         return plainAcc.paramStart(permutation[blockIndex]);
     }
 
+    __BASPACHO_HOST_DEVICE__
     std::tuple<int64_t, int64_t, bool> blockOffset(
         int64_t rowBlockIndex, int64_t colBlockIndex) const {
         int64_t permRowBlockIndex = permutation[rowBlockIndex];
@@ -116,13 +145,15 @@ struct PermutedCoalescedAccessor {
         return std::make_tuple(off, stride, flipped);
     }
 
+    __BASPACHO_HOST_DEVICE__
     std::pair<int64_t, int64_t> diagBlockOffset(int64_t blockIndex) const {
         return plainAcc.diagBlockOffset(permutation[blockIndex]);
     }
 
     template <int rowSize = Eigen::Dynamic, int64_t colSize = Eigen::Dynamic,
               typename T>
-    auto block(T* data, int64_t rowBlockIndex, int64_t colBlockIndex) const {
+    __BASPACHO_HOST_DEVICE__ auto block(T* data, int64_t rowBlockIndex,
+                                        int64_t colBlockIndex) const {
         using namespace Eigen;
         if (rowSize != Dynamic) {
             BASPACHO_CHECK_EQ(rowSize, paramSize(rowBlockIndex));
@@ -140,7 +171,7 @@ struct PermutedCoalescedAccessor {
     }
 
     template <int size = Eigen::Dynamic, typename T>
-    auto diagBlock(T* data, int64_t blockIndex) const {
+    __BASPACHO_HOST_DEVICE__ auto diagBlock(T* data, int64_t blockIndex) const {
         using namespace Eigen;
         auto [offset, stride] = diagBlockOffset(blockIndex);
         if (size != Dynamic) {

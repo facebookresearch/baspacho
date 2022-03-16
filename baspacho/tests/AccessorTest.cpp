@@ -105,7 +105,8 @@ TEST(Accessor, PermutedCoalescedAccessor) {
     denseMat.setZero();
 
     int seed = 0;
-    PermutedCoalescedAccessor acc(skel.accessor(), permutation.data());
+    PermutedCoalescedAccessor acc;
+    acc.init(skel.accessor(), permutation.data());
     for (int64_t pc = 0; pc < colBlocks.size(); pc++) {
         int64_t c = invP[pc];
         int64_t cSize = acc.paramSize(c);
@@ -246,7 +247,8 @@ TEST(Accessor, BlockPermutedCoalescedAccessor) {
     denseMat.setZero();
 
     int seed = 0;
-    PermutedCoalescedAccessor acc(skel.accessor(), permutation.data());
+    PermutedCoalescedAccessor acc;
+    acc.init(skel.accessor(), permutation.data());
     for (int64_t pc = 0; pc < colBlocks.size(); pc++) {
         int64_t c = invP[pc];
         int64_t cSize = acc.paramSize(c);

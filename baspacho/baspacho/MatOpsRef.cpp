@@ -41,7 +41,8 @@ struct SimpleSymbolicCtx : CpuBaseSymbolicCtx {
 // simple ops implemented using Eigen (therefore single thread)
 struct SimpleOps : Ops {
     virtual SymbolicCtxPtr createSymbolicCtx(
-        const CoalescedBlockMatrixSkel& skel) override {
+        const CoalescedBlockMatrixSkel& skel,
+        const std::vector<int64_t>& /* permutation */) override {
         return SymbolicCtxPtr(new SimpleSymbolicCtx(skel));
     }
 };
