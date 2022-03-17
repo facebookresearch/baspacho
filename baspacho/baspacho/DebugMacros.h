@@ -13,7 +13,7 @@
         exit(1);                                                         \
     }
 
-#ifdef BASPACHO_CHECKS
+#if defined(BASPACHO_CHECKS) && !defined(__CUDACC__)
 #define BASPACHO_CHECK(a) BASPACHO_CHECK_WHAT(a, #a)
 #define BASPACHO_CHECK_OP(a, b, op)                                          \
     {                                                                        \

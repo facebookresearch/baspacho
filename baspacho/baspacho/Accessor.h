@@ -37,7 +37,7 @@ struct CoalescedAccessor {
     __BASPACHO_HOST_DEVICE__
     std::pair<int64_t, int64_t> blockOffset(int64_t rowBlockIndex,
                                             int64_t colBlockIndex) const {
-        // BASPACHO_CHECK_GE(rowBlockIndex, colBlockIndex);
+        BASPACHO_CHECK_GE(rowBlockIndex, colBlockIndex);
         int64_t lump = spanToLump[colBlockIndex];
         int64_t lumpSize = lumpStart[lump + 1] - lumpStart[lump];
         int64_t offsetInLump = spanOffsetInLump[colBlockIndex];
@@ -45,7 +45,7 @@ struct CoalescedAccessor {
         int64_t end = chainColPtr[lump + 1];
         // bisect to find `rowBlockIndex` in chainRowSpan[start:end]
         int64_t pos = bisect(chainRowSpan + start, end - start, rowBlockIndex);
-        // BASPACHO_CHECK_EQ(chainRowSpan[start + pos], rowBlockIndex);
+        BASPACHO_CHECK_EQ(chainRowSpan[start + pos], rowBlockIndex);
         return std::make_pair(chainData[start + pos] + offsetInLump, lumpSize);
     }
 
