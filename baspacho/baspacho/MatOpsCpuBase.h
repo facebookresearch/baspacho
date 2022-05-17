@@ -25,6 +25,11 @@ struct CpuBaseSymElimCtx : SymElimCtx {
 struct CpuBaseSymbolicCtx : SymbolicCtx {
     CpuBaseSymbolicCtx(const CoalescedBlockMatrixSkel& skel) : skel(skel) {}
 
+    virtual PermutedCoalescedAccessor deviceAccessor() override {
+        throw std::runtime_error(
+            "no device accessor can be create from cpu-only backed!");
+    }
+
     static int64_t computeMaxBufSize(const CpuBaseSymElimCtx& elim,
                                      const CoalescedBlockMatrixSkel& skel,
                                      int64_t sRel) {

@@ -7,11 +7,6 @@
 
 namespace BaSpaCho {
 
-template <typename... Args>
-void UNUSED(const Args&... args) {
-    (void)(sizeof...(args));
-}
-
 std::string timeStamp();
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
@@ -57,6 +52,12 @@ bool isWeaklyIncreasing(const std::vector<T>& v, std::size_t begin,
 #else
 #define __BASPACHO_HOST_DEVICE__
 #endif
+
+template <typename... Args>
+__BASPACHO_HOST_DEVICE__
+void UNUSED(const Args&... args) {
+    (void)(sizeof...(args));
+}
 
 __BASPACHO_HOST_DEVICE__
 inline int64_t bisect(const int64_t* array, int64_t size, int64_t needle) {

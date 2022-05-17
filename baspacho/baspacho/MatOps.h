@@ -30,7 +30,9 @@ struct Ops {
 
     // creates a symbolic context from a matrix structure
     virtual SymbolicCtxPtr createSymbolicCtx(
-        const CoalescedBlockMatrixSkel& skel) = 0;
+        const CoalescedBlockMatrixSkel& skel,
+        const std::vector<int64_t>& permutation
+        ) = 0;
 };
 
 struct NumericCtxBase {
@@ -55,6 +57,8 @@ struct SymbolicCtx {
 
     virtual SolveCtxBase* createSolveCtxForType(std::type_index tIdx, int nRHS,
                                                 int batchSize) = 0;
+
+    virtual PermutedCoalescedAccessor deviceAccessor() = 0;
 
     template <typename T>
     NumericCtxPtr<T> createNumericCtx(int64_t tempBufSize, const T* data);

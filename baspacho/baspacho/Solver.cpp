@@ -24,7 +24,7 @@ Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_,
       elimLumpRanges(std::move(elimLumpRanges_)),
       permutation(std::move(permutation_)),
       ops(std::move(ops_)) {
-    symCtx = ops->createSymbolicCtx(factorSkel);
+    symCtx = ops->createSymbolicCtx(factorSkel, permutation);
     for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
         elimCtxs.push_back(symCtx->prepareElimination(elimLumpRanges[l],
                                                       elimLumpRanges[l + 1]));

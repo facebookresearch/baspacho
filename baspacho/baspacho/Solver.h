@@ -14,8 +14,13 @@ struct Solver {
            std::vector<int64_t>&& permutation, OpsPtr&& ops);
 
     PermutedCoalescedAccessor accessor() const {
-        return PermutedCoalescedAccessor(factorSkel.accessor(),
-                                         permutation.data());
+        PermutedCoalescedAccessor retv;
+        retv.init(factorSkel.accessor(), permutation.data());
+        return retv;
+    }
+
+    PermutedCoalescedAccessor deviceAccessor() const {
+        return symCtx->deviceAccessor();
     }
 
     void printStats() const;

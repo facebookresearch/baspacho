@@ -47,7 +47,8 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
 struct BlasOps : Ops {
     BlasOps(int numThreads) : numThreads(numThreads) {}
     virtual SymbolicCtxPtr createSymbolicCtx(
-        const CoalescedBlockMatrixSkel& skel) override {
+        const CoalescedBlockMatrixSkel& skel,
+        const std::vector<int64_t>& /* permutation */) override {
         // todo: use settings
         return SymbolicCtxPtr(new BlasSymbolicCtx(skel, numThreads));
     }

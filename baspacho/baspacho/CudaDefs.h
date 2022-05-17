@@ -83,6 +83,9 @@ struct DevMirror {
     }
     void load(const std::vector<T>& vec) {
         clear();
+        if(!vec.size()) {
+            return; // cudaMalloc of size 0 fails
+        }
         cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T)));
         CHECK_ALLOCATION(ptr, vec.size() * sizeof(T));
         cuCHECK(cudaMemcpy(ptr, vec.data(), vec.size() * sizeof(T),

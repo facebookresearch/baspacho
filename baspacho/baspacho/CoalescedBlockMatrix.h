@@ -52,10 +52,11 @@ struct CoalescedBlockMatrixSkel {
     int64_t dataSize() const { return chainData[chainData.size() - 1]; }
 
     CoalescedAccessor accessor() const {
-        return CoalescedAccessor(spanStart.data(), spanToLump.data(),
-                                 lumpStart.data(), spanOffsetInLump.data(),
-                                 chainColPtr.data(), chainRowSpan.data(),
-                                 chainData.data());
+        CoalescedAccessor retv;
+        retv.init(spanStart.data(), spanToLump.data(), lumpStart.data(),
+                  spanOffsetInLump.data(), chainColPtr.data(),
+                  chainRowSpan.data(), chainData.data());
+        return retv;
     }
 
     std::vector<int64_t> spanStart;  // (with final el)

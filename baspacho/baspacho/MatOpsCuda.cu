@@ -41,7 +41,8 @@ struct CudaSymElimCtx : SymElimCtx {
 };
 
 struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
-    CudaSymbolicCtx(const CoalescedBlockMatrixSkel& skel)
+    CudaSymbolicCtx(const CoalescedBlockMatrixSkel& skel,
+                   const std::vector<int64_t>& permutation)
         : CpuBaseSymbolicCtx(skel) {
         // TODO: support custom stream in the future
         cublasCHECK(cublasCreate(&cublasH));
@@ -59,6 +60,7 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         devBoardChainColOrd.load(skel.boardChainColOrd);
         devSpanStart.load(skel.spanStart);
         devSpanToLump.load(skel.spanToLump);
+        devPermutation.load(permutation);
     }
 
     virtual ~CudaSymbolicCtx() override {
@@ -68,6 +70,15 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
         if (cusolverDnH) {
             cusolverCHECK(cusolverDnDestroy(cusolverDnH));
         }
+    }
+
+    virtual PermutedCoalescedAccessor deviceAccessor() override {
+        PermutedCoalescedAccessor retv;
+        retv.init(devSpanStart.ptr, devSpanToLump.ptr,
+              devLumpStart.ptr, devSpanOffsetInLump.ptr,
+              devChainColPtr.ptr, devChainRowSpan.ptr,
+              devChainData.ptr, devPermutation.ptr);
+        return retv;
     }
 
     virtual SymElimCtxPtr prepareElimination(int64_t lumpsBegin,
@@ -112,14 +123,16 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     DevMirror<int64_t> devBoardChainColOrd;
     DevMirror<int64_t> devSpanStart;
     DevMirror<int64_t> devSpanToLump;
+    DevMirror<int64_t> devPermutation;
 };
 
 // cuda ops implemented using CUBLAS and custom kernels
 struct CudaOps : Ops {
     virtual SymbolicCtxPtr createSymbolicCtx(
-        const CoalescedBlockMatrixSkel& skel) override {
+        const CoalescedBlockMatrixSkel& skel,
+        const std::vector<int64_t>& permutation) override {
         // cout << "create sym..." << endl;
-        return SymbolicCtxPtr(new CudaSymbolicCtx(skel));
+        return SymbolicCtxPtr(new CudaSymbolicCtx(skel, permutation));
     }
 };
 
