@@ -452,20 +452,38 @@ SolverPtr createSolver(const Settings& settings,
 SolverPtr createSolverSchur(const Settings& settings,
                             const std::vector<int64_t>& paramSize,
                             const SparseStructure& ss_,
-                            const std::vector<int64_t>& elimLumpRanges) {
+                            const std::vector<int64_t>& elimLumpRanges,
+                            const unordered_set<int64_t>& elimLastIds) {
+    if(elimLumpRanges.empty()) {
+        return createSolver(settings, paramSize, ss_);
+    }
+
     BASPACHO_CHECK_GE((int64_t)elimLumpRanges.size(), 2);
+    int64_t elimEnd = elimLumpRanges.back();
+    for(int64_t id : elimLastIds) {
+        BASPACHO_CHECK_GE(id, elimEnd);
+    }
+
     SparseStructure ss =
         ss_.addIndependentEliminationFill(elimLumpRanges[0], elimLumpRanges[1]);
     for (int64_t e = 1; e < (int64_t)elimLumpRanges.size() - 1; e++) {
         ss = ss.addIndependentEliminationFill(elimLumpRanges[e],
                                               elimLumpRanges[e + 1]);
     }
-
-    int64_t elimEnd = elimLumpRanges[elimLumpRanges.size() - 1];
     SparseStructure ssBottom = ss.extractRightBottom(elimEnd);
 
     // find best permutation for right-bottom corner that is left
     vector<int64_t> permutation = ssBottom.fillReducingPermutation();
+    vector<int64_t> noCrossPoints;
+    if(!elimLastIds.empty()) { // force those params to go last
+        vector<int64_t> parts[2];
+        for(int64_t p : permutation) {
+            parts[elimLastIds.count(p)].push_back(p);
+        }
+        noCrossPoints.push_back(parts[0].size());
+        permutation = parts[0];
+        permutation.insert(permutation.end(), parts[1].begin(), parts[1].end());
+    }
     vector<int64_t> invPerm = inversePermutation(permutation);
     SparseStructure sortedSsBottom =
         ssBottom.symmetricPermutation(invPerm, false);

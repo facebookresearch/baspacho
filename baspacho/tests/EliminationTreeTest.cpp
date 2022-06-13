@@ -20,7 +20,7 @@ using namespace ::testing;
 
 TEST(EliminationTree, Build) {
     for (int h = 0; h < 200; h++) {
-        auto colsOrig = randomCols(70, 0.1, h + 37);
+        auto colsOrig = randomCols(70, 0.05, h + 37);
         auto ssOrig = columnsToCscStruct(colsOrig).transpose();
 
         vector<int64_t> permutation = ssOrig.fillReducingPermutation();
@@ -33,14 +33,19 @@ TEST(EliminationTree, Build) {
         vector<int64_t> paramSize(ssOrig.ptrs.size() - 1, 1);
         EliminationTree et(paramSize, ss);
 
+        // test no-cross barrier
+        int64_t nocross = (7 * h) % 60 + 5;
+
         et.buildTree();
 
-        et.computeMerges(/* compute sparse elim ranges = */ false);
+        et.computeMerges(/* compute sparse elim ranges = */ false, {nocross});
 
         et.computeAggregateStruct();
 
         CoalescedBlockMatrixSkel skel(et.computeSpanStart(), et.lumpToSpan,
                                       et.colStart, et.rowParam);
+        ASSERT_EQ(skel.spanOffsetInLump[nocross], 0);
+
         int64_t totData = skel.chainData[skel.chainData.size() - 1];
         vector<double> data(totData, 1);
         Eigen::MatrixXd mat = skel.densify(data);

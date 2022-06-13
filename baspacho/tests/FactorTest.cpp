@@ -143,7 +143,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
 
         vector<int64_t> permutation = ss.fillReducingPermutation();
         vector<int64_t> invPerm = inversePermutation(permutation);
-        SparseStructure sortedSs = ss;
+        SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
 
         vector<int64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
@@ -204,7 +204,7 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
 
         vector<int64_t> permutation = ss.fillReducingPermutation();
         vector<int64_t> invPerm = inversePermutation(permutation);
-        SparseStructure sortedSs = ss;
+        SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
 
         vector<int64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);

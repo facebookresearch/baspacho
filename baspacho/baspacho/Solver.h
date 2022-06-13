@@ -1,5 +1,6 @@
 
 #include <memory>
+#include <unordered_set>
 
 #include "baspacho/baspacho/CoalescedBlockMatrix.h"
 #include "baspacho/baspacho/MatOps.h"
@@ -37,6 +38,19 @@ struct Solver {
 
     template <typename T>
     void solveLt(const T* matData, T* vecData, int64_t stride, int nRHS) const;
+
+    template <typename T>
+    void factorUpTo(T* data, int64_t paramIndex, bool verbose = false) const;
+
+    template <typename T>
+    void applySymmetricFrom(const T* data, const T* inVec, T* outVec,
+                            int64_t paramIndex) const;
+
+    template <typename T>
+    void solveLtUpTo(const T* data, T* vecData, int64_t paramIndex) const;
+
+    template <typename T>
+    void solveLUpTo(const T* data, T* vecData, int64_t paramIndex) const;
 
     int64_t order() const { return factorSkel.order(); }
 
@@ -94,6 +108,7 @@ SolverPtr createSolver(const Settings& settings,
 SolverPtr createSolverSchur(const Settings& settings,
                             const std::vector<int64_t>& paramSize,
                             const SparseStructure& ss,
-                            const std::vector<int64_t>& elimLumpRanges);
+                            const std::vector<int64_t>& elimLumpRanges,
+                            const std::unordered_set<int64_t>& elimLastIds = {});
 
 }  // end namespace BaSpaCho

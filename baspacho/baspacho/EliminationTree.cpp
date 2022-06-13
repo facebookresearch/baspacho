@@ -11,7 +11,7 @@ namespace BaSpaCho {
 
 using namespace std;
 
-EliminationTree::EliminationTree(const std::vector<int64_t>& paramSize,
+EliminationTree::EliminationTree(const vector<int64_t>& paramSize,
                                  const SparseStructure& ss)
     : paramSize(paramSize), ss(ss) {
     BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
@@ -60,7 +60,7 @@ static constexpr int64_t maxSparseElimNodeSize = 12;
 static constexpr int64_t minNumSparseElimNodes = 50;
 static constexpr double flopsColOverhead = 2e7;
 
-void EliminationTree::computeMerges(bool computeSparseElimRanges) {
+void EliminationTree::computeMerges(bool computeSparseElimRanges, const vector<int64_t>& noCrossPoints) {
     int64_t ord = ss.order();
 
     // Compute node heights:
@@ -73,9 +73,11 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
     // In order to do so we sort nodes according to height.
     // TODO: consider allowing some initial merge of very small nodes?
     vector<int64_t> height(ord, 0);
-    vector<tuple<int64_t, int64_t, int64_t>> unmergedHeightNode(ord);
+    vector<tuple<int64_t, int64_t, int64_t, int64_t>> unmergedHeightNode(ord);
     for (int64_t k = 0; k < ord; k++) {
-        unmergedHeightNode[k] = make_tuple(height[k], nodeSize[k], k);
+        int noCrossSection = upper_bound(noCrossPoints.begin(), noCrossPoints.end(), k) - noCrossPoints.begin();
+
+        unmergedHeightNode[k] = make_tuple(noCrossSection, height[k], nodeSize[k], k);
 
         int64_t par = parent[k];
         if (par == -1) {
@@ -93,8 +95,10 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
         sparseElimRanges.push_back(0);
         for (int64_t k0 = 0; k0 < ord; /* */) {
             int64_t k1 = k0;
-            while (k1 < ord && get<0>(unmergedHeightNode[k1]) == mergeHeight &&
-                   get<1>(unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
+
+            while (k1 < ord && get<0>(unmergedHeightNode[k1]) == get<0>(unmergedHeightNode[k0])
+                     && get<1>(unmergedHeightNode[k1]) == mergeHeight &&
+                   get<2>(unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
                 k1++;
             }
             if (k1 - k0 < minNumSparseElimNodes) {
@@ -102,7 +106,7 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
             }
             mergeHeight++;
             for (int64_t k = k0; k < k1; k++) {
-                forbidMerge[get<2>(unmergedHeightNode[k])] = true;
+                forbidMerge[get<3>(unmergedHeightNode[k])] = true;
             }
             sparseElimRanges.push_back(k1);
             k0 = k1;
@@ -112,7 +116,7 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
         }
     }
 
-    std::priority_queue<std::tuple<double, int64_t, int64_t>> mergeCandidates;
+    priority_queue<tuple<double, int64_t, int64_t>> mergeCandidates;
     for (int64_t k = ord - 1; k >= 0; k--) {
         if (forbidMerge[k]) {
             continue;
@@ -121,6 +125,13 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
         if (p == -1) {
             continue;
         }
+
+        auto it = upper_bound(noCrossPoints.begin(), noCrossPoints.end(), k);
+        int64_t barrier = (it == noCrossPoints.end()) ? ord : *it; // do not cross
+        if (p >= barrier) {
+            continue;
+        }
+
         double fillAfterMerge =
             ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]);
         mergeCandidates.emplace(fillAfterMerge, k, p);
@@ -191,8 +202,11 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges) {
     lumpStart.resize(numLumps + 1);   // permuted
     lumpToSpan.resize(numLumps + 1);  // permuted
     vector<int64_t> unpermutedRootSpanToLump(ord, -1);
+
+    // int64_t endElims = sparseElimRanges.empty() ? 0 : sparseElimRanges.back();
+
     for (int64_t i = 0; i < ord; i++) {
-        auto [height, unmergedSize, k] = unmergedHeightNode[i];
+        auto [ncs, height, unmergedSize, k] = unmergedHeightNode[i];
         if (mergeWith[k] != -1) {
             continue;
         }
@@ -242,13 +256,13 @@ void EliminationTree::computeAggregateStruct() {
                 tags[p] = a;
             }
         }
-        std::sort(rowParam.begin() + colStart[colStart.size() - 1],
+        sort(rowParam.begin() + colStart[colStart.size() - 1],
                   rowParam.end());
         colStart.push_back(rowParam.size());
     }
 }
 
-std::vector<int64_t> EliminationTree::computeSpanStart() {
+vector<int64_t> EliminationTree::computeSpanStart() {
     vector<int64_t> spanStart(paramSize.size() + 1);
     leftPermute(spanStart.begin(), permInverse, paramSize);
     cumSumVec(spanStart);

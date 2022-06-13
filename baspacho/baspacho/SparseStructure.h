@@ -31,6 +31,7 @@ struct SparseStructure {
 
     // assumes only a half (any) is present,
     // result is lower/upper half csc (= upper/lower half csr)
+    // `mapPerm[i]` is the new index: `i`-th row will move to `mapPerm[i]`
     SparseStructure symmetricPermutation(const std::vector<int64_t>& mapPerm,
                                          bool lowerHalf = true,
                                          bool sortIndices = true) const;
@@ -41,6 +42,7 @@ struct SparseStructure {
 
     SparseStructure addFullEliminationFill() const;
 
+    // return `perm`: `perm[i]` is old index that should move in `i`-th position
     std::vector<int64_t> fillReducingPermutation() const;
 
     SparseStructure extractRightBottom(int64_t start);

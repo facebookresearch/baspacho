@@ -10,7 +10,7 @@ struct EliminationTree {
 
     void buildTree();
 
-    void computeMerges(bool computeSparseElimRanges);
+    void computeMerges(bool computeSparseElimRanges, const std::vector<int64_t>& noCrossPoints = {});
 
     void computeAggregateStruct();
 
