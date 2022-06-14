@@ -41,135 +41,135 @@ using namespace std;
 using namespace ::testing;
 
 TEST(CoalescedBlockMatrix, BasicAssertions) {
-    // sizes:                     1  1  2  1  2  2  3   2   2
-    vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
-    // sizes:                          1  3  1  4  3  4
-    vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
-    vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                      {3, 4, 5, 8},    {4, 5, 7},
-                                      {6, 8},          {7, 8}};
-    SparseStructure sStruct = columnsToCscStruct(columnParams);
-    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
-                                  sStruct.inds);
+  // sizes:                     1  1  2  1  2  2  3   2   2
+  vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
+  // sizes:                          1  3  1  4  3  4
+  vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
+  vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                    {3, 4, 5, 8},    {4, 5, 7},
+                                    {6, 8},          {7, 8}};
+  SparseStructure sStruct = columnsToCscStruct(columnParams);
+  CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
+                                sStruct.inds);
 
-    ASSERT_THAT(skel.spanStart, ContainerEq(spanStart));
-    ASSERT_THAT(skel.lumpToSpan, ContainerEq(lumpToSpan));
-    ASSERT_THAT(skel.spanToLump, ElementsAre(0, 1, 1, 2, 3, 3, 4, 5, 5));
-    ASSERT_THAT(skel.lumpStart, ElementsAre(0, 1, 4, 5, 9, 12, 16));
+  ASSERT_THAT(skel.spanStart, ContainerEq(spanStart));
+  ASSERT_THAT(skel.lumpToSpan, ContainerEq(lumpToSpan));
+  ASSERT_THAT(skel.spanToLump, ElementsAre(0, 1, 1, 2, 3, 3, 4, 5, 5));
+  ASSERT_THAT(skel.lumpStart, ElementsAre(0, 1, 4, 5, 9, 12, 16));
 
-    ASSERT_THAT(skel.chainColPtr, ElementsAre(0, 5, 10, 14, 17, 19, 21));
-    ASSERT_THAT(skel.chainRowSpan, ElementsAre(0, 1, 2, 5, 8,  //
-                                               1, 2, 3, 6, 7,  //
-                                               3, 4, 5, 8,     //
-                                               4, 5, 7,        //
-                                               6, 8,           //
-                                               7, 8));
-    // 1x{1, 1, 2, 2, 2}, 3x{1, 2, 1, 3, 2}, 1x{1, 2, 2, 2}, 4x{2, 2, 2}, 3x{3,
-    // 2}, 4x{2, 2}
-    ASSERT_THAT(skel.chainData,
-                ElementsAre(0, 1, 2, 4, 6, 8, 11, 17, 20, 29, 35, 36, 38, 40,
-                            42, 50, 58, 66, 75, 81, 89, 97));
-    ASSERT_THAT(skel.chainRowsTillEnd,
-                ElementsAre(1, 2, 4, 6, 8, 1, 3, 4, 7, 9, 1, 3, 5, 7, 2, 4, 6,
-                            3, 5, 2, 4));
+  ASSERT_THAT(skel.chainColPtr, ElementsAre(0, 5, 10, 14, 17, 19, 21));
+  ASSERT_THAT(skel.chainRowSpan, ElementsAre(0, 1, 2, 5, 8,  //
+                                             1, 2, 3, 6, 7,  //
+                                             3, 4, 5, 8,     //
+                                             4, 5, 7,        //
+                                             6, 8,           //
+                                             7, 8));
+  // 1x{1, 1, 2, 2, 2}, 3x{1, 2, 1, 3, 2}, 1x{1, 2, 2, 2}, 4x{2, 2, 2}, 3x{3,
+  // 2}, 4x{2, 2}
+  ASSERT_THAT(skel.chainData,
+              ElementsAre(0, 1, 2, 4, 6, 8, 11, 17, 20, 29, 35, 36, 38, 40, 42,
+                          50, 58, 66, 75, 81, 89, 97));
+  ASSERT_THAT(skel.chainRowsTillEnd,
+              ElementsAre(1, 2, 4, 6, 8, 1, 3, 4, 7, 9, 1, 3, 5, 7, 2, 4, 6, 3,
+                          5, 2, 4));
 
-    /*
-        X
-        X X
-        _ X X
-        X _ X X
-        _ X _ _ X
-        X X X X X X
-    */
-    ASSERT_THAT(skel.boardColPtr, ElementsAre(0, 5, 10, 14, 17, 20, 22));
-    ASSERT_THAT(skel.boardRowLump, ElementsAre(0, 1, 3, 5, kInvalid,  //
-                                               1, 2, 4, 5, kInvalid,  //
-                                               2, 3, 5, kInvalid,     //
-                                               3, 5, kInvalid,        //
-                                               4, 5, kInvalid,        //
-                                               5, kInvalid));
-    ASSERT_THAT(skel.boardChainColOrd, ElementsAre(0, 1, 3, 4, 5,  //
-                                                   0, 2, 3, 4, 5,  //
-                                                   0, 1, 3, 4,     //
-                                                   0, 2, 3,        //
-                                                   0, 1, 2,        //
-                                                   0, 2));
+  /*
+      X
+      X X
+      _ X X
+      X _ X X
+      _ X _ _ X
+      X X X X X X
+  */
+  ASSERT_THAT(skel.boardColPtr, ElementsAre(0, 5, 10, 14, 17, 20, 22));
+  ASSERT_THAT(skel.boardRowLump, ElementsAre(0, 1, 3, 5, kInvalid,  //
+                                             1, 2, 4, 5, kInvalid,  //
+                                             2, 3, 5, kInvalid,     //
+                                             3, 5, kInvalid,        //
+                                             4, 5, kInvalid,        //
+                                             5, kInvalid));
+  ASSERT_THAT(skel.boardChainColOrd, ElementsAre(0, 1, 3, 4, 5,  //
+                                                 0, 2, 3, 4, 5,  //
+                                                 0, 1, 3, 4,     //
+                                                 0, 2, 3,        //
+                                                 0, 1, 2,        //
+                                                 0, 2));
 
-    ASSERT_THAT(skel.boardRowPtr, ElementsAre(0, 1, 3, 5, 8, 10, 16));
-    ASSERT_THAT(skel.boardColLump, ElementsAre(0,        //
-                                               0, 1,     //
-                                               1, 2,     //
-                                               0, 2, 3,  //
-                                               1, 4,     //
-                                               0, 1, 2, 3, 4, 5));
-    ASSERT_THAT(skel.boardColOrd, ElementsAre(0,        //
-                                              1, 0,     //
-                                              1, 0,     //
-                                              2, 1, 0,  //
-                                              2, 0,     //
-                                              3, 3, 2, 1, 1, 0));
+  ASSERT_THAT(skel.boardRowPtr, ElementsAre(0, 1, 3, 5, 8, 10, 16));
+  ASSERT_THAT(skel.boardColLump, ElementsAre(0,        //
+                                             0, 1,     //
+                                             1, 2,     //
+                                             0, 2, 3,  //
+                                             1, 4,     //
+                                             0, 1, 2, 3, 4, 5));
+  ASSERT_THAT(skel.boardColOrd, ElementsAre(0,        //
+                                            1, 0,     //
+                                            1, 0,     //
+                                            2, 1, 0,  //
+                                            2, 0,     //
+                                            3, 3, 2, 1, 1, 0));
 }
 
 TEST(CoalescedBlockMatrix, Densify) {
-    vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
-    vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
-    vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                      {3, 4, 5, 8},    {4, 5, 7},
-                                      {6, 8},          {7, 8}};
-    SparseStructure sStruct = columnsToCscStruct(columnParams);
-    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
-                                  sStruct.inds);
+  vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
+  vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
+  vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                    {3, 4, 5, 8},    {4, 5, 7},
+                                    {6, 8},          {7, 8}};
+  SparseStructure sStruct = columnsToCscStruct(columnParams);
+  CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
+                                sStruct.inds);
 
-    int64_t totData = skel.chainData[skel.chainData.size() - 1];
-    vector<double> data(totData);
-    iota(data.begin(), data.end(), 13);
-    Eigen::MatrixXd mat = skel.densify(data);
+  int64_t totData = skel.chainData[skel.chainData.size() - 1];
+  vector<double> data(totData);
+  iota(data.begin(), data.end(), 13);
+  Eigen::MatrixXd mat = skel.densify(data);
 
-    std::stringstream ss;
-    ss << mat;
-    std::string expected =
-        " 13   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0\n"
-        " 14  21  22  23   0   0   0   0   0   0   0   0   0   0   0   0\n"
-        " 15  24  25  26   0   0   0   0   0   0   0   0   0   0   0   0\n"
-        " 16  27  28  29   0   0   0   0   0   0   0   0   0   0   0   0\n"
-        "  0  30  31  32  48   0   0   0   0   0   0   0   0   0   0   0\n"
-        "  0   0   0   0  49  55  56  57  58   0   0   0   0   0   0   0\n"
-        "  0   0   0   0  50  59  60  61  62   0   0   0   0   0   0   0\n"
-        " 17   0   0   0  51  63  64  65  66   0   0   0   0   0   0   0\n"
-        " 18   0   0   0  52  67  68  69  70   0   0   0   0   0   0   0\n"
-        "  0  33  34  35   0   0   0   0   0  79  80  81   0   0   0   0\n"
-        "  0  36  37  38   0   0   0   0   0  82  83  84   0   0   0   0\n"
-        "  0  39  40  41   0   0   0   0   0  85  86  87   0   0   0   0\n"
-        "  0  42  43  44   0  71  72  73  74   0   0   0  94  95  96  97\n"
-        "  0  45  46  47   0  75  76  77  78   0   0   0  98  99 100 101\n"
-        " 19   0   0   0  53   0   0   0   0  88  89  90 102 103 104 105\n"
-        " 20   0   0   0  54   0   0   0   0  91  92  93 106 107 108 109";
+  std::stringstream ss;
+  ss << mat;
+  std::string expected =
+      " 13   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0\n"
+      " 14  21  22  23   0   0   0   0   0   0   0   0   0   0   0   0\n"
+      " 15  24  25  26   0   0   0   0   0   0   0   0   0   0   0   0\n"
+      " 16  27  28  29   0   0   0   0   0   0   0   0   0   0   0   0\n"
+      "  0  30  31  32  48   0   0   0   0   0   0   0   0   0   0   0\n"
+      "  0   0   0   0  49  55  56  57  58   0   0   0   0   0   0   0\n"
+      "  0   0   0   0  50  59  60  61  62   0   0   0   0   0   0   0\n"
+      " 17   0   0   0  51  63  64  65  66   0   0   0   0   0   0   0\n"
+      " 18   0   0   0  52  67  68  69  70   0   0   0   0   0   0   0\n"
+      "  0  33  34  35   0   0   0   0   0  79  80  81   0   0   0   0\n"
+      "  0  36  37  38   0   0   0   0   0  82  83  84   0   0   0   0\n"
+      "  0  39  40  41   0   0   0   0   0  85  86  87   0   0   0   0\n"
+      "  0  42  43  44   0  71  72  73  74   0   0   0  94  95  96  97\n"
+      "  0  45  46  47   0  75  76  77  78   0   0   0  98  99 100 101\n"
+      " 19   0   0   0  53   0   0   0   0  88  89  90 102 103 104 105\n"
+      " 20   0   0   0  54   0   0   0   0  91  92  93 106 107 108 109";
 
-    ASSERT_EQ(ss.str(), expected);
+  ASSERT_EQ(ss.str(), expected);
 }
 
 TEST(CoalescedBlockMatrix, Damp) {
-    vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
-    vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
-    vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
-                                      {3, 4, 5, 8},    {4, 5, 7},
-                                      {6, 8},          {7, 8}};
-    SparseStructure sStruct = columnsToCscStruct(columnParams);
-    CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
-                                  sStruct.inds);
+  vector<int64_t> spanStart{0, 1, 2, 4, 5, 7, 9, 12, 14, 16};
+  vector<int64_t> lumpToSpan{0, 1, 3, 4, 6, 7, 9};
+  vector<set<int64_t>> columnParams{{0, 1, 2, 5, 8}, {1, 2, 3, 6, 7},
+                                    {3, 4, 5, 8},    {4, 5, 7},
+                                    {6, 8},          {7, 8}};
+  SparseStructure sStruct = columnsToCscStruct(columnParams);
+  CoalescedBlockMatrixSkel skel(spanStart, lumpToSpan, sStruct.ptrs,
+                                sStruct.inds);
 
-    int64_t totData = skel.chainData[skel.chainData.size() - 1];
-    vector<double> data(totData);
-    iota(data.begin(), data.end(), 13);
+  int64_t totData = skel.chainData[skel.chainData.size() - 1];
+  vector<double> data(totData);
+  iota(data.begin(), data.end(), 13);
 
-    Eigen::MatrixXd mat = skel.densify(data);
+  Eigen::MatrixXd mat = skel.densify(data);
 
-    double alpha = 2.0, beta = 100.0;
-    skel.damp(data, alpha, beta);
+  double alpha = 2.0, beta = 100.0;
+  skel.damp(data, alpha, beta);
 
-    Eigen::MatrixXd matDamped = skel.densify(data);
+  Eigen::MatrixXd matDamped = skel.densify(data);
 
-    mat.diagonal() *= (1.0 + alpha);
-    mat.diagonal().array() += beta;
-    ASSERT_NEAR((mat - matDamped).norm(), 0, 1e-5);
+  mat.diagonal() *= (1.0 + alpha);
+  mat.diagonal().array() += beta;
+  ASSERT_NEAR((mat - matDamped).norm(), 0, 1e-5);
 }
