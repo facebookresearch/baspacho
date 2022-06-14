@@ -134,26 +134,30 @@ TEST(Factor, CoalescedFactor_Many_Ref_float) {
     testCoalescedFactor_Many<float>([] { return simpleOps(); });
 }
 
+// this value must match the value in EliminationTree.cpp - so that the no-cross barriers
+// are placed without preventing the sparse elimination from happening
+static constexpr int64_t minNumSparseElimNodes = 50;
+
 template <typename T>
 void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.03, 57 + i);
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
-        SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
+        SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
-        vector<int64_t> permutation = ss.fillReducingPermutation();
-        vector<int64_t> invPerm = inversePermutation(permutation);
-        SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
+        // test no-cross barrier - make sure the elim set is still present
+        int64_t nocross = (7 * i) % (110 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
         vector<int64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
-        et.computeMerges(/* compute sparse elim ranges = */ true);
+        et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
         et.computeAggregateStruct();
 
         CoalescedBlockMatrixSkel factorSkel(
             et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
+        ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
         vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
         factorSkel.damp(data, T(0.0), T(factorSkel.order() * 1.5));
@@ -200,21 +204,21 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
     for (int i = 0; i < 20; i++) {
         auto colBlocks = randomCols(115, 0.03, 57 + i);
         colBlocks = makeIndependentElimSet(colBlocks, 0, 60);
-        SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
+        SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
-        vector<int64_t> permutation = ss.fillReducingPermutation();
-        vector<int64_t> invPerm = inversePermutation(permutation);
-        SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
+        // test no-cross barrier - make sure the elim set is still present
+        int64_t nocross = (7 * i) % (110 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
         vector<int64_t> paramSize =
             randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
         EliminationTree et(paramSize, sortedSs);
         et.buildTree();
-        et.computeMerges(/* compute sparse elim ranges = */ true);
+        et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
         et.computeAggregateStruct();
 
         CoalescedBlockMatrixSkel factorSkel(
             et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
+        ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
         vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
         factorSkel.damp(data, T(0.0), T(factorSkel.order() * 1.5));
