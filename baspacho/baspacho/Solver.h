@@ -40,17 +40,19 @@ struct Solver {
   void solveLt(const T* matData, T* vecData, int64_t stride, int nRHS) const;
 
   template <typename T>
-  void factorUpTo(T* data, int64_t paramIndex, bool verbose = false) const;
-
-  template <typename T>
   void applySymmetricFrom(const T* data, const T* inVec, T* outVec,
                           int64_t paramIndex) const;
 
   template <typename T>
-  void solveLtUpTo(const T* data, T* vecData, int64_t paramIndex) const;
+  void factorUpTo(T* data, int64_t paramIndex, bool verbose = false) const;
 
   template <typename T>
-  void solveLUpTo(const T* data, T* vecData, int64_t paramIndex) const;
+  void solveLUpTo(const T* data, int64_t paramIndex, T* vecData, int64_t stride,
+                  int nRHS) const;
+
+  template <typename T>
+  void solveLtUpTo(const T* data, int64_t paramIndex, T* vecData,
+                   int64_t stride, int nRHS) const;
 
   int64_t order() const { return factorSkel.order(); }
 
@@ -74,6 +76,15 @@ struct Solver {
   template <typename T>
   void internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
                        int64_t stride) const;
+
+  template <typename T>
+  void internalSolveLUpTo(SolveCtx<T>& slvCtx, const T* data,
+                          int64_t paramIndex, T* vecData, int64_t stride) const;
+
+  template <typename T>
+  void internalSolveLtUpTo(SolveCtx<T>& slvCtx, const T* data,
+                           int64_t paramIndex, T* vecData,
+                           int64_t stride) const;
 
  public:
   CoalescedBlockMatrixSkel factorSkel;

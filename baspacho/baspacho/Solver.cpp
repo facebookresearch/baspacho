@@ -271,6 +271,20 @@ void Solver::solveLt(const T* matData, T* vecData, int64_t stride,
   internalSolveLt(*slvCtx, matData, vecData, stride);
 }
 
+template <typename T>
+void Solver::solveLUpTo(const T* matData, int64_t paramIndex, T* vecData,
+                        int64_t stride, int nRHS) const {
+  SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
+  internalSolveLUpTo(*slvCtx, matData, paramIndex, vecData, stride);
+}
+
+template <typename T>
+void Solver::solveLtUpTo(const T* matData, int64_t paramIndex, T* vecData,
+                         int64_t stride, int nRHS) const {
+  SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
+  internalSolveLtUpTo(*slvCtx, matData, paramIndex, vecData, stride);
+}
+
 static constexpr bool SparseElimSolve = true;
 
 template <typename T>
@@ -372,6 +386,123 @@ void Solver::internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
   }
 }
 
+template <typename T>
+void Solver::internalSolveLUpTo(SolveCtx<T>& slvCtx, const T* matData,
+                                int64_t paramIndex, T* vecData,
+                                int64_t stride) const {
+  BASPACHO_CHECK_GE(paramIndex, 0);
+  BASPACHO_CHECK_LT(paramIndex, (int64_t)factorSkel.spanOffsetInLump.size());
+  BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[paramIndex], 0);
+  int64_t upToLump = factorSkel.spanToLump[paramIndex];
+
+  int64_t denseOpsFromLump;
+  if (SparseElimSolve) {
+    for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
+      int64_t rangeEnd = std::min(elimLumpRanges[l + 1], upToLump);
+      slvCtx.sparseElimSolveL(*elimCtxs[l], matData, elimLumpRanges[l],
+                              rangeEnd, vecData, stride);
+      if (elimLumpRanges[l + 1] >= upToLump) {
+        return;  // done
+      }
+    }
+
+    denseOpsFromLump =
+        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
+  } else {
+    denseOpsFromLump = 0;
+  }
+
+  for (int64_t l = denseOpsFromLump; l < upToLump; l++) {
+    int64_t lumpStart = factorSkel.lumpStart[l];
+    int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
+    int64_t chainColBegin = factorSkel.chainColPtr[l];
+    int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
+
+    slvCtx.solveL(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
+                  stride);
+
+    int64_t boardColBegin = factorSkel.boardColPtr[l];
+    int64_t boardColEnd = factorSkel.boardColPtr[l + 1];
+    int64_t belowDiagChainColOrd =
+        factorSkel.boardChainColOrd[boardColBegin + 1];
+    int64_t numColChains = factorSkel.boardChainColOrd[boardColEnd - 1];
+    int64_t belowDiagOffset =
+        factorSkel.chainData[chainColBegin + belowDiagChainColOrd];
+    int64_t numRowsBelowDiag =
+        factorSkel.chainRowsTillEnd[chainColBegin + numColChains - 1] -
+        factorSkel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
+    if (numRowsBelowDiag == 0) {
+      continue;
+    }
+
+    slvCtx.gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize, vecData,
+                lumpStart, stride);
+
+    int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
+    slvCtx.assembleVec(chainColPtr, numColChains - belowDiagChainColOrd,
+                       vecData, stride);
+  }
+}
+
+template <typename T>
+void Solver::internalSolveLtUpTo(SolveCtx<T>& slvCtx, const T* matData,
+                                 int64_t paramIndex, T* vecData,
+                                 int64_t stride) const {
+  BASPACHO_CHECK_GE(paramIndex, 0);
+  BASPACHO_CHECK_LT(paramIndex, (int64_t)factorSkel.spanOffsetInLump.size());
+  BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[paramIndex], 0);
+  int64_t upToLump = factorSkel.spanToLump[paramIndex];
+
+  int64_t denseOpsFromLump;
+  if (SparseElimSolve) {
+    denseOpsFromLump =
+        elimLumpRanges.size() ? elimLumpRanges[elimLumpRanges.size() - 1] : 0;
+  } else {
+    denseOpsFromLump = 0;
+  }
+
+  for (int64_t l = upToLump - 1; l >= denseOpsFromLump; l--) {
+    int64_t lumpStart = factorSkel.lumpStart[l];
+    int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
+    int64_t chainColBegin = factorSkel.chainColPtr[l];
+
+    int64_t boardColBegin = factorSkel.boardColPtr[l];
+    int64_t boardColEnd = factorSkel.boardColPtr[l + 1];
+    int64_t belowDiagChainColOrd =
+        factorSkel.boardChainColOrd[boardColBegin + 1];
+    int64_t numColChains = factorSkel.boardChainColOrd[boardColEnd - 1];
+    int64_t belowDiagOffset =
+        factorSkel.chainData[chainColBegin + belowDiagChainColOrd];
+    int64_t numRowsBelowDiag =
+        factorSkel.chainRowsTillEnd[chainColBegin + numColChains - 1] -
+        factorSkel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
+
+    if (numRowsBelowDiag > 0) {
+      int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
+      slvCtx.assembleVecT(vecData, stride, chainColPtr,
+                          numColChains - belowDiagChainColOrd);
+
+      slvCtx.gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
+                   vecData, lumpStart, stride);
+    }
+
+    int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
+    slvCtx.solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart,
+                   stride);
+  }
+
+  if (SparseElimSolve) {
+    for (int64_t l = (int64_t)elimLumpRanges.size() - 2; l >= 0; l--) {
+      int64_t rangeEnd = std::min(elimLumpRanges[l + 1], upToLump);
+      if (rangeEnd <= elimLumpRanges[l]) {
+        continue;
+      }
+      slvCtx.sparseElimSolveLt(*elimCtxs[l], matData, elimLumpRanges[l],
+                               rangeEnd, vecData, stride);
+    }
+  }
+}
+
 template void Solver::factor<double>(double* data, bool verbose) const;
 template void Solver::factor<float>(float* data, bool verbose) const;
 template void Solver::factor<vector<double*>>(vector<double*>* data,
@@ -412,6 +543,18 @@ template void Solver::factorUpTo<double>(double* data, int64_t paramIndex,
                                          bool verbose) const;
 template void Solver::factorUpTo<float>(float* data, int64_t paramIndex,
                                         bool verbose) const;
+template void Solver::solveLUpTo<double>(const double* matData,
+                                         int64_t paramIndex, double* vecData,
+                                         int64_t stride, int nRHS) const;
+template void Solver::solveLUpTo<float>(const float* matData,
+                                        int64_t paramIndex, float* vecData,
+                                        int64_t stride, int nRHS) const;
+template void Solver::solveLtUpTo<double>(const double* matData,
+                                          int64_t paramIndex, double* vecData,
+                                          int64_t stride, int nRHS) const;
+template void Solver::solveLtUpTo<float>(const float* matData,
+                                         int64_t paramIndex, float* vecData,
+                                         int64_t stride, int nRHS) const;
 
 void Solver::printStats() const {
   cout << "Matrix stats:" << endl;
