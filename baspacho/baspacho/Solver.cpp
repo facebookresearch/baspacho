@@ -199,6 +199,57 @@ void Solver::factor(T* data, bool verbose) const {
 }
 
 template <typename T>
+void Solver::factorUpTo(T* data, int64_t paramIndex, bool verbose) const {
+  BASPACHO_CHECK_GE(paramIndex, 0);
+  BASPACHO_CHECK_LT(paramIndex, (int64_t)factorSkel.spanOffsetInLump.size());
+  BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[paramIndex], 0);
+  int64_t upToLump = factorSkel.spanToLump[paramIndex];
+
+  NumericCtxPtr<T> numCtx = symCtx->createNumericCtx<T>(maxElimTempSize, data);
+
+  for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
+    int64_t rangeEnd = std::min(elimLumpRanges[l + 1], upToLump);
+    if (verbose) {
+      std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
+                << rangeEnd << ")" << std::endl;
+    }
+    numCtx->doElimination(*elimCtxs[l], data, elimLumpRanges[l], rangeEnd);
+    if (elimLumpRanges[l + 1] >= upToLump) {
+      if (verbose) {
+        std::cout << "Exit, upToLump = " << upToLump << std::endl;
+      }
+      return;  // done
+    }
+  }
+
+  int64_t denseOpsFromLump = elimLumpRanges.size() ? elimLumpRanges.back() : 0;
+  if (verbose) {
+    std::cout << "Block-Fact from: " << denseOpsFromLump << std::endl;
+  }
+
+  for (int64_t l = denseOpsFromLump;
+       l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
+    numCtx->prepareAssemble(l);
+
+    //  iterate over columns having a non-trivial a-block
+    for (int64_t rPtr = startElimRowPtr[l - denseOpsFromLump],
+                 rEnd = factorSkel.boardRowPtr[l + 1] -
+                        1;  // skip last (diag block)
+         rPtr < rEnd; rPtr++) {
+      int64_t origLump = factorSkel.boardColLump[rPtr];
+      if (origLump >= upToLump) {
+        break;
+      }
+      eliminateBoard(*numCtx, data, rPtr);
+    }
+
+    if (l < upToLump) {
+      factorLump(*numCtx, data, l);
+    }
+  }
+}
+
+template <typename T>
 void Solver::solve(const T* matData, T* vecData, int64_t stride,
                    int nRHS) const {
   SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
@@ -357,6 +408,10 @@ template void Solver::solveLt<vector<double*>>(const vector<double*>* matData,
 template void Solver::solveLt<vector<float*>>(const vector<float*>* matData,
                                               vector<float*>* vecData,
                                               int64_t stride, int nRHS) const;
+template void Solver::factorUpTo<double>(double* data, int64_t paramIndex,
+                                         bool verbose) const;
+template void Solver::factorUpTo<float>(float* data, int64_t paramIndex,
+                                        bool verbose) const;
 
 void Solver::printStats() const {
   cout << "Matrix stats:" << endl;
