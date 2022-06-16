@@ -59,11 +59,11 @@ struct CoalescedBlockMatrixSkel {
     return retv;
   }
 
-  std::vector<int64_t> spanStart;  // (with final el)
-  std::vector<int64_t> spanToLump;
-  std::vector<int64_t> lumpStart;   // (with final el)
-  std::vector<int64_t> lumpToSpan;  // (with final el)
-  std::vector<int64_t> spanOffsetInLump;
+  std::vector<int64_t> spanStart;         // (with final el)
+  std::vector<int64_t> spanToLump;        // (with final el)
+  std::vector<int64_t> lumpStart;         // (with final el)
+  std::vector<int64_t> lumpToSpan;        // (with final el)
+  std::vector<int64_t> spanOffsetInLump;  // (with final el)
 
   // per-chain data, column-ordered
   std::vector<int64_t> chainColPtr;       // board col data start (with end)

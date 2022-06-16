@@ -54,7 +54,7 @@ TEST(CoalescedBlockMatrix, BasicAssertions) {
 
   ASSERT_THAT(skel.spanStart, ContainerEq(spanStart));
   ASSERT_THAT(skel.lumpToSpan, ContainerEq(lumpToSpan));
-  ASSERT_THAT(skel.spanToLump, ElementsAre(0, 1, 1, 2, 3, 3, 4, 5, 5));
+  ASSERT_THAT(skel.spanToLump, ElementsAre(0, 1, 1, 2, 3, 3, 4, 5, 5, 6));
   ASSERT_THAT(skel.lumpStart, ElementsAre(0, 1, 4, 5, 9, 12, 16));
 
   ASSERT_THAT(skel.chainColPtr, ElementsAre(0, 5, 10, 14, 17, 19, 21));

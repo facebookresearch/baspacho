@@ -70,14 +70,6 @@ struct Solver {
   void eliminateBoard(NumericCtx<T>& numCtx, T* data, int64_t ptr) const;
 
   template <typename T>
-  void internalSolveL(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
-                      int64_t stride) const;
-
-  template <typename T>
-  void internalSolveLt(SolveCtx<T>& slvCtx, const T* matData, T* vecData,
-                       int64_t stride) const;
-
-  template <typename T>
   void internalSolveLUpTo(SolveCtx<T>& slvCtx, const T* data,
                           int64_t paramIndex, T* vecData, int64_t stride) const;
 

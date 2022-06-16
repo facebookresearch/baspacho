@@ -25,7 +25,7 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
   int64_t numSpans = spanStart.size() - 1;
   int64_t numLumps = lumpToSpan.size() - 1;
 
-  spanToLump.resize(numSpans);
+  spanToLump.resize(numSpans + 1);
   lumpStart.resize(numLumps + 1);
   for (int64_t l = 0; l < numLumps; l++) {
     int64_t sBegin = lumpToSpan[l];
@@ -35,11 +35,13 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(
       spanToLump[s] = l;
     }
   }
+  spanToLump[numSpans] = numLumps;
   lumpStart[numLumps] = totSize;
-  spanOffsetInLump.resize(numSpans);
+  spanOffsetInLump.resize(numSpans + 1);
   for (int64_t s = 0; s < numSpans; s++) {
     spanOffsetInLump[s] = spanStart[s] - lumpStart[spanToLump[s]];
   }
+  spanOffsetInLump[numSpans] = 0;
 
   chainColPtr.resize(numLumps + 1);
   chainRowSpan.clear();
