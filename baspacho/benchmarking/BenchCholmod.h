@@ -4,10 +4,10 @@
 #include "baspacho/baspacho/SparseStructure.h"
 
 struct CholmodBenchResults {
-    double analysisTime;
-    double factorTime;
-    std::map<int64_t, double> solveTimes;
-    int nRHS;
+  double analysisTime;
+  double factorTime;
+  std::map<int64_t, double> solveTimes;
+  int nRHS;
 };
 
 CholmodBenchResults benchmarkCholmodSolve(

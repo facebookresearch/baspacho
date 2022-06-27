@@ -76,8 +76,8 @@ inline void cblas_dgemm(const CBLAS_LAYOUT /* Layout */,
                         const double* A, const BLAS_INT lda, const double* B,
                         const BLAS_INT ldb, const double beta, double* C,
                         const BLAS_INT ldc) {
-    dgemm_(&TransA, &TransB, &M, &N, &K, &alpha, A, &lda, B, &ldb, &beta, C,
-           &ldc);
+  dgemm_(&TransA, &TransB, &M, &N, &K, &alpha, A, &lda, B, &ldb, &beta, C,
+         &ldc);
 }
 
 inline void cblas_dtrsm(const CBLAS_LAYOUT /* Layout */, const CBLAS_SIDE Side,
@@ -85,7 +85,7 @@ inline void cblas_dtrsm(const CBLAS_LAYOUT /* Layout */, const CBLAS_SIDE Side,
                         const CBLAS_DIAG Diag, const BLAS_INT M,
                         const BLAS_INT N, const double alpha, const double* A,
                         const BLAS_INT lda, double* B, const BLAS_INT ldb) {
-    dtrsm_(&Side, &Uplo, &TransA, &Diag, &M, &N, &alpha, A, &lda, B, &ldb);
+  dtrsm_(&Side, &Uplo, &TransA, &Diag, &M, &N, &alpha, A, &lda, B, &ldb);
 }
 
 inline void cblas_dsyrk(const CBLAS_LAYOUT /* Layout */, const CBLAS_UPLO Uplo,
@@ -93,14 +93,14 @@ inline void cblas_dsyrk(const CBLAS_LAYOUT /* Layout */, const CBLAS_UPLO Uplo,
                         const BLAS_INT K, const double alpha, const double* A,
                         const BLAS_INT lda, const double beta, double* C,
                         const BLAS_INT ldc) {
-    dsyrk_(&Uplo, &Trans, &N, &K, &alpha, A, &lda, &beta, C, &ldc);
+  dsyrk_(&Uplo, &Trans, &N, &K, &alpha, A, &lda, &beta, C, &ldc);
 }
 
 BLAS_INT LAPACKE_dpotrf(int /* matrix_layout */, char uplo, BLAS_INT n,
                         double* a, BLAS_INT lda) {
-    BLAS_INT info;
-    dpotrf_(&uplo, &n, a, &lda, &info);
-    return info;
+  BLAS_INT info;
+  dpotrf_(&uplo, &n, a, &lda, &info);
+  return info;
 }
 
 inline void cblas_sgemm(const CBLAS_LAYOUT /* Layout */,
@@ -110,8 +110,8 @@ inline void cblas_sgemm(const CBLAS_LAYOUT /* Layout */,
                         const float* A, const BLAS_INT lda, const float* B,
                         const BLAS_INT ldb, const float beta, float* C,
                         const BLAS_INT ldc) {
-    sgemm_(&TransA, &TransB, &M, &N, &K, &alpha, A, &lda, B, &ldb, &beta, C,
-           &ldc);
+  sgemm_(&TransA, &TransB, &M, &N, &K, &alpha, A, &lda, B, &ldb, &beta, C,
+         &ldc);
 }
 
 inline void cblas_strsm(const CBLAS_LAYOUT /* Layout */, const CBLAS_SIDE Side,
@@ -119,7 +119,7 @@ inline void cblas_strsm(const CBLAS_LAYOUT /* Layout */, const CBLAS_SIDE Side,
                         const CBLAS_DIAG Diag, const BLAS_INT M,
                         const BLAS_INT N, const float alpha, const float* A,
                         const BLAS_INT lda, float* B, const BLAS_INT ldb) {
-    strsm_(&Side, &Uplo, &TransA, &Diag, &M, &N, &alpha, A, &lda, B, &ldb);
+  strsm_(&Side, &Uplo, &TransA, &Diag, &M, &N, &alpha, A, &lda, B, &ldb);
 }
 
 inline void cblas_ssyrk(const CBLAS_LAYOUT /* Layout */, const CBLAS_UPLO Uplo,
@@ -127,14 +127,14 @@ inline void cblas_ssyrk(const CBLAS_LAYOUT /* Layout */, const CBLAS_UPLO Uplo,
                         const BLAS_INT K, const float alpha, const float* A,
                         const BLAS_INT lda, const float beta, float* C,
                         const BLAS_INT ldc) {
-    ssyrk_(&Uplo, &Trans, &N, &K, &alpha, A, &lda, &beta, C, &ldc);
+  ssyrk_(&Uplo, &Trans, &N, &K, &alpha, A, &lda, &beta, C, &ldc);
 }
 
 BLAS_INT LAPACKE_spotrf(int /* matrix_layout */, char uplo, BLAS_INT n,
                         float* a, BLAS_INT lda) {
-    BLAS_INT info;
-    spotrf_(&uplo, &n, a, &lda, &info);
-    return info;
+  BLAS_INT info;
+  spotrf_(&uplo, &n, a, &lda, &info);
+  return info;
 }
 
 }  // end namespace BaSpaCho

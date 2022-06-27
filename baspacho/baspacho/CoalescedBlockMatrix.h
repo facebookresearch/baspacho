@@ -31,55 +31,55 @@ using MatRMaj =
     or to the whole set of columns as the chain data are consecutive.
 */
 struct CoalescedBlockMatrixSkel {
-    CoalescedBlockMatrixSkel(const std::vector<int64_t>& spanStart,
-                             const std::vector<int64_t>& lumpToSpan,
-                             const std::vector<int64_t>& colPtr,
-                             const std::vector<int64_t>& rowInd);
+  CoalescedBlockMatrixSkel(const std::vector<int64_t>& spanStart,
+                           const std::vector<int64_t>& lumpToSpan,
+                           const std::vector<int64_t>& colPtr,
+                           const std::vector<int64_t>& rowInd);
 
-    template <typename T>
-    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> densify(
-        const std::vector<T>& data) const;
+  template <typename T>
+  Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> densify(
+      const std::vector<T>& data) const;
 
-    template <typename T>
-    void damp(std::vector<T>& data, T alpha, T beta) const;
+  template <typename T>
+  void damp(std::vector<T>& data, T alpha, T beta) const;
 
-    int64_t numSpans() const { return spanStart.size() - 1; }
+  int64_t numSpans() const { return spanStart.size() - 1; }
 
-    int64_t numLumps() const { return spanStart.size() - 1; }
+  int64_t numLumps() const { return spanStart.size() - 1; }
 
-    int64_t order() const { return spanStart[spanStart.size() - 1]; }
+  int64_t order() const { return spanStart[spanStart.size() - 1]; }
 
-    int64_t dataSize() const { return chainData[chainData.size() - 1]; }
+  int64_t dataSize() const { return chainData[chainData.size() - 1]; }
 
-    CoalescedAccessor accessor() const {
-        CoalescedAccessor retv;
-        retv.init(spanStart.data(), spanToLump.data(), lumpStart.data(),
-                  spanOffsetInLump.data(), chainColPtr.data(),
-                  chainRowSpan.data(), chainData.data());
-        return retv;
-    }
+  CoalescedAccessor accessor() const {
+    CoalescedAccessor retv;
+    retv.init(spanStart.data(), spanToLump.data(), lumpStart.data(),
+              spanOffsetInLump.data(), chainColPtr.data(), chainRowSpan.data(),
+              chainData.data());
+    return retv;
+  }
 
-    std::vector<int64_t> spanStart;  // (with final el)
-    std::vector<int64_t> spanToLump;
-    std::vector<int64_t> lumpStart;   // (with final el)
-    std::vector<int64_t> lumpToSpan;  // (with final el)
-    std::vector<int64_t> spanOffsetInLump;
+  std::vector<int64_t> spanStart;         // (with final el)
+  std::vector<int64_t> spanToLump;        // (with final el)
+  std::vector<int64_t> lumpStart;         // (with final el)
+  std::vector<int64_t> lumpToSpan;        // (with final el)
+  std::vector<int64_t> spanOffsetInLump;  // (with final el)
 
-    // per-chain data, column-ordered
-    std::vector<int64_t> chainColPtr;       // board col data start (with end)
-    std::vector<int64_t> chainRowSpan;      // row-span id
-    std::vector<int64_t> chainData;         // numeric data offset
-    std::vector<int64_t> chainRowsTillEnd;  // num of rows till end
+  // per-chain data, column-ordered
+  std::vector<int64_t> chainColPtr;       // board col data start (with end)
+  std::vector<int64_t> chainRowSpan;      // row-span id
+  std::vector<int64_t> chainData;         // numeric data offset
+  std::vector<int64_t> chainRowsTillEnd;  // num of rows till end
 
-    // per-board data, column-ordered, colums have a final element
-    std::vector<int64_t> boardColPtr;       // board col data start (with end)
-    std::vector<int64_t> boardRowLump;      // row-lump id (end = invalid)
-    std::vector<int64_t> boardChainColOrd;  // chain ord in col (end = #chains)
+  // per-board data, column-ordered, colums have a final element
+  std::vector<int64_t> boardColPtr;       // board col data start (with end)
+  std::vector<int64_t> boardRowLump;      // row-lump id (end = invalid)
+  std::vector<int64_t> boardChainColOrd;  // chain ord in col (end = #chains)
 
-    // per-board data, row-ordered
-    std::vector<int64_t> boardRowPtr;   // board row data start (with end)
-    std::vector<int64_t> boardColLump;  // board's col lump
-    std::vector<int64_t> boardColOrd;   // board order in col
+  // per-board data, row-ordered
+  std::vector<int64_t> boardRowPtr;   // board row data start (with end)
+  std::vector<int64_t> boardColLump;  // board's col lump
+  std::vector<int64_t> boardColOrd;   // board order in col
 };
 
 }  // end namespace BaSpaCho

@@ -29,15 +29,15 @@ std::vector<int64_t> randomPartition(int64_t weight, int64_t low, int64_t high,
 
 template <typename T>
 std::string printVec(const std::vector<T>& ints) {
-    std::stringstream ss;
-    ss << "[";
-    bool first = true;
-    for (auto c : ints) {
-        ss << (first ? "" : ", ") << c;
-        first = false;
-    }
-    ss << "]";
-    return ss.str();
+  std::stringstream ss;
+  ss << "[";
+  bool first = true;
+  for (auto c : ints) {
+    ss << (first ? "" : ", ") << c;
+    first = false;
+  }
+  ss << "]";
+  return ss.str();
 }
 
 std::string printCols(const std::vector<std::set<int64_t>>& columns);
