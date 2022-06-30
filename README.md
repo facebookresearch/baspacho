@@ -9,7 +9,7 @@ the complexity in optimization libraries offering the best tool for the job.
 Compared to the library currently considered state of the art (CHOLMOD from SuiteSparse) it
 supports:
 * **pure-CUDA mode with support for batching,** ie. solving a batch of matrices with identical
-structure (NOT YET :-p). This is to support differentiable optimization in Theseus library.
+structure. This is to support differentiable optimization in Theseus library.
 * **parallel elimination of independent sparse small elimination nodes.** This is what is essentially
 the operation done via "Schur-elimination trick" in mathematical optimization libraries such as Ceres.
 This is essentially a workaround to the supernodal algorithm in CHOLMOD being a bad fit for the problem
