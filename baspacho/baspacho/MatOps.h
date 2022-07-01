@@ -88,6 +88,7 @@ struct SymbolicCtx {
 
   mutable OpStat solveSparseLStat;
   mutable OpStat solveSparseLtStat;
+  mutable OpStat pseudoFactorStat;
   mutable OpStat symmStat;
   mutable OpStat solveLStat;
   mutable OpStat solveLtStat;
@@ -108,6 +109,10 @@ struct SymElimCtx {
 template <typename T>
 struct NumericCtx : NumericCtxBase {
   virtual ~NumericCtx() {}
+
+  // does 1. diag factor 2. solve on colunm
+  virtual void pseudoFactorSpans(T* data, int64_t spanBegin,
+                                 int64_t spanEnd) = 0;
 
   // does (possibly parallel) elimination on a lump of aggregs
   virtual void doElimination(const SymElimCtx& elimData, T* data,

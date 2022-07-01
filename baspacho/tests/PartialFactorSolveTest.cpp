@@ -313,3 +313,75 @@ TEST(Partial, PartialAddMv_Blas_double) {
 TEST(Partial, PartialAddMv_Blas_float) {
   testPartialAddMv_Many<float>([] { return blasOps(); });
 }
+
+template <typename T>
+void testPseudoFactor_Many(const std::function<OpsPtr()>& genOps) {
+  for (int i = 0; i < 20; i++) {
+    int numParams = 215;
+    auto colBlocks = randomCols(numParams, 0.03, 57 + i);
+    colBlocks = makeIndependentElimSet(colBlocks, 0, 150);
+    SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
+
+    // test no-cross barrier - make sure the elim set is still present
+    int64_t nocross =
+        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+
+    vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
+    EliminationTree et(paramSize, sortedSs);
+    et.buildTree();
+    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.computeAggregateStruct();
+
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
+                                        et.colStart, et.rowParam);
+    ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
+
+    vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
+    factorSkel.damp(data, T(0.0), T(factorSkel.order() * 2.0));
+
+    Matrix<T> verifyMat = factorSkel.densify(data);
+    int64_t order = factorSkel.order();
+    for (int64_t i = 0; i < factorSkel.numSpans(); i++) {
+      int64_t start = factorSkel.spanStart[i];
+      int64_t end = factorSkel.spanStart[i + 1];
+      int64_t size = end - start;
+
+      auto diagBlock = verifyMat.block(start, start, size, size);
+      auto belowDiagBlock = verifyMat.block(end, start, order - end, size);
+
+      { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(diagBlock); }
+
+      diagBlock.template triangularView<Eigen::Lower>()
+          .transpose()
+          .template solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
+    }
+
+    ASSERT_GE(et.sparseElimRanges.size(), 2);
+    Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
+    solver.pseudoFactorFrom(data.data(), 0);
+    Matrix<T> computedMat = solver.factorSkel.densify(data);
+
+    ASSERT_NEAR(
+        Matrix<T>(
+            (verifyMat - computedMat).template triangularView<Eigen::Lower>())
+                .norm() /
+            Matrix<T>(verifyMat.template triangularView<Eigen::Lower>()).norm(),
+        0, Epsilon<T>::value2);
+  }
+}
+
+TEST(Partial, testPseudoFactor_Ref_double) {
+  testPseudoFactor_Many<double>([] { return simpleOps(); });
+}
+
+TEST(Partial, testPseudoFactor_Ref_float) {
+  testPseudoFactor_Many<float>([] { return simpleOps(); });
+}
+
+TEST(Partial, testPseudoFactor_Blas_double) {
+  testPseudoFactor_Many<double>([] { return blasOps(); });
+}
+
+TEST(Partial, testPseudoFactor_Blas_float) {
+  testPseudoFactor_Many<float>([] { return blasOps(); });
+}

@@ -60,6 +60,11 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
   BlasNumericCtx(const BlasSymbolicCtx& sym, int64_t bufSize, int64_t numSpans)
       : CpuBaseNumericCtx<T>(bufSize, numSpans), sym(sym) {}
 
+  virtual void pseudoFactorSpans(T* data, int64_t spanBegin,
+                                 int64_t spanEnd) override {
+    UNUSED(data, spanBegin, spanEnd);
+  }
+
   virtual void doElimination(const SymElimCtx& elimData, T* data,
                              int64_t lumpsBegin, int64_t lumpsEnd) override {
     const CpuBaseSymElimCtx* pElim =

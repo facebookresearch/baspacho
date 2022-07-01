@@ -421,6 +421,13 @@ void Solver::addMvFrom(const T* matData, int64_t paramIndex, const T* inVecData,
   }
 }
 
+template <typename T>
+void Solver::pseudoFactorFrom(T* data, int64_t paramIndex,
+                              bool /* verbose */) const {
+  NumericCtxPtr<T> numCtx = symCtx->createNumericCtx<T>(maxElimTempSize, data);
+  numCtx->pseudoFactorSpans(data, paramIndex, factorSkel.numSpans());
+}
+
 template void Solver::factor<double>(double* data, bool verbose) const;
 template void Solver::factor<float>(float* data, bool verbose) const;
 template void Solver::factor<vector<double*>>(vector<double*>* data,
@@ -505,6 +512,10 @@ template void Solver::addMvFrom<float>(const float* matData, int64_t paramIndex,
                                        const float* inVecData, int64_t inStride,
                                        float* outVecData, int64_t outStride,
                                        int nRHS, float alpha) const;
+template void Solver::pseudoFactorFrom<double>(double* data, int64_t,
+                                               bool verbose) const;
+template void Solver::pseudoFactorFrom<float>(float* data, int64_t,
+                                              bool verbose) const;
 
 void Solver::printStats() const {
   cout << "Matrix stats:" << endl;

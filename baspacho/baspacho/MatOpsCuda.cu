@@ -377,6 +377,11 @@ struct CudaNumericCtx : NumericCtx<T> {
     }
   }
 
+  virtual void pseudoFactorSpans(T* data, int64_t spanBegin,
+                                 int64_t spanEnd) override {
+    UNUSED(data, spanBegin, spanEnd);
+  }
+
   virtual void doElimination(const SymElimCtx& elimData, T* data,
                              int64_t lumpsBegin, int64_t lumpsEnd) override {
     const CudaSymElimCtx* pElim =
@@ -600,6 +605,11 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
     if (devSpanToChainOffset) {
       cuCHECK(cudaFree(devSpanToChainOffset));
     }
+  }
+
+  virtual void pseudoFactorSpans(vector<T*>* data, int64_t spanBegin,
+                                 int64_t spanEnd) override {
+    UNUSED(data, spanBegin, spanEnd);
   }
 
   virtual void doElimination(const SymElimCtx& elimData, vector<T*>* data,

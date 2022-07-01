@@ -55,6 +55,10 @@ struct Solver {
                  int64_t inStride, T* outVecData, int64_t outStride, int nRHS,
                  BaseType<T> alpha = 1.0) const;
 
+  template <typename T>
+  void pseudoFactorFrom(T* data, int64_t paramIndex,
+                        bool verbose = false) const;
+
   int64_t order() const { return factorSkel.order(); }
 
   int64_t dataSize() const { return factorSkel.dataSize(); }
