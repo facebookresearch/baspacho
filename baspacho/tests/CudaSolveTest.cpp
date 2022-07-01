@@ -279,12 +279,7 @@ void testPartialAddMv_Many(const std::function<OpsPtr()>& genOps) {
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
     int64_t largestIndep = et.sparseElimRanges[1];
-    auto sparseElimRangesCp = et.sparseElimRanges;
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
-    CoalescedBlockMatrixSkel factorSkel2(et.computeSpanStart(), et.lumpToSpan,
-                                         et.colStart, et.rowParam);
-    Solver solver2(move(factorSkel2), move(sparseElimRangesCp), {},
-                   simpleOps());
 
     for (int j = 0; j < 5; j++) {
       int nRHS = 3;
@@ -313,14 +308,6 @@ void testPartialAddMv_Many(const std::function<OpsPtr()>& genOps) {
         vecOut = Eigen::Map<Matrix<T>>(vecOutData.data(), order, nRHS);
       }
 
-      // ref
-      solver2.addMvFrom(data.data(), nocross, vecIn.data(), order,
-                        vecOut2.data(), order, nRHS);
-
-      cout << "dist2: " << (vecOut - vecOut2).norm() << " / " << vecOut2.norm()
-           << endl;
-      cout << "dist: " << (vecOut - vecRef).norm() << " / " << vecRef.norm()
-           << endl;
       ASSERT_NEAR((vecOut - vecRef).norm() / vecRef.norm(), 0,
                   Epsilon<T>::value2);
     }
