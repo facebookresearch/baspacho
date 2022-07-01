@@ -334,8 +334,24 @@ struct SimpleSolveCtx : SolveCtx<T> {
     }
   }
 
+  virtual void symm(const T* data, int64_t offM, int64_t n, const T* C,
+                    int64_t offC, int64_t ldc, T* D, int64_t ldd,
+                    T alpha) override {
+    OpInstance timer(sym.symmStat);
+    Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
+    OuterStridedCMajMatK<T> matC(C + offC, n, nRHS, OuterStride(ldc));
+    OuterStridedCMajMatM<T> matD(D + offC, n, nRHS, OuterStride(ldd));
+
+    matD += alpha *
+            (MatRMaj<T>(matA.template triangularView<Eigen::Lower>()) * matC);
+    matD += alpha *
+            (MatRMaj<T>(matA.template triangularView<Eigen::StrictlyLower>())
+                 .transpose() *
+             matC);
+  }
+
   virtual void solveL(const T* data, int64_t offM, int64_t n, T* C,
-                      int64_t offC, int64_t ldc /* , int64_t nRHS */) override {
+                      int64_t offC, int64_t ldc) override {
     OpInstance timer(sym.solveLStat);
     Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
     OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
@@ -343,12 +359,12 @@ struct SimpleSolveCtx : SolveCtx<T> {
   }
 
   virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
-                    const T* A, int64_t offA, int64_t lda) override {
+                    const T* A, int64_t offA, int64_t lda, T alpha) override {
     OpInstance timer(sym.solveGemvStat);
     Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
     OuterStridedCMajMatK<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
     Eigen::Map<MatRMaj<T>> matC(tmpBuf.data(), nRows, nRHS);
-    matC.noalias() = matM * matA;
+    matC.noalias() = alpha * (matM * matA);
   }
 
   virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
@@ -369,7 +385,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
       Eigen::Map<const MatRMaj<T>> matA(A + rowOffset * nRHS, spanSize, nRHS);
       OuterStridedCMajMatM<T> matC(C + spanStart, spanSize, nRHS,
                                    OuterStride(ldc));
-      matC -= matA;
+      matC += matA;
     }
   }
 
@@ -382,12 +398,12 @@ struct SimpleSolveCtx : SolveCtx<T> {
   }
 
   virtual void gemvT(const T* data, int64_t offM, int64_t nRows, int64_t nCols,
-                     T* A, int64_t offA, int64_t lda) override {
+                     T* A, int64_t offA, int64_t lda, T alpha) override {
     OpInstance timer(sym.solveGemvTStat);
     Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
     OuterStridedCMajMatM<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
     Eigen::Map<const MatRMaj<T>> matC(tmpBuf.data(), nRows, nRHS);
-    matA.noalias() -= matM.transpose() * matC;
+    matA.noalias() += alpha * (matM.transpose() * matC);
   }
 
   virtual void assembleVecT(const T* C, int64_t ldc, int64_t chainColPtr,

@@ -305,7 +305,7 @@ void Solver::internalSolveLUpTo(SolveCtx<T>& slvCtx, const T* matData,
     }
 
     slvCtx.gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize, vecData,
-                lumpStart, stride);
+                lumpStart, stride, -1.0);
 
     int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
     slvCtx.assembleVec(chainColPtr, numColChains - belowDiagChainColOrd,
@@ -352,7 +352,7 @@ void Solver::internalSolveLtUpTo(SolveCtx<T>& slvCtx, const T* matData,
                           numColChains - belowDiagChainColOrd);
 
       slvCtx.gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
-                   vecData, lumpStart, stride);
+                   vecData, lumpStart, stride, -1.0);
     }
 
     int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
@@ -369,6 +369,55 @@ void Solver::internalSolveLtUpTo(SolveCtx<T>& slvCtx, const T* matData,
       slvCtx.sparseElimSolveLt(*elimCtxs[l], matData, elimLumpRanges[l],
                                rangeEnd, vecData, stride);
     }
+  }
+}
+
+template <typename T>
+void Solver::addMvFrom(const T* matData, int64_t paramIndex, const T* inVecData,
+                       int64_t inStride, T* outVecData, int64_t outStride,
+                       int nRHS, BaseType<T> alpha) const {
+  SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
+
+  BASPACHO_CHECK_GE(paramIndex, 0);
+  BASPACHO_CHECK_LT(paramIndex, (int64_t)factorSkel.spanOffsetInLump.size());
+  BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[paramIndex], 0);
+  int64_t startFromLump = factorSkel.spanToLump[paramIndex];
+  int64_t denseOpsFromLump = startFromLump;  // sparse ops not supported yet
+
+  int64_t upToLump = factorSkel.lumpStart.size() - 1;
+  for (int64_t l = denseOpsFromLump; l < upToLump; l++) {
+    int64_t lumpStart = factorSkel.lumpStart[l];
+    int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
+    int64_t chainColBegin = factorSkel.chainColPtr[l];
+
+    int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
+    slvCtx->symm(matData, diagBlockOffset, lumpSize, inVecData, lumpStart,
+                 inStride, outVecData, outStride, alpha);
+
+    int64_t boardColBegin = factorSkel.boardColPtr[l];
+    int64_t boardColEnd = factorSkel.boardColPtr[l + 1];
+    int64_t belowDiagChainColOrd =
+        factorSkel.boardChainColOrd[boardColBegin + 1];
+    int64_t numColChains = factorSkel.boardChainColOrd[boardColEnd - 1];
+    int64_t belowDiagOffset =
+        factorSkel.chainData[chainColBegin + belowDiagChainColOrd];
+    int64_t numRowsBelowDiag =
+        factorSkel.chainRowsTillEnd[chainColBegin + numColChains - 1] -
+        factorSkel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
+    if (numRowsBelowDiag == 0) {
+      continue;
+    }
+
+    int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
+    slvCtx->gemv(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
+                 inVecData, lumpStart, inStride, alpha);
+    slvCtx->assembleVec(chainColPtr, numColChains - belowDiagChainColOrd,
+                        outVecData, outStride);
+
+    slvCtx->assembleVecT(inVecData, inStride, chainColPtr,
+                         numColChains - belowDiagChainColOrd);
+    slvCtx->gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize,
+                  outVecData, lumpStart, outStride, alpha);
   }
 }
 
@@ -446,6 +495,16 @@ template void Solver::solveLtUpTo<vector<float*>>(const vector<float*>* matData,
                                                   vector<float*>* vecData,
                                                   int64_t stride,
                                                   int nRHS) const;
+template void Solver::addMvFrom<double>(const double* matData,
+                                        int64_t paramIndex,
+                                        const double* inVecData,
+                                        int64_t inStride, double* outVecData,
+                                        int64_t outStride, int nRHS,
+                                        double alpha) const;
+template void Solver::addMvFrom<float>(const float* matData, int64_t paramIndex,
+                                       const float* inVecData, int64_t inStride,
+                                       float* outVecData, int64_t outStride,
+                                       int nRHS, float alpha) const;
 
 void Solver::printStats() const {
   cout << "Matrix stats:" << endl;

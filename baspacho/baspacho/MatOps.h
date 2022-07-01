@@ -24,6 +24,21 @@ using NumericCtxPtr = std::unique_ptr<NumericCtx<T>>;
 template <typename T>
 using SolveCtxPtr = std::unique_ptr<SolveCtx<T>>;
 
+template <typename T>
+struct Batch {
+  using BaseType = T;
+  static int getSize(const T*) { return 1; }
+};
+
+template <typename T>
+struct Batch<std::vector<T*>> {
+  using BaseType = T;
+  static int getSize(const std::vector<T*>* data) { return data->size(); }
+};
+
+template <typename T>
+using BaseType = typename Batch<T>::BaseType;
+
 // generator class for operation contexts
 struct Ops {
   virtual ~Ops() {}
@@ -75,6 +90,7 @@ struct SymbolicCtx {
 
   mutable OpStat solveSparseLStat;
   mutable OpStat solveSparseLtStat;
+  mutable OpStat symmStat;
   mutable OpStat solveLStat;
   mutable OpStat solveLtStat;
   mutable OpStat solveGemvStat;
@@ -130,11 +146,16 @@ struct SolveCtx : SolveCtxBase {
                                  int64_t lumpsBegin, int64_t lumpsEnd, T* C,
                                  int64_t ldc) = 0;
 
+  virtual void symm(const T* data, int64_t offset, int64_t n, const T* C,
+                    int64_t offC, int64_t ldc, T* D, int64_t ldd,
+                    BaseType<T> alpha) = 0;
+
   virtual void solveL(const T* data, int64_t offset, int64_t n, T* C,
                       int64_t offC, int64_t ldc) = 0;
 
   virtual void gemv(const T* data, int64_t offset, int64_t nRows, int64_t nCols,
-                    const T* A, int64_t offA, int64_t lda) = 0;
+                    const T* A, int64_t offA, int64_t lda,
+                    BaseType<T> alpha) = 0;
 
   virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, T* C,
                            int64_t ldc) = 0;
@@ -143,7 +164,8 @@ struct SolveCtx : SolveCtxBase {
                        int64_t offC, int64_t ldc) = 0;
 
   virtual void gemvT(const T* data, int64_t offset, int64_t nRows,
-                     int64_t nCols, T* A, int64_t offA, int64_t lda) = 0;
+                     int64_t nCols, T* A, int64_t offA, int64_t lda,
+                     BaseType<T> alpha) = 0;
 
   virtual void assembleVecT(const T* C, int64_t ldc, int64_t chainColPtr,
                             int64_t numColItems) = 0;
@@ -160,20 +182,10 @@ std::string prettyTypeName(const T& t) {
 }
 
 template <typename T>
-struct BatchSizeHelper {
-  static int get(const T*) { return 1; }
-};
-
-template <typename T>
-struct BatchSizeHelper<std::vector<T>> {
-  static int get(const std::vector<T>* data) { return data->size(); }
-};
-
-template <typename T>
 NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize,
                                                const T* data) {
   static const std::type_index T_tIdx(typeid(T));
-  int batchSize = BatchSizeHelper<T>::get(data);
+  int batchSize = Batch<T>::getSize(data);
   NumericCtxBase* ctx = createNumericCtxForType(T_tIdx, tempBufSize, batchSize);
   NumericCtx<T>* typedCtx = dynamic_cast<NumericCtx<T>*>(ctx);
   BASPACHO_CHECK_NOTNULL(typedCtx);
@@ -183,7 +195,7 @@ NumericCtxPtr<T> SymbolicCtx::createNumericCtx(int64_t tempBufSize,
 template <typename T>
 SolveCtxPtr<T> SymbolicCtx::createSolveCtx(int nRHS, const T* data) {
   static const std::type_index T_tIdx(typeid(T));
-  int batchSize = BatchSizeHelper<T>::get(data);
+  int batchSize = Batch<T>::getSize(data);
   SolveCtxBase* ctx = createSolveCtxForType(T_tIdx, nRHS, batchSize);
   SolveCtx<T>* typedCtx = dynamic_cast<SolveCtx<T>*>(ctx);
   BASPACHO_CHECK_NOTNULL(typedCtx);

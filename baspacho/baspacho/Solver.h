@@ -41,10 +41,6 @@ struct Solver {
   void solveLt(const T* matData, T* vecData, int64_t stride, int nRHS) const;
 
   template <typename T>
-  void applySymmetricFrom(const T* data, const T* inVec, T* outVec,
-                          int64_t paramIndex) const;
-
-  template <typename T>
   void factorUpTo(T* data, int64_t paramIndex, bool verbose = false) const;
 
   template <typename T>
@@ -54,6 +50,11 @@ struct Solver {
   template <typename T>
   void solveLtUpTo(const T* data, int64_t paramIndex, T* vecData,
                    int64_t stride, int nRHS) const;
+
+  template <typename T>
+  void addMvFrom(const T* matData, int64_t paramIndex, const T* inVecData,
+                 int64_t inStride, T* outVecData, int64_t outStride, int nRHS,
+                 BaseType<T> alpha = 1.0) const;
 
   int64_t order() const { return factorSkel.order(); }
 
