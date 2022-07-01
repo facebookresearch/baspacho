@@ -305,3 +305,11 @@ TEST(Partial, PartialAddMv_Ref_double) {
 TEST(Partial, PartialAddMv_Ref_float) {
   testPartialAddMv_Many<float>([] { return simpleOps(); });
 }
+
+TEST(Partial, PartialAddMv_Blas_double) {
+  testPartialAddMv_Many<double>([] { return blasOps(); });
+}
+
+TEST(Partial, PartialAddMv_Blas_float) {
+  testPartialAddMv_Many<float>([] { return blasOps(); });
+}

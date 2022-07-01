@@ -342,12 +342,8 @@ struct SimpleSolveCtx : SolveCtx<T> {
     OuterStridedCMajMatK<T> matC(C + offC, n, nRHS, OuterStride(ldc));
     OuterStridedCMajMatM<T> matD(D + offC, n, nRHS, OuterStride(ldd));
 
-    // std::cout << "2.BR:\n" << matA.topLeftCorner(30, 30) << std::endl;
-    // std::cout << "2.out0-TR: " << matC.topRows(30).transpose() << std::endl;
-    // std::cout << "2.in-TR: " << matD.topRows(30).transpose() << std::endl;
     matD += alpha *
             (MatRMaj<T>(matA.template triangularView<Eigen::Lower>()) * matC);
-    // std::cout << "2.out1-TR: " << matC.topRows(30).transpose() << std::endl;
     matD += alpha *
             (MatRMaj<T>(matA.template triangularView<Eigen::StrictlyLower>())
                  .transpose() *

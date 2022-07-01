@@ -638,19 +638,21 @@ struct BlasSolveCtx : SolveCtx<T> {
 };
 
 template <>
-void BlasSolveCtx<double>::symm(const double* data, int64_t offset, int64_t n,
+void BlasSolveCtx<double>::symm(const double* data, int64_t offM, int64_t n,
                                 const double* C, int64_t offC, int64_t ldc,
                                 double* D, int64_t ldd, double alpha) {
   OpInstance timer(sym.symmStat);
-  UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
+  cblas_dsymm(CblasColMajor, CblasLeft, CblasUpper, n, nRHS, alpha, data + offM,
+              n, C + offC, ldc, 1.0, D + offC, ldd);
 }
 
 template <>
-void BlasSolveCtx<float>::symm(const float* data, int64_t offset, int64_t n,
+void BlasSolveCtx<float>::symm(const float* data, int64_t offM, int64_t n,
                                const float* C, int64_t offC, int64_t ldc,
                                float* D, int64_t ldd, float alpha) {
   OpInstance timer(sym.symmStat);
-  UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
+  cblas_ssymm(CblasColMajor, CblasLeft, CblasUpper, n, nRHS, alpha, data + offM,
+              n, C + offC, ldc, 1.0, D + offC, ldd);
 }
 
 template <>
