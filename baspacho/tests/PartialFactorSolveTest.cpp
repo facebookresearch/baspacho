@@ -274,7 +274,7 @@ void testPartialAddMv_Many(const std::function<OpsPtr()>& genOps) {
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
 
     for (int j = 0; j < 5; j++) {
-      int nRHS = 1;
+      int nRHS = 3;
       vector<T> vecInData = randomData<T>(order * nRHS, -1.0, 1.0, 49 + j + i);
       vector<T> vecOutData = randomData<T>(order * nRHS, -1.0, 1.0, 49 + j + i);
       Matrix<T> vecIn = Eigen::Map<Matrix<T>>(vecInData.data(), order, nRHS);

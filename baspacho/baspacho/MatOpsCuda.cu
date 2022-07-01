@@ -335,7 +335,7 @@ __global__ void assemble_kernel(int64_t numBlockRows, int64_t numBlockCols,
   T* data = batch.get(dataB);
 
   int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i > numBlockRows * numBlockCols) {
+  if (i >= numBlockRows * numBlockCols) {
     return;
   }
   int64_t r = i % numBlockRows;
@@ -860,7 +860,7 @@ __global__ void assembleVec_kernel(const int64_t* chainRowsTillEnd,
   const T* A = batch.get(AB);
 
   int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i > numColItems) {
+  if (i >= numColItems) {
     return;
   }
   int64_t rowOffset = chainRowsTillEnd[i - 1] - chainRowsTillEnd[-1];
@@ -886,7 +886,7 @@ __global__ void assembleVecT_kernel(const int64_t* chainRowsTillEnd,
   T* A = batch.get(AB);
 
   int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i > numColItems) {
+  if (i >= numColItems) {
     return;
   }
   int64_t rowOffset = chainRowsTillEnd[i - 1] - chainRowsTillEnd[-1];
@@ -1136,19 +1136,25 @@ struct CudaSolveCtx : SolveCtx<T> {
 };
 
 template <>
-void CudaSolveCtx<double>::symm(const double* data, int64_t offset, int64_t n,
+void CudaSolveCtx<double>::symm(const double* data, int64_t offM, int64_t n,
                                 const double* C, int64_t offC, int64_t ldc,
                                 double* D, int64_t ldd, double alpha) {
   OpInstance timer(sym.symmStat);
-  UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
+  double beta(1.0);
+  cublasCHECK(cublasDsymm(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER,
+                          n, nRHS, &alpha, data + offM, n, C + offC, ldc, &beta,
+                          D + offC, ldd));
 }
 
 template <>
-void CudaSolveCtx<float>::symm(const float* data, int64_t offset, int64_t n,
+void CudaSolveCtx<float>::symm(const float* data, int64_t offM, int64_t n,
                                const float* C, int64_t offC, int64_t ldc,
                                float* D, int64_t ldd, float alpha) {
   OpInstance timer(sym.symmStat);
-  UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
+  float beta(1.0);
+  cublasCHECK(cublasSsymm(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER,
+                          n, nRHS, &alpha, data + offM, n, C + offC, ldc, &beta,
+                          D + offC, ldd));
 }
 
 template <>
@@ -1396,6 +1402,7 @@ void CudaSolveCtx<vector<double*>>::symm(const vector<double*>* data,
                                          int64_t ldd, double alpha) {
   OpInstance timer(sym.symmStat);
   UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
+  throw std::runtime_error("symm not implemented for batched ops");
 }
 
 template <>
@@ -1406,6 +1413,7 @@ void CudaSolveCtx<vector<float*>>::symm(const vector<float*>* data,
                                         int64_t ldd, float alpha) {
   OpInstance timer(sym.symmStat);
   UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
+  throw std::runtime_error("symm not implemented for batched ops");
 }
 
 template <>

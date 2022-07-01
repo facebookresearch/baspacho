@@ -239,3 +239,98 @@ TEST(CudaSolve, SolveL_SparseElimAndFactor_Many_double) {
 TEST(CudaSolve, SolveL_SparseElimAndFactor_Many_float) {
   testSolveL_SparseElimAndFactor_Many<float>([] { return cudaOps(); }, 5);
 }
+
+// this value must match the value in EliminationTree.cpp - so that the no-cross
+// barriers are placed without preventing the sparse elimination from happening
+static constexpr int64_t minNumSparseElimNodes = 50;
+
+template <typename T>
+void testPartialAddMv_Many(const std::function<OpsPtr()>& genOps) {
+  for (int i = 0; i < 20; i++) {
+    int numParams = 215;
+    auto colBlocks = randomCols(numParams, 0.03, 57 + i);
+    colBlocks = makeIndependentElimSet(colBlocks, 0, 150);
+    SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
+
+    // test no-cross barrier - make sure the elim set is still present
+    int64_t nocross =
+        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+
+    vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
+    EliminationTree et(paramSize, sortedSs);
+    et.buildTree();
+    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.computeAggregateStruct();
+
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
+                                        et.colStart, et.rowParam);
+    ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
+
+    // test from 0
+    nocross = 0;
+
+    vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
+    factorSkel.damp(data, T(0.0), T(factorSkel.order() * 2.0));
+
+    Matrix<T> mat = factorSkel.densify(data);
+    int order = factorSkel.order();
+    int barrierAt = factorSkel.spanStart[nocross];
+    int afterBar = order - barrierAt;
+
+    ASSERT_GE(et.sparseElimRanges.size(), 2);
+    int64_t largestIndep = et.sparseElimRanges[1];
+    auto sparseElimRangesCp = et.sparseElimRanges;
+    Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
+    CoalescedBlockMatrixSkel factorSkel2(et.computeSpanStart(), et.lumpToSpan,
+                                         et.colStart, et.rowParam);
+    Solver solver2(move(factorSkel2), move(sparseElimRangesCp), {},
+                   simpleOps());
+
+    for (int j = 0; j < 5; j++) {
+      int nRHS = 3;
+      vector<T> vecInData = randomData<T>(order * nRHS, -1.0, 1.0, 49 + j + i);
+      vector<T> vecOutData = randomData<T>(order * nRHS, -1.0, 1.0, 49 + j + i);
+      Matrix<T> vecIn = Eigen::Map<Matrix<T>>(vecInData.data(), order, nRHS);
+      Matrix<T> vecOut = Eigen::Map<Matrix<T>>(vecOutData.data(), order, nRHS);
+      Matrix<T> vecOut2 = vecOut;
+      Matrix<T> vecRef = vecOut;
+      vecRef.bottomRows(afterBar) +=
+          mat.bottomRightCorner(afterBar, afterBar)
+              .template triangularView<Eigen::Lower>() *
+          vecIn.bottomRows(afterBar);
+      vecRef.bottomRows(afterBar) +=
+          mat.bottomRightCorner(afterBar, afterBar)
+              .template triangularView<Eigen::StrictlyLower>()
+              .transpose() *
+          vecIn.bottomRows(afterBar);
+
+      // call solve on gpu data
+      {
+        DevMirror<T> dataGpu(data), vecInGpu(vecInData), vecOutGpu(vecOutData);
+        solver.addMvFrom(dataGpu.ptr, nocross, vecInGpu.ptr, order,
+                         vecOutGpu.ptr, order, nRHS);
+        vecOutGpu.get(vecOutData);
+        vecOut = Eigen::Map<Matrix<T>>(vecOutData.data(), order, nRHS);
+      }
+
+      // ref
+      solver2.addMvFrom(data.data(), nocross, vecIn.data(), order,
+                        vecOut2.data(), order, nRHS);
+
+      cout << "dist2: " << (vecOut - vecOut2).norm() << " / " << vecOut2.norm()
+           << endl;
+      cout << "dist: " << (vecOut - vecRef).norm() << " / " << vecRef.norm()
+           << endl;
+      ASSERT_NEAR((vecOut - vecRef).norm() / vecRef.norm(), 0,
+                  Epsilon<T>::value2);
+    }
+  }
+}
+
+TEST(CudaMv, PartialAddMv_double) {
+  testPartialAddMv_Many<double>([] { return cudaOps(); });
+}
+
+TEST(CudaMv, PartialAddMv_float) {
+  testPartialAddMv_Many<float>([] { return cudaOps(); });
+}
