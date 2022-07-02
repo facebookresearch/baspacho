@@ -50,6 +50,7 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
     cusolverCHECK(cusolverDnCreate(&cusolverDnH));
     // cusolverCHECK(cusolverDnSetStream(cusolverDnH, stream));
 
+    devLumpToSpan.load(skel.lumpToSpan);
     devChainRowsTillEnd.load(skel.chainRowsTillEnd);
     devChainRowSpan.load(skel.chainRowSpan);
     devSpanOffsetInLump.load(skel.spanOffsetInLump);
@@ -112,6 +113,7 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
   cublasHandle_t cublasH = nullptr;
   cusolverDnHandle_t cusolverDnH = nullptr;
 
+  DevMirror<int64_t> devLumpToSpan;
   DevMirror<int64_t> devChainRowsTillEnd;
   DevMirror<int64_t> devChainRowSpan;
   DevMirror<int64_t> devSpanOffsetInLump;
@@ -158,7 +160,7 @@ __global__ static inline void factor_lumps_kernel(
 
   // in-place lower diag cholesky dec on diagonal block
   T* diagBlockPtr = data + dataPtr;
-  cholesky(diagBlockPtr, lumpSize);
+  cholesky(diagBlockPtr, lumpSize, lumpSize);
 
   int64_t gatheredStart = boardColPtr[lump];
   int64_t gatheredEnd = boardColPtr[lump + 1];
@@ -170,7 +172,54 @@ __global__ static inline void factor_lumps_kernel(
 
   T* belowDiagBlockPtr = data + belowDiagStart;
   for (int i = 0; i < numRows; i++) {
-    solveUpperT(diagBlockPtr, lumpSize, belowDiagBlockPtr);
+    solveUpperT(diagBlockPtr, lumpSize, lumpSize, belowDiagBlockPtr);
+    belowDiagBlockPtr += lumpSize;
+  }
+}
+
+template <typename TT, typename B>
+__global__ static inline void factor_spans_kernel(
+    const int64_t* spanToLump, const int64_t* spanOffsetInLumpV,
+    const int64_t* lumpToSpan, const int64_t* spanStart,
+
+    const int64_t* lumpStartV, const int64_t* chainColPtr,
+    const int64_t* chainData, const int64_t* boardColPtr,
+    const int64_t* boardChainColOrd, const int64_t* chainRowsTillEnd, TT* dataB,
+    int64_t spanIndexStart, int64_t spanIndexEnd, B batch) {
+  if (!batch.verify()) {
+    return;
+  }
+  using T = remove_cv_t<remove_reference_t<decltype(batch.get(dataB)[0])>>;
+  T* data = batch.get(dataB);
+
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  int64_t span = spanIndexStart + i;
+  if (span >= spanIndexEnd) {
+    return;
+  }
+  int64_t lump = spanToLump[span];
+  int64_t spanOffsetInLump = spanOffsetInLumpV[span];
+  int64_t spanIndexInLump = span - lumpToSpan[lump];
+  int64_t spanSize = spanStart[span + 1] - spanStart[span];
+  int64_t lumpStart = lumpStartV[lump];
+  int64_t lumpSize = lumpStartV[lump + 1] - lumpStart;
+  int64_t colStart = chainColPtr[lump];
+  int64_t dataPtr = chainData[colStart + spanIndexInLump] + spanOffsetInLump;
+
+  // in-place lower diag cholesky dec on diagonal block
+  T* diagBlockPtr = data + dataPtr;
+  cholesky(diagBlockPtr, lumpSize, spanSize);
+
+  int64_t gatheredEnd = boardColPtr[lump + 1];
+  int64_t rowDataEnd = boardChainColOrd[gatheredEnd - 1];
+  int64_t belowDiagPtr =
+      chainData[colStart + spanIndexInLump + 1] + spanOffsetInLump;
+  int64_t numRows = chainRowsTillEnd[colStart + rowDataEnd - 1] -
+                    chainRowsTillEnd[colStart + spanIndexInLump];
+
+  T* belowDiagBlockPtr = data + belowDiagPtr;
+  for (int i = 0; i < numRows; i++) {
+    solveUpperT(diagBlockPtr, lumpSize, spanSize, belowDiagBlockPtr);
     belowDiagBlockPtr += lumpSize;
   }
 }
@@ -379,7 +428,17 @@ struct CudaNumericCtx : NumericCtx<T> {
 
   virtual void pseudoFactorSpans(T* data, int64_t spanBegin,
                                  int64_t spanEnd) override {
-    UNUSED(data, spanBegin, spanEnd);
+    OpInstance timer(sym.pseudoFactorStat);
+
+    int wgs = 32;
+    int numGroups = (spanEnd - spanBegin + wgs - 1) / wgs;
+    factor_spans_kernel<T><<<numGroups, wgs>>>(
+        sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr,
+        sym.devLumpToSpan.ptr, sym.devSpanStart.ptr,
+
+        sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+        sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
+        sym.devChainRowsTillEnd.ptr, data, spanBegin, spanEnd, Plain{});
   }
 
   virtual void doElimination(const SymElimCtx& elimData, T* data,
@@ -398,9 +457,7 @@ struct CudaNumericCtx : NumericCtx<T> {
         sym.devBoardColPtr.ptr, sym.devBoardChainColOrd.ptr,
         sym.devChainRowsTillEnd.ptr, data, lumpsBegin, lumpsEnd, Plain{});
 
-    /*cuCHECK(cudaDeviceSynchronize());
-    cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
-         << "s" << endl;*/
+    /*cuCHECK(cudaDeviceSynchronize());*/
 
 #if 0
         // double inner loop
@@ -419,7 +476,7 @@ struct CudaNumericCtx : NumericCtx<T> {
         elim.makeBlockPairEnumStraight.ptr, elim.numBlockPairs, Plain{});
 #endif
 
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void potrf(int64_t n, T* data, int64_t offA) override;
@@ -462,7 +519,7 @@ struct CudaNumericCtx : NumericCtx<T> {
         pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
         devTempBuffer, data, Plain{});
 
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   T* devTempBuffer;
@@ -610,6 +667,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
   virtual void pseudoFactorSpans(vector<T*>* data, int64_t spanBegin,
                                  int64_t spanEnd) override {
     UNUSED(data, spanBegin, spanEnd);
+    throw std::runtime_error("pseudo factor not implemented for batched ops");
   }
 
   virtual void doElimination(const SymElimCtx& elimData, vector<T*>* data,
@@ -663,7 +721,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 #endif
 
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void potrf(int64_t n, vector<T*>* data, int64_t offA) override;
@@ -716,7 +774,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         devTempBufsDev.ptr, dataDev.ptr,
         Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   vector<T*> devTempBufs;
@@ -935,7 +993,8 @@ __global__ void sparseElim_diagSolveL(const int64_t* lumpStarts,
   int64_t diagDataPtr = chainData[colStart];
 
   for (int i = 0; i < nRHS; i++) {
-    solveUpperT(data + diagDataPtr, lumpSize, v + lumpStart + ldc * i);
+    solveUpperT(data + diagDataPtr, lumpSize, lumpSize,
+                v + lumpStart + ldc * i);
   }
 }
 
@@ -1004,7 +1063,7 @@ __global__ void sparseElim_diagSolveLt(const int64_t* lumpStarts,
   int64_t diagDataPtr = chainData[colStart];
 
   for (int i = 0; i < nRHS; i++) {
-    solveUpper(data + diagDataPtr, lumpSize, v + lumpStart + ldc * i);
+    solveUpper(data + diagDataPtr, lumpSize, lumpSize, v + lumpStart + ldc * i);
   }
 }
 
@@ -1069,14 +1128,14 @@ struct CudaSolveCtx : SolveCtx<T> {
     sparseElim_diagSolveL<T><<<numGroups, wgs>>>(
         sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
         data, C, ldc, nRHS, lumpsBegin, lumpsEnd, Plain{});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
 
     // TODO: consider "straightening" inner loop
     sparseElim_subDiagMult<T><<<numGroups, wgs>>>(
         sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
         sym.devChainRowSpan.ptr, sym.devChainData.ptr, data, C, ldc, nRHS,
         lumpsBegin, lumpsEnd, Plain{});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void sparseElimSolveLt(const SymElimCtx& /*elimData*/, const T* data,
@@ -1092,12 +1151,12 @@ struct CudaSolveCtx : SolveCtx<T> {
         sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
         sym.devChainRowSpan.ptr, sym.devChainData.ptr, data, C, ldc, nRHS,
         lumpsBegin, lumpsEnd, Plain{});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
 
     sparseElim_diagSolveLt<T><<<numGroups, wgs>>>(
         sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
         data, C, ldc, nRHS, lumpsBegin, lumpsEnd, Plain{});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void symm(const T* data, int64_t offset, int64_t n, const T* C,
@@ -1119,7 +1178,7 @@ struct CudaSolveCtx : SolveCtx<T> {
         sym.devChainRowsTillEnd.ptr + chainColPtr,
         sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr,
         devSolveBuf, numColItems, C, ldc, nRHS, Plain{});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
@@ -1137,7 +1196,7 @@ struct CudaSolveCtx : SolveCtx<T> {
         sym.devChainRowsTillEnd.ptr + chainColPtr,
         sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr, C, ldc,
         nRHS, devSolveBuf, numColItems, Plain{});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   const CudaSymbolicCtx& sym;
@@ -1293,7 +1352,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
         datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
 
     // TODO: consider "straightening" inner loop
     sparseElim_subDiagMult<T*><<<gridDim, blockDim>>>(
@@ -1301,7 +1360,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devChainRowSpan.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr, ldc,
         nRHS, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void sparseElimSolveLt(const SymElimCtx& /*elimData*/,
@@ -1329,13 +1388,13 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devChainRowSpan.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr, ldc,
         nRHS, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
 
     sparseElim_diagSolveLt<T*><<<gridDim, blockDim>>>(
         sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
         datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void symm(const vector<T*>* data, int64_t offset, int64_t n,
@@ -1367,7 +1426,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr,
         devSolveBufsDev.ptr, numColItems, Cs.ptr, ldc, nRHS,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void solveLt(const vector<T*>* data, int64_t offM, int64_t n,
@@ -1395,7 +1454,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr, Cs.ptr,
         ldc, nRHS, devSolveBufsDev.ptr, numColItems,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    cuCHECK(cudaDeviceSynchronize());
+    // cuCHECK(cudaDeviceSynchronize());
   }
 
   const CudaSymbolicCtx& sym;
