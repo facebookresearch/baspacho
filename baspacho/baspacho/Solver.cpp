@@ -178,18 +178,16 @@ void Solver::factorUpTo(T* data, int64_t paramIndex, bool verbose) const {
   NumericCtxPtr<T> numCtx = symCtx->createNumericCtx<T>(maxElimTempSize, data);
 
   for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
-    int64_t rangeEnd = std::min(elimLumpRanges[l + 1], upToLump);
+    if (elimLumpRanges[l + 1] > upToLump) {
+      BASPACHO_CHECK_EQ(elimLumpRanges[l], upToLump);
+      return;
+    }
     if (verbose) {
       std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
-                << rangeEnd << ")" << std::endl;
+                << elimLumpRanges[l + 1] << ")" << std::endl;
     }
-    numCtx->doElimination(*elimCtxs[l], data, elimLumpRanges[l], rangeEnd);
-    if (elimLumpRanges[l + 1] >= upToLump) {
-      if (verbose) {
-        std::cout << "Exit, upToLump = " << upToLump << std::endl;
-      }
-      return;  // done
-    }
+    numCtx->doElimination(*elimCtxs[l], data, elimLumpRanges[l],
+                          elimLumpRanges[l + 1]);
   }
 
   int64_t denseOpsFromLump = elimLumpRanges.size() ? elimLumpRanges.back() : 0;
@@ -267,12 +265,12 @@ void Solver::internalSolveLUpTo(SolveCtx<T>& slvCtx, const T* matData,
   int64_t denseOpsFromLump;
   if (SparseElimSolve) {
     for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
-      int64_t rangeEnd = std::min(elimLumpRanges[l + 1], upToLump);
-      slvCtx.sparseElimSolveL(*elimCtxs[l], matData, elimLumpRanges[l],
-                              rangeEnd, vecData, stride);
-      if (elimLumpRanges[l + 1] >= upToLump) {
-        return;  // done
+      if (elimLumpRanges[l + 1] > upToLump) {
+        BASPACHO_CHECK_EQ(elimLumpRanges[l], upToLump);
+        return;
       }
+      slvCtx.sparseElimSolveL(*elimCtxs[l], matData, elimLumpRanges[l],
+                              elimLumpRanges[l + 1], vecData, stride);
     }
 
     denseOpsFromLump =
@@ -362,12 +360,12 @@ void Solver::internalSolveLtUpTo(SolveCtx<T>& slvCtx, const T* matData,
 
   if (SparseElimSolve) {
     for (int64_t l = (int64_t)elimLumpRanges.size() - 2; l >= 0; l--) {
-      int64_t rangeEnd = std::min(elimLumpRanges[l + 1], upToLump);
-      if (rangeEnd <= elimLumpRanges[l]) {
+      if (elimLumpRanges[l + 1] > upToLump) {
+        BASPACHO_CHECK_LE(elimLumpRanges[l], upToLump);
         continue;
       }
       slvCtx.sparseElimSolveLt(*elimCtxs[l], matData, elimLumpRanges[l],
-                               rangeEnd, vecData, stride);
+                               elimLumpRanges[l + 1], vecData, stride);
     }
   }
 }
