@@ -475,8 +475,6 @@ struct CudaNumericCtx : NumericCtx<T> {
         sym.devSpanOffsetInLump.ptr, data, lumpsBegin, lumpsEnd,
         elim.makeBlockPairEnumStraight.ptr, elim.numBlockPairs, Plain{});
 #endif
-
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void potrf(int64_t n, T* data, int64_t offA) override;
@@ -518,8 +516,6 @@ struct CudaNumericCtx : NumericCtx<T> {
         numBlockRows, numBlockCols, rectRowBegin, srcRectWidth, dstStride,
         pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
         devTempBuffer, data, Plain{});
-
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   T* devTempBuffer;
@@ -696,9 +692,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         sym.devChainRowsTillEnd.ptr, dataDev.ptr, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 
-    /*cuCHECK(cudaDeviceSynchronize());
-    cout << "elim 1st part: " << tdelta(hrc::now() - timer.start).count()
-         << "s" << endl;*/
+    // cuCHECK(cudaDeviceSynchronize());
 
 #if 0
         // double inner loop
@@ -720,8 +714,6 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         elim.makeBlockPairEnumStraight.ptr, elim.numBlockPairs,
         Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 #endif
-
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void potrf(int64_t n, vector<T*>* data, int64_t offA) override;
@@ -773,8 +765,6 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         pChainRowsTillEnd, pToSpan, pSpanToChainOffset, pSpanOffsetInLump,
         devTempBufsDev.ptr, dataDev.ptr,
         Batched{.batchSize = (int)data->size(), .batchIndex = 0});
-
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   vector<T*> devTempBufs;
@@ -1135,7 +1125,6 @@ struct CudaSolveCtx : SolveCtx<T> {
         sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr,
         sym.devChainRowSpan.ptr, sym.devChainData.ptr, data, C, ldc, nRHS,
         lumpsBegin, lumpsEnd, Plain{});
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void sparseElimSolveLt(const SymElimCtx& /*elimData*/, const T* data,
@@ -1156,7 +1145,6 @@ struct CudaSolveCtx : SolveCtx<T> {
     sparseElim_diagSolveLt<T><<<numGroups, wgs>>>(
         sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
         data, C, ldc, nRHS, lumpsBegin, lumpsEnd, Plain{});
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void symm(const T* data, int64_t offset, int64_t n, const T* C,
@@ -1178,7 +1166,6 @@ struct CudaSolveCtx : SolveCtx<T> {
         sym.devChainRowsTillEnd.ptr + chainColPtr,
         sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr,
         devSolveBuf, numColItems, C, ldc, nRHS, Plain{});
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C,
@@ -1196,7 +1183,6 @@ struct CudaSolveCtx : SolveCtx<T> {
         sym.devChainRowsTillEnd.ptr + chainColPtr,
         sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr, C, ldc,
         nRHS, devSolveBuf, numColItems, Plain{});
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   const CudaSymbolicCtx& sym;
@@ -1360,7 +1346,6 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devChainRowSpan.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr, ldc,
         nRHS, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void sparseElimSolveLt(const SymElimCtx& /*elimData*/,
@@ -1394,7 +1379,6 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
         datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void symm(const vector<T*>* data, int64_t offset, int64_t n,
@@ -1426,7 +1410,6 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr,
         devSolveBufsDev.ptr, numColItems, Cs.ptr, ldc, nRHS,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   virtual void solveLt(const vector<T*>* data, int64_t offM, int64_t n,
@@ -1454,7 +1437,6 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
         sym.devChainRowSpan.ptr + chainColPtr, sym.devSpanStart.ptr, Cs.ptr,
         ldc, nRHS, devSolveBufsDev.ptr, numColItems,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
-    // cuCHECK(cudaDeviceSynchronize());
   }
 
   const CudaSymbolicCtx& sym;
