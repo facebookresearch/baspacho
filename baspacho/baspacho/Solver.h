@@ -63,6 +63,14 @@ struct Solver {
 
   int64_t dataSize() const { return factorSkel.dataSize(); }
 
+  int64_t paramVecDataStart(int64_t paramIndex) const {
+    return factorSkel.paramVecDataStart(paramIndex);
+  }
+
+  int64_t paramMatDataStart(int64_t paramIndex) const {
+    return factorSkel.paramMatDataStart(paramIndex);
+  }
+
  private:
   void initElimination();
 

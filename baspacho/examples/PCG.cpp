@@ -1,11 +1,12 @@
 
+#include "baspacho/examples/PCG.h"
+
 #include <iostream>
-#include "PCG.h"
 
 using namespace std;
 
-std::pair<int, double>
-PCG::solve(Eigen::VectorXd& x, const Eigen::VectorXd& b, int overrideMaxSteps) {
+std::pair<int, double> PCG::solve(Eigen::VectorXd& x, const Eigen::VectorXd& b,
+                                  int overrideMaxSteps) {
   int mxs = overrideMaxSteps >= 0 ? overrideMaxSteps : maxSteps;
 
   /*
@@ -26,8 +27,8 @@ PCG::solve(Eigen::VectorXd& x, const Eigen::VectorXd& b, int overrideMaxSteps) {
   double residual = 0.0;
 
   if (trace) {
-	  std::cout << "|Rk[0]|_2 = " << rk0norm
-	            << ", size=" << b.size() << std::endl;
+    std::cout << "|Rk[0]|_2 = " << rk0norm << ", size=" << b.size()
+              << std::endl;
   }
 
   /*
@@ -57,19 +58,18 @@ PCG::solve(Eigen::VectorXd& x, const Eigen::VectorXd& b, int overrideMaxSteps) {
     double rk1norm = rk1.norm();
     residual = rk1norm / rk0norm;
     if (trace) {
-	    std::cout << "|Rk[" << k + 1 << "]|_2 = " << rk1norm
-	              << " (res = " << residual << ")" << std::endl;
+      std::cout << "|Rk[" << k + 1 << "]|_2 = " << rk1norm
+                << " (res = " << residual << ")" << std::endl;
     }
     if (residual < wantedResidual) {
       break;
     }
-     if (k + 1 >= mxs) {
+    if (k + 1 >= mxs) {
       if (trace) {
-	      std::cout << "max conjugate gradient steps, giving up..."
-	                << std::endl;
+        std::cout << "max conjugate gradient steps, giving up..." << std::endl;
       }
       x = xk1;
-      return std::make_pair(k + 1, residual); // failed
+      return std::make_pair(k + 1, residual);  // failed
     }
 
     // z_k1 = M^{-1}*r_k1
@@ -97,7 +97,7 @@ PCG::solve(Eigen::VectorXd& x, const Eigen::VectorXd& b, int overrideMaxSteps) {
 }
 
 size_t PCG::memUsage() {
-	return (xk.size() + rk.size() + zk.size() + pk.size() +
-		xk1.size() + rk1.size() + zk1.size() + pk1.size() +
-	        Apk.size()) * sizeof(double);
+  return (xk.size() + rk.size() + zk.size() + pk.size() + xk1.size() +
+          rk1.size() + zk1.size() + pk1.size() + Apk.size()) *
+         sizeof(double);
 }
