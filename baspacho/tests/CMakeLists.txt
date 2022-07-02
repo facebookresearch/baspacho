@@ -1,6 +1,7 @@
 
 add_baspacho_test(AccessorTest AccessorTest.cpp)
 add_baspacho_test(CoalescedBlockMatrixTest CoalescedBlockMatrixTest.cpp)
+add_baspacho_test(CreateSolverTest CreateSolverTest.cpp)
 add_baspacho_test(SparseStructureTest SparseStructureTest.cpp)
 add_baspacho_test(EliminationTreeTest EliminationTreeTest.cpp)
 add_baspacho_test(FactorTest FactorTest.cpp)

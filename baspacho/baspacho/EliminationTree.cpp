@@ -61,7 +61,8 @@ static constexpr int64_t minNumSparseElimNodes = 50;
 static constexpr double flopsColOverhead = 2e7;
 
 void EliminationTree::computeMerges(bool computeSparseElimRanges,
-                                    const vector<int64_t>& noCrossPoints) {
+                                    const vector<int64_t>& noCrossPoints,
+                                    bool findOnlyElims) {
   int64_t ord = ss.order();
 
   // Compute node heights:
@@ -138,17 +139,20 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges,
   }
 
   priority_queue<tuple<double, int64_t, int64_t>> mergeCandidates;
-  for (int64_t k = ord - 1; k >= 0; k--) {
-    if (forbidMerge[k]) {
-      continue;
-    }
-    int64_t p = parent[k];
-    if (p == -1) {
-      continue;
-    }
+  if (!findOnlyElims) {
+    for (int64_t k = ord - 1; k >= 0; k--) {
+      if (forbidMerge[k]) {
+        continue;
+      }
+      int64_t p = parent[k];
+      if (p == -1) {
+        continue;
+      }
 
-    double fillAfterMerge = ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]);
-    mergeCandidates.emplace(fillAfterMerge, k, p);
+      double fillAfterMerge =
+          ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]);
+      mergeCandidates.emplace(fillAfterMerge, k, p);
+    }
   }
 
   mergeWith.assign(ord, -1);
@@ -243,15 +247,23 @@ void EliminationTree::computeMerges(bool computeSparseElimRanges,
   rewindVec(lumpToSpan);  // restore after advancing
 }
 
-void EliminationTree::computeAggregateStruct() {
+void EliminationTree::computeAggregateStruct(bool fillOnlyForElims) {
   int64_t ord = ss.order();
   int64_t numLumps = ord - numMerges;
 
   SparseStructure tperm =  // lower-half csc
       ss.symmetricPermutation(permInverse, /* lowerHalf = */ false,
-                              /* sortIndices = */ false)
-          .addFullEliminationFill()
-          .transpose();
+                              /* sortIndices = */ false);
+
+  if (fillOnlyForElims) {
+    for (int64_t e = 0; e < (int64_t)sparseElimRanges.size() - 1; e++) {
+      tperm = tperm.addIndependentEliminationFill(sparseElimRanges[e],
+                                                  sparseElimRanges[e + 1]);
+    }
+  } else {
+    tperm = tperm.addFullEliminationFill();
+  }
+  tperm = tperm.transpose();
 
   vector<int64_t> tags(ord, -1);  // check if row el was added already
   colStart.push_back(0);

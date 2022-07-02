@@ -11,7 +11,14 @@ namespace BaSpaCho {
 struct Solver {
   Solver(CoalescedBlockMatrixSkel&& factorSkel,
          std::vector<int64_t>&& elimLumpRanges,
-         std::vector<int64_t>&& permutation, OpsPtr&& ops);
+         std::vector<int64_t>&& permutation, int64_t canFactorUpTo,
+         OpsPtr&& ops);
+
+  Solver(CoalescedBlockMatrixSkel&& factorSkel,
+         std::vector<int64_t>&& elimLumpRanges,
+         std::vector<int64_t>&& permutation, OpsPtr&& ops)
+      : Solver(std::move(factorSkel), std::move(elimLumpRanges),
+               std::move(permutation), -1, std::move(ops)) {}
 
   PermutedCoalescedAccessor accessor() const {
     PermutedCoalescedAccessor retv;
@@ -63,6 +70,8 @@ struct Solver {
 
   int64_t dataSize() const { return factorSkel.dataSize(); }
 
+  int64_t maxFactorParam() const { return canFactorUpTo; }
+
   int64_t paramVecDataStart(int64_t paramIndex) const {
     return factorSkel.paramVecDataStart(paramIndex);
   }
@@ -95,6 +104,7 @@ struct Solver {
   CoalescedBlockMatrixSkel factorSkel;
   std::vector<int64_t> elimLumpRanges;
   std::vector<int64_t> permutation;  // *on indices*: v'[p[i]] = v[i];
+  int64_t canFactorUpTo;
 
   OpsPtr ops;
   SymbolicCtxPtr symCtx;
@@ -111,19 +121,24 @@ enum BackendType {
   BackendCuda,
 };
 
+enum AddFillPolicy {
+  AddFillComplete,       // add fill for complete factoring, reorder
+  AddFillForAutoElims,   // add fill for give+auto elim-ranges, reorder
+  AddFillForGivenElims,  // fill for elimination of elim ranges, no reorder
+  AddFillNone,           // no fill added, no reorder
+};
+
 struct Settings {
   bool findSparseEliminationRanges = true;
   int numThreads = 16;
   BackendType backend = BackendBlas;
+  AddFillPolicy addFillPolicy = AddFillComplete;
 };
 
 SolverPtr createSolver(const Settings& settings,
                        const std::vector<int64_t>& paramSize,
-                       const SparseStructure& ss);
-
-SolverPtr createSolverSchur(
-    const Settings& settings, const std::vector<int64_t>& paramSize,
-    const SparseStructure& ss, const std::vector<int64_t>& elimLumpRanges,
-    const std::unordered_set<int64_t>& elimLastIds = {});
+                       const SparseStructure& ss,
+                       const std::vector<int64_t>& elimLumpRanges = {},
+                       const std::unordered_set<int64_t>& elimLastIds = {});
 
 }  // end namespace BaSpaCho

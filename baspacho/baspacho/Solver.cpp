@@ -19,11 +19,16 @@ using tdelta = chrono::duration<double>;
 
 Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_,
                std::vector<int64_t>&& elimLumpRanges_,
-               std::vector<int64_t>&& permutation_, OpsPtr&& ops_)
+               std::vector<int64_t>&& permutation_, int64_t canFactorUpTo,
+               OpsPtr&& ops_)
     : factorSkel(std::move(factorSkel_)),
       elimLumpRanges(std::move(elimLumpRanges_)),
       permutation(std::move(permutation_)),
+      canFactorUpTo(canFactorUpTo),
       ops(std::move(ops_)) {
+  if (canFactorUpTo < 0) {
+    canFactorUpTo = factorSkel.order();
+  }
   symCtx = ops->createSymbolicCtx(factorSkel, permutation);
   for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
     elimCtxs.push_back(
@@ -572,9 +577,9 @@ OpsPtr getBackend(const Settings& settings) {
   return simpleOps();
 }
 
-SolverPtr createSolver(const Settings& settings,
-                       const std::vector<int64_t>& paramSize,
-                       const SparseStructure& ss) {
+static SolverPtr createSolverQ(const Settings& settings,
+                               const std::vector<int64_t>& paramSize,
+                               const SparseStructure& ss) {
   vector<int64_t> permutation = ss.fillReducingPermutation();
   vector<int64_t> invPerm = inversePermutation(permutation);
   SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
@@ -592,16 +597,17 @@ SolverPtr createSolver(const Settings& settings,
 
   vector<int64_t> etTotalInvPerm = composePermutations(et.permInverse, invPerm);
   return SolverPtr(new Solver(move(factorSkel), move(et.sparseElimRanges),
-                              move(etTotalInvPerm), getBackend(settings)));
+                              move(etTotalInvPerm), et.permInverse.size(),
+                              getBackend(settings)));
 }
 
-SolverPtr createSolverSchur(const Settings& settings,
-                            const std::vector<int64_t>& paramSize,
-                            const SparseStructure& ss_,
-                            const std::vector<int64_t>& elimLumpRanges,
-                            const unordered_set<int64_t>& elimLastIds) {
+SolverPtr createSolver(const Settings& settings,
+                       const std::vector<int64_t>& paramSize,
+                       const SparseStructure& ss_,
+                       const std::vector<int64_t>& elimLumpRanges,
+                       const unordered_set<int64_t>& elimLastIds) {
   if (elimLumpRanges.empty()) {
-    return createSolver(settings, paramSize, ss_);
+    return createSolverQ(settings, paramSize, ss_);
   }
 
   BASPACHO_CHECK_GE((int64_t)elimLumpRanges.size(), 2);
@@ -610,12 +616,40 @@ SolverPtr createSolverSchur(const Settings& settings,
     BASPACHO_CHECK_GE(id, elimEnd);
   }
 
-  SparseStructure ss =
-      ss_.addIndependentEliminationFill(elimLumpRanges[0], elimLumpRanges[1]);
-  for (int64_t e = 1; e < (int64_t)elimLumpRanges.size() - 1; e++) {
-    ss = ss.addIndependentEliminationFill(elimLumpRanges[e],
-                                          elimLumpRanges[e + 1]);
+  SparseStructure ss = ss_;
+  if (settings.addFillPolicy != AddFillNone) {
+    ss = ss.addIndependentEliminationFill(elimLumpRanges[0], elimLumpRanges[1]);
+    for (int64_t e = 1; e < (int64_t)elimLumpRanges.size() - 1; e++) {
+      ss = ss.addIndependentEliminationFill(elimLumpRanges[e],
+                                            elimLumpRanges[e + 1]);
+    }
   }
+
+  if (settings.addFillPolicy == AddFillNone ||
+      settings.addFillPolicy == AddFillForGivenElims) {
+    vector<int64_t> spanStart;
+    spanStart.reserve(paramSize.size() + 1);
+    spanStart.insert(spanStart.end(), paramSize.begin(), paramSize.end());
+    spanStart.push_back(0);
+    cumSumVec(spanStart);
+
+    std::vector<int64_t> lumpToSpan(paramSize.size() + 1);
+    ::std::iota(lumpToSpan.begin(), lumpToSpan.end(), 0);
+
+    std::vector<int64_t> permutation(paramSize.size());
+    ::std::iota(permutation.begin(), permutation.end(), 0);
+
+    SparseStructure ssT = ss.transpose();  // to csc
+    CoalescedBlockMatrixSkel factorSkel(spanStart, lumpToSpan, ssT.ptrs,
+                                        ssT.inds);
+
+    std::vector<int64_t> elimLumpRangesCopy = elimLumpRanges;
+    return SolverPtr(new Solver(
+        move(factorSkel), std::move(elimLumpRangesCopy), move(permutation),
+        settings.addFillPolicy == AddFillNone ? 0 : elimEnd,
+        getBackend(settings)));
+  }
+
   SparseStructure ssBottom = ss.extractRightBottom(elimEnd);
 
   // find best permutation for right-bottom corner that is left
@@ -643,13 +677,14 @@ SolverPtr createSolverSchur(const Settings& settings,
   // compute as ordinary elimination tree on br-corner
   EliminationTree et(sortedBottomParamSize, sortedSsBottom);
   et.buildTree();
-  et.computeMerges(settings.findSparseEliminationRanges);
-  et.computeAggregateStruct();
+  et.computeMerges(settings.findSparseEliminationRanges, noCrossPoints,
+                   settings.addFillPolicy == AddFillForAutoElims);
+  et.computeAggregateStruct(settings.addFillPolicy == AddFillForAutoElims);
 
   // ss last rows are to be permuted according to etTotalInvPerm
   vector<int64_t> etTotalInvPerm = composePermutations(et.permInverse, invPerm);
   vector<int64_t> fullInvPerm(elimEnd + etTotalInvPerm.size());
-  iota(fullInvPerm.begin(), fullInvPerm.begin() + elimEnd, 0);
+  ::std::iota(fullInvPerm.begin(), fullInvPerm.begin() + elimEnd, 0);
   for (size_t i = 0; i < etTotalInvPerm.size(); i++) {
     fullInvPerm[i + elimEnd] = elimEnd + etTotalInvPerm[i];
   }
@@ -664,7 +699,7 @@ SolverPtr createSolverSchur(const Settings& settings,
   vector<int64_t> fullLumpToSpan;
   fullLumpToSpan.reserve(elimEnd + et.lumpToSpan.size());
   fullLumpToSpan.resize(elimEnd);
-  iota(fullLumpToSpan.begin(), fullLumpToSpan.begin() + elimEnd, 0);
+  ::std::iota(fullLumpToSpan.begin(), fullLumpToSpan.begin() + elimEnd, 0);
   shiftConcat(fullLumpToSpan, elimEnd, et.lumpToSpan.begin(),
               et.lumpToSpan.end());
   BASPACHO_CHECK_EQ((int64_t)fullSpanStart.size() - 1,
@@ -700,15 +735,21 @@ SolverPtr createSolverSchur(const Settings& settings,
   std::vector<int64_t> fullElimLumpRanges = elimLumpRanges;
   if (!et.sparseElimRanges.empty()) {
     int64_t rangeStart = elimLumpRanges[elimLumpRanges.size() - 1];
-    shiftConcat(fullElimLumpRanges, rangeStart, et.sparseElimRanges.begin(),
+    shiftConcat(fullElimLumpRanges, rangeStart,
+                et.sparseElimRanges.begin() + (elimLumpRanges.empty() ? 0 : 1),
                 et.sparseElimRanges.end());
   }
   if (fullElimLumpRanges.size() == 1) {
     fullElimLumpRanges.pop_back();
   }
+  int64_t autoElimEnd =
+      fullElimLumpRanges.empty() ? 0 : fullElimLumpRanges.back();
 
-  return SolverPtr(new Solver(move(factorSkel), move(fullElimLumpRanges),
-                              move(fullInvPerm), getBackend(settings)));
+  return SolverPtr(new Solver(
+      move(factorSkel), move(fullElimLumpRanges), move(fullInvPerm),
+      settings.addFillPolicy == AddFillForAutoElims ? autoElimEnd
+                                                    : paramSize.size(),
+      getBackend(settings)));
 }
 
 }  // end namespace BaSpaCho
