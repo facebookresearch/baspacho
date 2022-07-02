@@ -62,7 +62,23 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
   virtual void pseudoFactorSpans(T* data, int64_t spanBegin,
                                  int64_t spanEnd) override {
-    UNUSED(data, spanBegin, spanEnd);
+    OpInstance timer(sym.pseudoFactorStat);
+    const CoalescedBlockMatrixSkel& skel = sym.skel;
+
+    if (!sym.useThreads) {
+      for (int64_t s = spanBegin; s < spanEnd; s++) {
+        factorSpan(skel, data, s);
+      }
+    } else {
+      dispenso::TaskSet taskSet(sym.threadPool);
+      dispenso::parallel_for(
+          taskSet, dispenso::makeChunkedRange(spanBegin, spanEnd, 1UL),
+          [&](int64_t sBegin, int64_t sEnd) {
+            for (int64_t s = sBegin; s < sEnd; s++) {
+              factorSpan(skel, data, s);
+            }
+          });
+    }
   }
 
   virtual void doElimination(const SymElimCtx& elimData, T* data,
@@ -214,6 +230,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
   }
 
   using CpuBaseNumericCtx<T>::factorLump;
+  using CpuBaseNumericCtx<T>::factorSpan;
   using CpuBaseNumericCtx<T>::eliminateRowChain;
   using CpuBaseNumericCtx<T>::eliminateVerySparseRowChain;
   using CpuBaseNumericCtx<T>::stridedMatSub;
