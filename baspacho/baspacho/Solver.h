@@ -66,6 +66,14 @@ struct Solver {
   void pseudoFactorFrom(T* data, int64_t paramIndex,
                         bool verbose = false) const;
 
+  template <typename T>
+  void solveLFrom(const T* data, int64_t paramIndex, T* vecData, int64_t stride,
+                  int nRHS) const;
+
+  template <typename T>
+  void solveLtFrom(const T* data, int64_t paramIndex, T* vecData,
+                   int64_t stride, int nRHS) const;
+
   int64_t order() const { return factorSkel.order(); }
 
   int64_t dataSize() const { return factorSkel.dataSize(); }
@@ -92,13 +100,14 @@ struct Solver {
   void eliminateBoard(NumericCtx<T>& numCtx, T* data, int64_t ptr) const;
 
   template <typename T>
-  void internalSolveLUpTo(SolveCtx<T>& slvCtx, const T* data,
-                          int64_t paramIndex, T* vecData, int64_t stride) const;
+  void internalSolveLRange(SolveCtx<T>& slvCtx, const T* data,
+                           int64_t startParamIndex, int64_t endParamIndex,
+                           T* vecData, int64_t stride) const;
 
   template <typename T>
-  void internalSolveLtUpTo(SolveCtx<T>& slvCtx, const T* data,
-                           int64_t paramIndex, T* vecData,
-                           int64_t stride) const;
+  void internalSolveLtRange(SolveCtx<T>& slvCtx, const T* data,
+                            int64_t startParamIndex, int64_t endParamIndex,
+                            T* vecData, int64_t stride) const;
 
  public:
   CoalescedBlockMatrixSkel factorSkel;

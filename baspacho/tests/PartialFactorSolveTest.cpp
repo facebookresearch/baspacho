@@ -373,3 +373,118 @@ TEST(Partial, testPseudoFactor_Blas_double) {
 TEST(Partial, testPseudoFactor_Blas_float) {
   testPseudoFactor_Many<float>([] { return blasOps(); });
 }
+
+template <typename T>
+void testPartialSolveLFrom_Many(const std::function<OpsPtr()>& genOps) {
+  for (int i = 0; i < 20; i++) {
+    int numParams = 215;
+    auto colBlocks = randomCols(numParams, 0.03, 57 + i);
+    colBlocks = makeIndependentElimSet(colBlocks, 0, 150);
+    SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
+
+    // test no-cross barrier - make sure the elim set is still present
+    int64_t nocross =
+        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+
+    vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
+    EliminationTree et(paramSize, sortedSs);
+    et.buildTree();
+    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.computeAggregateStruct();
+
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
+                                        et.colStart, et.rowParam);
+    ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
+
+    vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
+    factorSkel.damp(data, T(0.0), T(factorSkel.order() * 2.0));
+
+    Matrix<T> mat = factorSkel.densify(data);
+    int order = factorSkel.order();
+    int barrierAt = factorSkel.spanStart[nocross];
+    int afterBar = order - barrierAt;
+
+    ASSERT_GE(et.sparseElimRanges.size(), 2);
+    int64_t largestIndep = et.sparseElimRanges[1];
+    Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
+
+    for (int j = 0; j < 5; j++) {
+      int nRHS = 3;
+      vector<T> vecData = randomData<T>(order * nRHS, -1.0, 1.0, 49 + j + i);
+      Matrix<T> vec = Eigen::Map<Matrix<T>>(vecData.data(), order, nRHS);
+      Matrix<T> vecRef = vec;
+      vecRef.bottomRows(afterBar) = mat.bottomRightCorner(afterBar, afterBar)
+                                        .template triangularView<Eigen::Lower>()
+                                        .solve(vec.bottomRows(afterBar));
+      solver.solveLFrom(data.data(), nocross, vec.data(), order, nRHS);
+
+      ASSERT_NEAR((vec - vecRef).norm() / vecRef.norm(), 0, Epsilon<T>::value2);
+    }
+  }
+}
+
+TEST(Partial, PartialSolveLFrom_Ref_double) {
+  testPartialSolveLFrom_Many<double>([] { return simpleOps(); });
+}
+
+TEST(Partial, PartialSolveLFrom_Ref_float) {
+  testPartialSolveLFrom_Many<float>([] { return simpleOps(); });
+}
+
+template <typename T>
+void testPartialSolveLtFrom_Many(const std::function<OpsPtr()>& genOps) {
+  for (int i = 0; i < 20; i++) {
+    int numParams = 215;
+    auto colBlocks = randomCols(numParams, 0.03, 57 + i);
+    colBlocks = makeIndependentElimSet(colBlocks, 0, 150);
+    SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
+
+    // test no-cross barrier - make sure the elim set is still present
+    int64_t nocross =
+        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+
+    vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
+    EliminationTree et(paramSize, sortedSs);
+    et.buildTree();
+    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.computeAggregateStruct();
+
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
+                                        et.colStart, et.rowParam);
+    ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
+
+    vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
+    factorSkel.damp(data, T(0.0), T(factorSkel.order() * 2.0));
+
+    Matrix<T> mat = factorSkel.densify(data);
+    int order = factorSkel.order();
+    int barrierAt = factorSkel.spanStart[nocross];
+    int afterBar = order - barrierAt;
+
+    ASSERT_GE(et.sparseElimRanges.size(), 2);
+    int64_t largestIndep = et.sparseElimRanges[1];
+    Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
+
+    for (int j = 0; j < 5; j++) {
+      int nRHS = 3;
+      vector<T> vecData = randomData<T>(order * nRHS, -1.0, 1.0, 49 + j + i);
+      Matrix<T> vec = Eigen::Map<Matrix<T>>(vecData.data(), order, nRHS);
+      Matrix<T> vecRef = vec;
+      vecRef.bottomRows(afterBar) = mat.bottomRightCorner(afterBar, afterBar)
+                                        .template triangularView<Eigen::Lower>()
+                                        .transpose()
+                                        .solve(vec.bottomRows(afterBar));
+      solver.solveLtFrom(data.data(), nocross, vec.data(), order, nRHS);
+
+      ASSERT_NEAR((vec - vecRef).norm() / vecRef.norm(), 0, Epsilon<T>::value2);
+    }
+  }
+}
+
+TEST(Partial, PartialSolveLtFrom_Ref_double) {
+  testPartialSolveLtFrom_Many<double>([] { return simpleOps(); });
+}
+
+TEST(Partial, PartialSolveLtFrom_Ref_float) {
+  testPartialSolveLtFrom_Many<float>([] { return simpleOps(); });
+}
