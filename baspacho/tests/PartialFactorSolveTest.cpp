@@ -70,22 +70,10 @@ void testPartialFactor_Many(const std::function<OpsPtr()>& genOps) {
 
     int barrierAt = factorSkel.spanStart[nocross];
     int afterBar = factorSkel.order() - barrierAt;
-    Matrix<T> decBr = verifyMat.bottomRightCorner(afterBar, afterBar)
-                          .template triangularView<Eigen::Lower>();
-    Matrix<T> marginalBr0 = decBr * decBr.transpose();
 
     Matrix<T> decBl = verifyMat.bottomLeftCorner(afterBar, barrierAt);
     Matrix<T> origBr = origMat.bottomRightCorner(afterBar, afterBar);
     Matrix<T> marginalBr = origBr - decBl * decBl.transpose();
-    double v1 =
-        Matrix<T>(marginalBr0.template triangularView<Eigen::Lower>()).norm();
-    double v2 =
-        Matrix<T>(marginalBr.template triangularView<Eigen::Lower>()).norm();
-    double v3 =
-        Matrix<T>(
-            (marginalBr - marginalBr0).template triangularView<Eigen::Lower>())
-            .norm();
-
     verifyMat.bottomRightCorner(afterBar, afterBar) = marginalBr;
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);

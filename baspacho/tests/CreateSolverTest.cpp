@@ -118,4 +118,10 @@ void testCreateSolver_Many() {
   }
 }
 
-TEST(CreateSolver, testCreateSolver_Many) { testCreateSolver_Many<double>(); }
+TEST(CreateSolver, testCreateSolver_Many_double) {
+  testCreateSolver_Many<double>();
+}
+
+TEST(CreateSolver, testCreateSolver_Many_float) {
+  testCreateSolver_Many<float>();
+}
