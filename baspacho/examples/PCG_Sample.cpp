@@ -11,6 +11,7 @@
 #include "baspacho/baspacho/SparseStructure.h"
 #include "baspacho/baspacho/Utils.h"
 #include "baspacho/examples/PCG.h"
+#include "baspacho/examples/Preconditioner.h"
 #include "baspacho/testing/TestingUtils.h"
 
 using namespace BaSpaCho;
@@ -24,7 +25,7 @@ using Vector = Eigen::Vector<T, Eigen::Dynamic>;
 
 static constexpr int minNumSparseElimNodes = 50;
 
-void runTest(int seed) {
+void runTestRaw(int seed) {
   int numParams = 215;
   auto colBlocks = randomCols(numParams, 0.03, 57 + seed);
   colBlocks = makeIndependentElimSet(colBlocks, 0, 150);
@@ -94,6 +95,105 @@ void runTest(int seed) {
   Vector<T> b2(order);
   b2.setZero();
   solver.addMvFrom(origData.data(), 0, x.data(), order, b2.data(), order, 1);
+
+  cout << "rel residual: " << (b - b2).norm() / b.norm() << endl;
+
+  /*Matrix<T> mat = factorSkel.densify(data);
+  int order = factorSkel.order();
+  int barrierAt = factorSkel.spanStart[nocross];
+  int afterBar = order - barrierAt;
+
+  ASSERT_GE(et.sparseElimRanges.size(), 2);
+  int64_t largestIndep = et.sparseElimRanges[1];
+  Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());*/
+}
+
+void runTest(int seed) {
+  int numParams = 215;
+  auto colBlocks = randomCols(numParams, 0.03, 57 + seed);
+  colBlocks = makeIndependentElimSet(colBlocks, 0, 150);
+  SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
+  vector<int64_t> paramSize = randomVec(ss.ptrs.size() - 1, 2, 3, 47);
+
+  cout << "generating solver..." << endl;
+
+  auto solver = createSolver(
+      {.backend = BackendRef, .addFillPolicy = AddFillForAutoElims}, paramSize,
+      ss, {0, 100});
+  int64_t nocross = solver->maxFactorParam();
+  cout << "max factor: " << nocross << " / " << paramSize.size() << endl;
+
+  int order = solver->order();
+  BASPACHO_CHECK_EQ(solver->factorSkel.spanOffsetInLump[nocross], 0);
+
+  cout << "generating prob..." << endl;
+  using T = double;
+  vector<T> matData = randomData<T>(solver->dataSize(), -1.0, 1.0, 9 + seed);
+
+  // randomized damping
+  {
+    auto acc = solver->accessor();
+    mt19937 gen(seed);
+    uniform_real_distribution<> dis(solver->order() * 0.1,
+                                    solver->order() * 0.5);
+    for (int64_t i = 0; i < (int64_t)paramSize.size(); i++) {
+      acc.plainAcc.diagBlock(matData.data(), i).diagonal().array() += dis(gen);
+    }
+  }
+  // solver->factorSkel.damp(matData, T(0.0), T(solver->order() * 0.1));
+
+  // b
+  vector<T> bData = randomData<T>(order * 1, -1.0, 1.0, 49 + seed);
+  Vector<T> b = Eigen::Map<Vector<T>>(bData.data(), order, 1);
+  Vector<T> x = b;
+
+  cout << "solve first part..." << endl;
+
+  // factor and solve up to "nocross" value
+  vector<T> origMatData = matData;
+  solver->factorUpTo(matData.data(), nocross);
+  solver->solveLUpTo(matData.data(), nocross, x.data(), order, 1);
+
+  cout << "setup pcg..." << endl;
+
+  std::unique_ptr<Preconditioner<double>> precond;
+  // precond.reset(new IdentityPrecond<double>(*solver, nocross));
+  // precond.reset(new BlockJacobiPrecond<double>(*solver, nocross));
+  precond.reset(new BlockGaussSeidelPrecond<double>(*solver, nocross));
+  precond->init(matData.data());
+
+  // set up PCG in elimination area
+  int64_t secStart = solver->paramVecDataStart(nocross);
+  int64_t secSize = order - secStart;
+  PCG pcg(
+      [&](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
+        u.resize(v.size());
+        (*precond)(u.data(), v.data());
+      },
+      [&](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
+        u.resize(v.size());
+        u.setZero();
+        solver->addMvFrom(matData.data(), nocross, v.data() - secStart, order,
+                          u.data() - secStart, order, 1);
+      },
+      1e-10, 40, true);
+
+  cout << "run pcg..." << endl;
+
+  Eigen::VectorXd tmp;
+  pcg.solve(tmp, x.segment(secStart, secSize));
+  x.segment(secStart, secSize) = tmp;
+
+  cout << "solve Lt..." << endl;
+
+  solver->solveLtUpTo(matData.data(), nocross, x.data(), order, 1);
+
+  cout << "comp residual..." << endl;
+
+  Vector<T> b2(order);
+  b2.setZero();
+  solver->addMvFrom(origMatData.data(), 0, x.data(), order, b2.data(), order,
+                    1);
 
   cout << "rel residual: " << (b - b2).norm() / b.norm() << endl;
 
