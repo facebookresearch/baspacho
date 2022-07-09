@@ -41,7 +41,7 @@ struct Optimizer {
     SparseStructure blockStructure = columnsToCscStruct(colBlocks).transpose();
 
     // create solver
-    solver = createSolverSchur({}, paramSize, blockStructure, {0, numPts});
+    solver = createSolver({}, paramSize, blockStructure, {0, numPts});
 
     hess.resize(solver->dataSize());
     grad.resize(solver->order());

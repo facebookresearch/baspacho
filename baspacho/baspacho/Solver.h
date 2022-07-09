@@ -12,7 +12,14 @@ namespace BaSpaCho {
 struct Solver {
   Solver(CoalescedBlockMatrixSkel&& factorSkel,
          std::vector<int64_t>&& elimLumpRanges,
-         std::vector<int64_t>&& permutation, OpsPtr&& ops);
+         std::vector<int64_t>&& permutation, int64_t canFactorUpTo,
+         OpsPtr&& ops);
+
+  Solver(CoalescedBlockMatrixSkel&& factorSkel,
+         std::vector<int64_t>&& elimLumpRanges,
+         std::vector<int64_t>&& permutation, OpsPtr&& ops)
+      : Solver(std::move(factorSkel), std::move(elimLumpRanges),
+               std::move(permutation), -1, std::move(ops)) {}
 
   PermutedCoalescedAccessor accessor() const {
     PermutedCoalescedAccessor retv;
@@ -56,9 +63,35 @@ struct Solver {
                  int64_t inStride, T* outVecData, int64_t outStride, int nRHS,
                  BaseType<T> alpha = 1.0) const;
 
+  template <typename T>
+  void pseudoFactorFrom(T* data, int64_t paramIndex,
+                        bool verbose = false) const;
+
+  template <typename T>
+  void solveLFrom(const T* data, int64_t paramIndex, T* vecData, int64_t stride,
+                  int nRHS) const;
+
+  template <typename T>
+  void solveLtFrom(const T* data, int64_t paramIndex, T* vecData,
+                   int64_t stride, int nRHS) const;
+
   int64_t order() const { return factorSkel.order(); }
 
   int64_t dataSize() const { return factorSkel.dataSize(); }
+
+  int64_t maxFactorParam() const { return canFactorUpTo; }
+
+  int64_t paramVecDataStart(int64_t paramIndex) const {
+    return factorSkel.paramVecDataStart(paramIndex);
+  }
+
+  int64_t paramMatDataStart(int64_t paramIndex) const {
+    return factorSkel.paramMatDataStart(paramIndex);
+  }
+
+  CoalescedBlockMatrixSkel& skel() { return factorSkel; }
+
+  const CoalescedBlockMatrixSkel& skel() const { return factorSkel; }
 
  private:
   void initElimination();
@@ -72,18 +105,20 @@ struct Solver {
   void eliminateBoard(NumericCtx<T>& numCtx, T* data, int64_t ptr) const;
 
   template <typename T>
-  void internalSolveLUpTo(SolveCtx<T>& slvCtx, const T* data,
-                          int64_t paramIndex, T* vecData, int64_t stride) const;
+  void internalSolveLRange(SolveCtx<T>& slvCtx, const T* data,
+                           int64_t startParamIndex, int64_t endParamIndex,
+                           T* vecData, int64_t stride) const;
 
   template <typename T>
-  void internalSolveLtUpTo(SolveCtx<T>& slvCtx, const T* data,
-                           int64_t paramIndex, T* vecData,
-                           int64_t stride) const;
+  void internalSolveLtRange(SolveCtx<T>& slvCtx, const T* data,
+                            int64_t startParamIndex, int64_t endParamIndex,
+                            T* vecData, int64_t stride) const;
 
  public:
   CoalescedBlockMatrixSkel factorSkel;
   std::vector<int64_t> elimLumpRanges;
   std::vector<int64_t> permutation;  // *on indices*: v'[p[i]] = v[i];
+  int64_t canFactorUpTo;
 
   OpsPtr ops;
   SymbolicCtxPtr symCtx;
@@ -100,19 +135,24 @@ enum BackendType {
   BackendCuda,
 };
 
+enum AddFillPolicy {
+  AddFillComplete,       // add fill for complete factoring, reorder
+  AddFillForAutoElims,   // add fill for give+auto elim-ranges, reorder
+  AddFillForGivenElims,  // fill for elimination of elim ranges, no reorder
+  AddFillNone,           // no fill added, no reorder
+};
+
 struct Settings {
   bool findSparseEliminationRanges = true;
   int numThreads = 16;
   BackendType backend = BackendBlas;
+  AddFillPolicy addFillPolicy = AddFillComplete;
 };
 
 SolverPtr createSolver(const Settings& settings,
                        const std::vector<int64_t>& paramSize,
-                       const SparseStructure& ss);
-
-SolverPtr createSolverSchur(
-    const Settings& settings, const std::vector<int64_t>& paramSize,
-    const SparseStructure& ss, const std::vector<int64_t>& elimLumpRanges,
-    const std::unordered_set<int64_t>& elimLastIds = {});
+                       const SparseStructure& ss,
+                       const std::vector<int64_t>& elimLumpRanges = {},
+                       const std::unordered_set<int64_t>& elimLastIds = {});
 
 }  // end namespace BaSpaCho

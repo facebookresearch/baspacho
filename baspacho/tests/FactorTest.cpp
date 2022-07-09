@@ -56,7 +56,7 @@ void testCoalescedFactor(OpsPtr&& ops) {
 
   Solver solver(std::move(factorSkel), {}, {}, std::move(ops));
   solver.factor(data.data());
-  Matrix<T> computedMat = solver.factorSkel.densify(data);
+  Matrix<T> computedMat = solver.skel().densify(data);
 
   ASSERT_NEAR(
       Matrix<T>(
@@ -108,7 +108,7 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
 
     Solver solver(std::move(factorSkel), {}, {}, genOps());
     solver.factor(data.data());
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
         Matrix<T>(
@@ -170,7 +170,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     NumericCtxPtr<T> numCtx = solver.symCtx->createNumericCtx<T>(0, nullptr);
     numCtx->doElimination(*solver.elimCtxs[0], data.data(), 0, largestIndep);
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
         Matrix<T>(
@@ -228,7 +228,7 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
     int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     solver.factor(data.data());
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
         Matrix<T>(

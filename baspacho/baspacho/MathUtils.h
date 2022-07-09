@@ -26,7 +26,7 @@ __BASPACHO_HOST_DEVICE__ inline std::pair<int64_t, int64_t> toOrderedPair(
 }
 
 template <typename T>
-__BASPACHO_HOST_DEVICE__ inline static void cholesky(T* A, int n) {
+__BASPACHO_HOST_DEVICE__ inline static void cholesky(T* A, int lda, int n) {
   T* b_ii = A;
 
   for (int i = 0; i < n; i++) {
@@ -34,29 +34,29 @@ __BASPACHO_HOST_DEVICE__ inline static void cholesky(T* A, int n) {
     *b_ii = d;
 
     // block(j, i)
-    T* b_ji = b_ii + n;
+    T* b_ji = b_ii + lda;
     for (int j = i + 1; j < n; j++) {
       T c = *b_ji / d;
       *b_ji = c;
 
-      T* b_ki = b_ii + n;
+      T* b_ki = b_ii + lda;
       T* b_jk = b_ji + 1;
       for (int k = i + 1; k <= j; k++) {
         *b_jk -= c * (*b_ki);
-        b_ki += n;
+        b_ki += lda;
         b_jk += 1;
       }
 
-      b_ji += n;
+      b_ji += lda;
     }
 
-    b_ii += n + 1;
+    b_ii += lda + 1;
   }
 }
 
 template <typename T>
-__BASPACHO_HOST_DEVICE__ inline static void solveUpperT(const T* A, int n,
-                                                        T* v) {
+__BASPACHO_HOST_DEVICE__ inline static void solveUpperT(const T* A, int lda,
+                                                        int n, T* v) {
   const T* b_ii = A;
   for (int i = 0; i < n; i++) {
     T x = v[i];
@@ -66,25 +66,25 @@ __BASPACHO_HOST_DEVICE__ inline static void solveUpperT(const T* A, int n,
     }
 
     v[i] = x / b_ii[i];
-    b_ii += n;
+    b_ii += lda;
   }
 }
 
 template <typename T>
-__BASPACHO_HOST_DEVICE__ inline static void solveUpper(const T* A, int n,
-                                                       T* v) {
-  const T* b_ii = A + n * n - 1;
+__BASPACHO_HOST_DEVICE__ inline static void solveUpper(const T* A, int lda,
+                                                       int n, T* v) {
+  const T* b_ii = A + (lda + 1) * (n - 1);
   for (int i = n - 1; i >= 0; i--) {
     T x = v[i];
 
     const T* b_ij = b_ii;
     for (int j = i + 1; j < n; j++) {
-      b_ij += n;
+      b_ij += lda;
       x -= (*b_ij) * v[j];
     }
 
     v[i] = x / (*b_ii);
-    b_ii -= n + 1;
+    b_ii -= lda + 1;
   }
 }
 

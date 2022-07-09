@@ -45,11 +45,19 @@ struct CoalescedBlockMatrixSkel {
 
   int64_t numSpans() const { return spanStart.size() - 1; }
 
-  int64_t numLumps() const { return spanStart.size() - 1; }
+  int64_t numLumps() const { return lumpStart.size() - 1; }
 
   int64_t order() const { return spanStart[spanStart.size() - 1]; }
 
   int64_t dataSize() const { return chainData[chainData.size() - 1]; }
+
+  int64_t paramVecDataStart(int64_t span) const { return spanStart[span]; }
+
+  int64_t paramMatDataStart(int64_t span) const {
+    int64_t lump = spanToLump[span];
+    BASPACHO_CHECK_EQ(spanOffsetInLump[span], 0);
+    return chainData[chainColPtr[lump]];
+  }
 
   CoalescedAccessor accessor() const {
     CoalescedAccessor retv;

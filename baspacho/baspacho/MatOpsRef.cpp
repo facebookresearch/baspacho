@@ -53,6 +53,16 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
                    int64_t numSpans)
       : CpuBaseNumericCtx<T>(bufSize, numSpans), sym(sym) {}
 
+  virtual void pseudoFactorSpans(T* data, int64_t spanBegin,
+                                 int64_t spanEnd) override {
+    OpInstance timer(sym.pseudoFactorStat);
+    const CoalescedBlockMatrixSkel& skel = sym.skel;
+
+    for (int64_t s = spanBegin; s < spanEnd; s++) {
+      factorSpan(skel, data, s);
+    }
+  }
+
   virtual void doElimination(const SymElimCtx& elimData, T* data,
                              int64_t lumpsBegin, int64_t lumpsEnd) override {
     const CpuBaseSymElimCtx* pElim =
@@ -211,6 +221,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
   }
 
   using CpuBaseNumericCtx<T>::factorLump;
+  using CpuBaseNumericCtx<T>::factorSpan;
   using CpuBaseNumericCtx<T>::eliminateRowChain;
   using CpuBaseNumericCtx<T>::stridedMatSub;
 

@@ -27,7 +27,7 @@ TEST(MathUtils, Cholesky) {
   { Eigen::LLT<Eigen::Ref<MatRMaj<double>>> llt(verifyMat); }
   cout << "verif:\n" << verifyMat << endl;
 
-  cholesky(data.data(), n);
+  cholesky(data.data(), n, n);
   MatRMaj<double> computedMat = Eigen::Map<MatRMaj<double>>(data.data(), n, n);
   cout << "comptd:\n" << computedMat << endl;
 
@@ -57,7 +57,7 @@ TEST(MathUtils, Solve) {
 
   cout << "verif:\n" << verifyVec << endl;
 
-  solveUpperT(data.data(), n, vecData.data());
+  solveUpperT(data.data(), n, n, vecData.data());
   MatRMaj<double> computeVec =
       Eigen::Map<MatRMaj<double>>(vecData.data(), k, n);
   cout << "comptd:\n" << computeVec << endl;
@@ -84,7 +84,7 @@ TEST(MathUtils, SolveT) {
 
   cout << "verif:\n" << verifyVec << endl;
 
-  solveUpper(data.data(), n, vecData.data());
+  solveUpper(data.data(), n, n, vecData.data());
   MatRMaj<double> computeVec =
       Eigen::Map<MatRMaj<double>>(vecData.data(), k, n);
   cout << "comptd:\n" << computeVec << endl;

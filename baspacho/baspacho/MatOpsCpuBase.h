@@ -7,6 +7,12 @@
 
 namespace BaSpaCho {
 
+using OuterStride = Eigen::OuterStride<>;
+template <typename T>
+using OuterStridedMatM = Eigen::Map<
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0,
+    OuterStride>;
+
 struct CpuBaseSymElimCtx : SymElimCtx {
   CpuBaseSymElimCtx() {}
   virtual ~CpuBaseSymElimCtx() override {}
@@ -134,6 +140,37 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
 
     Eigen::Map<MatRMaj<T>> belowDiagBlock(data + belowDiagStart, numRows,
                                           lumpSize);
+    diagBlock.template triangularView<Eigen::Lower>()
+        .transpose()
+        .template solveInPlace<Eigen::OnTheRight>(belowDiagBlock);
+  }
+
+  static inline void factorSpan(const CoalescedBlockMatrixSkel& skel, T* data,
+                                int64_t span) {
+    int64_t lump = skel.spanToLump[span];
+    int64_t spanOffsetInLump = skel.spanOffsetInLump[span];
+    int64_t spanIndexInLump = span - skel.lumpToSpan[lump];
+    int64_t spanSize = skel.spanStart[span + 1] - skel.spanStart[span];
+    int64_t lumpStart = skel.lumpStart[lump];
+    int64_t lumpSize = skel.lumpStart[lump + 1] - lumpStart;
+    int64_t colStart = skel.chainColPtr[lump];
+    int64_t diagBlockPtr =
+        skel.chainData[colStart + spanIndexInLump] + spanOffsetInLump;
+
+    // in-place lower diag cholesky dec on diagonal block
+    OuterStridedMatM<T> diagBlock(data + diagBlockPtr, spanSize, spanSize,
+                                  OuterStride(lumpSize));
+    { Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(diagBlock); }
+
+    int64_t gatheredEnd = skel.boardColPtr[lump + 1];
+    int64_t rowDataEnd = skel.boardChainColOrd[gatheredEnd - 1];
+    int64_t belowDiagPtr =
+        skel.chainData[colStart + spanIndexInLump + 1] + spanOffsetInLump;
+    int64_t numRows = skel.chainRowsTillEnd[colStart + rowDataEnd - 1] -
+                      skel.chainRowsTillEnd[colStart + spanIndexInLump];
+
+    OuterStridedMatM<T> belowDiagBlock(data + belowDiagPtr, numRows, spanSize,
+                                       OuterStride(lumpSize));
     diagBlock.template triangularView<Eigen::Lower>()
         .transpose()
         .template solveInPlace<Eigen::OnTheRight>(belowDiagBlock);

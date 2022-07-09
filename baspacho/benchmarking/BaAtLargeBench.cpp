@@ -66,7 +66,7 @@ void testSolvers(Data& data) {
          << endl;
     auto startAnalysis = hrc::now();
     auto solver =
-        createSolverSchur({.numThreads = 16}, paramSize, origSs, {0, numPts});
+        createSolver({.numThreads = 16}, paramSize, origSs, {0, numPts});
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     // generate mock data, make positive def
@@ -100,7 +100,7 @@ void testSolvers(Data& data) {
          << endl;
     auto startAnalysis = hrc::now();
     auto solver =
-        createSolverSchur({.numThreads = 1}, paramSize, origSs, {0, numPts});
+        createSolver({.numThreads = 1}, paramSize, origSs, {0, numPts});
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     // generate mock data, make positive def
@@ -141,12 +141,12 @@ void testSolvers(Data& data) {
     cout << "Testing CUDA (on full Points+Cameras system)" << endl;
     {
       cout << "heating up cuda..." << endl;
-      auto solver = createSolverSchur({.backend = BackendCuda}, paramSize,
-                                      origSs, {0, numPts});
+      auto solver = createSolver({.backend = BackendCuda}, paramSize, origSs,
+                                 {0, numPts});
     }
     auto startAnalysis = hrc::now();
-    auto solver = createSolverSchur({.backend = BackendCuda}, paramSize, origSs,
-                                    {0, numPts});
+    auto solver =
+        createSolver({.backend = BackendCuda}, paramSize, origSs, {0, numPts});
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges) << endl;

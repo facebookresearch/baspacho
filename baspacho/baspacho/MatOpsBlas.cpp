@@ -60,6 +60,27 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
   BlasNumericCtx(const BlasSymbolicCtx& sym, int64_t bufSize, int64_t numSpans)
       : CpuBaseNumericCtx<T>(bufSize, numSpans), sym(sym) {}
 
+  virtual void pseudoFactorSpans(T* data, int64_t spanBegin,
+                                 int64_t spanEnd) override {
+    OpInstance timer(sym.pseudoFactorStat);
+    const CoalescedBlockMatrixSkel& skel = sym.skel;
+
+    if (!sym.useThreads) {
+      for (int64_t s = spanBegin; s < spanEnd; s++) {
+        factorSpan(skel, data, s);
+      }
+    } else {
+      dispenso::TaskSet taskSet(sym.threadPool);
+      dispenso::parallel_for(
+          taskSet, dispenso::makeChunkedRange(spanBegin, spanEnd, 1UL),
+          [&](int64_t sBegin, int64_t sEnd) {
+            for (int64_t s = sBegin; s < sEnd; s++) {
+              factorSpan(skel, data, s);
+            }
+          });
+    }
+  }
+
   virtual void doElimination(const SymElimCtx& elimData, T* data,
                              int64_t lumpsBegin, int64_t lumpsEnd) override {
     const CpuBaseSymElimCtx* pElim =
@@ -209,6 +230,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
   }
 
   using CpuBaseNumericCtx<T>::factorLump;
+  using CpuBaseNumericCtx<T>::factorSpan;
   using CpuBaseNumericCtx<T>::eliminateRowChain;
   using CpuBaseNumericCtx<T>::eliminateVerySparseRowChain;
   using CpuBaseNumericCtx<T>::stridedMatSub;

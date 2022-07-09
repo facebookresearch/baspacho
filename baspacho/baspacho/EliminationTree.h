@@ -11,9 +11,10 @@ struct EliminationTree {
   void buildTree();
 
   void computeMerges(bool computeSparseElimRanges,
-                     const std::vector<int64_t> &noCrossPoints = {});
+                     const std::vector<int64_t> &noCrossPoints = {},
+                     bool findOnlyElims = false);
 
-  void computeAggregateStruct();
+  void computeAggregateStruct(bool fillOnlyForElims = false);
 
   // utility helper
   std::vector<int64_t> computeSpanStart();
