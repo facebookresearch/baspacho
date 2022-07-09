@@ -46,21 +46,21 @@ void check(Solver& solver, int seed) {
   cout << "nnz: " << solver.dataSize() << endl;
 
   vector<T> data = randomData<T>(solver.dataSize(), -1.0, 1.0, 9 + seed);
-  solver.factorSkel.damp(data, T(0.0), T(solver.order() * 2.0));
-  Matrix<T> verifyMat = solver.factorSkel.densify(data);
+  solver.skel().damp(data, T(0.0), T(solver.order() * 2.0));
+  Matrix<T> verifyMat = solver.skel().densify(data);
   Matrix<T> origMat = verifyMat;
   Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat);
 
   int factorUpTo = solver.maxFactorParam();
-  int barrierAt = solver.factorSkel.spanStart[factorUpTo];
-  int afterBar = solver.factorSkel.order() - barrierAt;
+  int barrierAt = solver.skel().spanStart[factorUpTo];
+  int afterBar = solver.skel().order() - barrierAt;
   Matrix<T> decBl = verifyMat.bottomLeftCorner(afterBar, barrierAt);
   Matrix<T> origBr = origMat.bottomRightCorner(afterBar, afterBar);
   Matrix<T> marginalBr = origBr - decBl * decBl.transpose();
   verifyMat.bottomRightCorner(afterBar, afterBar) = marginalBr;
 
   solver.factorUpTo(data.data(), factorUpTo);
-  Matrix<T> computedMat = solver.factorSkel.densify(data);
+  Matrix<T> computedMat = solver.skel().densify(data);
 
   ASSERT_NEAR(
       Matrix<T>(

@@ -55,8 +55,8 @@ void testBatchedSolveL(OpsPtr&& ops, int nRHS = 1, int batchSize = 8) {
   vector<vector<T>> datas(batchSize);
   vector<vector<T>> rhsDatas(batchSize);
   for (int q = 0; q < batchSize; q++) {
-    datas[q] = randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
-    solver.factorSkel.damp(datas[q], T(0), T(solver.factorSkel.order() * 1.3));
+    datas[q] = randomData<T>(solver.skel().dataSize(), -1.0, 1.0, 37 + q);
+    solver.skel().damp(datas[q], T(0), T(solver.skel().order() * 1.3));
     rhsDatas[q] = randomData<T>(order * nRHS, -1.0, 1.0, 137 + q);
   }
   vector<vector<T>> rhsDatasBackup = rhsDatas;
@@ -81,7 +81,7 @@ void testBatchedSolveL(OpsPtr&& ops, int nRHS = 1, int batchSize = 8) {
 
   for (int q = 0; q < batchSize; q++) {
     vector<T> rhsVerif(order * nRHS);
-    Matrix<T> verifyMat = solver.factorSkel.densify(datas[q]);
+    Matrix<T> verifyMat = solver.skel().densify(datas[q]);
     Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS) =
         verifyMat.template triangularView<Eigen::Lower>().solve(
             Eigen::Map<Matrix<T>>(rhsDatasBackup[q].data(), order, nRHS));
@@ -131,8 +131,8 @@ void testBatchedSolveLt(OpsPtr&& ops, int nRHS = 1, int batchSize = 8) {
   vector<vector<T>> datas(batchSize);
   vector<vector<T>> rhsDatas(batchSize);
   for (int q = 0; q < batchSize; q++) {
-    datas[q] = randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
-    solver.factorSkel.damp(datas[q], T(0), T(solver.factorSkel.order() * 1.3));
+    datas[q] = randomData<T>(solver.skel().dataSize(), -1.0, 1.0, 37 + q);
+    solver.skel().damp(datas[q], T(0), T(solver.skel().order() * 1.3));
     rhsDatas[q] = randomData<T>(order * nRHS, -1.0, 1.0, 137 + q);
   }
   vector<vector<T>> rhsDatasBackup = rhsDatas;
@@ -157,7 +157,7 @@ void testBatchedSolveLt(OpsPtr&& ops, int nRHS = 1, int batchSize = 8) {
 
   for (int q = 0; q < batchSize; q++) {
     vector<T> rhsVerif(order * nRHS);
-    Matrix<T> verifyMat = solver.factorSkel.densify(datas[q]);
+    Matrix<T> verifyMat = solver.skel().densify(datas[q]);
     Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS) =
         verifyMat.template triangularView<Eigen::Lower>().adjoint().solve(
             Eigen::Map<Matrix<T>>(rhsDatasBackup[q].data(), order, nRHS));
@@ -212,8 +212,8 @@ void testBatchedSolveLt_SparseElimAndFactor_Many(
     vector<vector<T>> rhsDatas(batchSize);
     for (int q = 0; q < batchSize; q++) {
       datas[q] =
-          randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q + i);
-      solver.factorSkel.damp(datas[q], T(0), T(order * 1.3));
+          randomData<T>(solver.skel().dataSize(), -1.0, 1.0, 37 + q + i);
+      solver.skel().damp(datas[q], T(0), T(order * 1.3));
       rhsDatas[q] = randomData<T>(order * nRHS, -1.0, 1.0, 137 + q + i);
     }
     vector<vector<T>> rhsDatasBackup = rhsDatas;
@@ -238,7 +238,7 @@ void testBatchedSolveLt_SparseElimAndFactor_Many(
 
     for (int q = 0; q < batchSize; q++) {
       vector<T> rhsVerif(order * nRHS);
-      Matrix<T> verifyMat = solver.factorSkel.densify(datas[q]);
+      Matrix<T> verifyMat = solver.skel().densify(datas[q]);
       Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS) =
           verifyMat.template triangularView<Eigen::Lower>().solve(
               Eigen::Map<Matrix<T>>(rhsDatasBackup[q].data(), order, nRHS));
@@ -293,8 +293,8 @@ void testBatchedSolveL_SparseElimAndFactor_Many(
     vector<vector<T>> rhsDatas(batchSize);
     for (int q = 0; q < batchSize; q++) {
       datas[q] =
-          randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q + i);
-      solver.factorSkel.damp(datas[q], T(0), T(order * 1.3));
+          randomData<T>(solver.skel().dataSize(), -1.0, 1.0, 37 + q + i);
+      solver.skel().damp(datas[q], T(0), T(order * 1.3));
       rhsDatas[q] = randomData<T>(order * nRHS, -1.0, 1.0, 137 + q + i);
     }
     vector<vector<T>> rhsDatasBackup = rhsDatas;
@@ -319,7 +319,7 @@ void testBatchedSolveL_SparseElimAndFactor_Many(
 
     for (int q = 0; q < batchSize; q++) {
       vector<T> rhsVerif(order * nRHS);
-      Matrix<T> verifyMat = solver.factorSkel.densify(datas[q]);
+      Matrix<T> verifyMat = solver.skel().densify(datas[q]);
       Eigen::Map<Matrix<T>>(rhsVerif.data(), order, nRHS) =
           verifyMat.template triangularView<Eigen::Lower>().solve(
               Eigen::Map<Matrix<T>>(rhsDatasBackup[q].data(), order, nRHS));

@@ -167,7 +167,7 @@ void testPseudoFactor_Many(const std::function<OpsPtr()>& genOps) {
       solver.pseudoFactorFrom(dataGpu.ptr, 0);
       dataGpu.get(data);
     }
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
         Matrix<T>(

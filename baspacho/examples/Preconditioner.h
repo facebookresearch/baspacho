@@ -49,7 +49,7 @@ class BlockJacobiPrecond : public Preconditioner<T> {
       : solver(solver),
         paramStart(paramStart),
         vecSize(solver.order() - solver.paramVecDataStart(paramStart)) {
-    int64_t numParams = solver.factorSkel.spanStart.size() - 1;
+    int64_t numParams = solver.skel().spanStart.size() - 1;
     int64_t offset = 0;
     for (int64_t p = paramStart; p < numParams; p++) {
       diagBlockOffset.push_back(offset);

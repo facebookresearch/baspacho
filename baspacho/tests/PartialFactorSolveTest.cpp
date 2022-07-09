@@ -80,7 +80,7 @@ void testPartialFactor_Many(const std::function<OpsPtr()>& genOps) {
     int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     solver.factorUpTo(data.data(), nocross);
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
         Matrix<T>(
@@ -347,7 +347,7 @@ void testPseudoFactor_Many(const std::function<OpsPtr()>& genOps) {
     ASSERT_GE(et.sparseElimRanges.size(), 2);
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     solver.pseudoFactorFrom(data.data(), 0);
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
         Matrix<T>(

@@ -53,8 +53,8 @@ void testBatchedCoalescedFactor(OpsPtr&& ops, int batchSize) {
   // generate a batch of data
   vector<vector<T>> datas(batchSize);
   for (int q = 0; q < batchSize; q++) {
-    datas[q] = randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
-    solver.factorSkel.damp(datas[q], T(0), T(solver.factorSkel.order() * 1.3));
+    datas[q] = randomData<T>(solver.skel().dataSize(), -1.0, 1.0, 37 + q);
+    solver.skel().damp(datas[q], T(0), T(solver.skel().order() * 1.3));
   }
   vector<vector<T>> datasBackup = datas;
 
@@ -73,10 +73,10 @@ void testBatchedCoalescedFactor(OpsPtr&& ops, int batchSize) {
   }
 
   for (int q = 0; q < batchSize; q++) {
-    Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[q]);
+    Matrix<T> verifyMat = solver.skel().densify(datasBackup[q]);
     { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat); }
 
-    Matrix<T> computedMat = solver.factorSkel.densify(datas[q]);
+    Matrix<T> computedMat = solver.skel().densify(datas[q]);
 
     ASSERT_NEAR(
         Matrix<T>(
@@ -120,9 +120,9 @@ void testBatchedCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
     int batchSize = batchSizes[i];
     vector<vector<T>> datas(batchSize);
     for (int q = 0; q < batchSize; q++) {
-      datas[q] = randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
-      solver.factorSkel.damp(datas[q], T(0),
-                             T(solver.factorSkel.order() * 1.3));
+      datas[q] = randomData<T>(solver.skel().dataSize(), -1.0, 1.0, 37 + q);
+      solver.skel().damp(datas[q], T(0),
+                             T(solver.skel().order() * 1.3));
     }
     vector<vector<T>> datasBackup = datas;
 
@@ -142,10 +142,10 @@ void testBatchedCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
     }
 
     for (int q = 0; q < batchSize; q++) {
-      Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[q]);
+      Matrix<T> verifyMat = solver.skel().densify(datasBackup[q]);
       { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat); }
 
-      Matrix<T> computedMat = solver.factorSkel.densify(datas[q]);
+      Matrix<T> computedMat = solver.skel().densify(datas[q]);
 
       ASSERT_NEAR(
           Matrix<T>(
@@ -193,9 +193,9 @@ void testBatchedSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     int batchSize = batchSizes[i];
     vector<vector<T>> datas(batchSize);
     for (int q = 0; q < batchSize; q++) {
-      datas[q] = randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
-      solver.factorSkel.damp(datas[q], T(0),
-                             T(solver.factorSkel.order() * 1.3));
+      datas[q] = randomData<T>(solver.skel().dataSize(), -1.0, 1.0, 37 + q);
+      solver.skel().damp(datas[q], T(0),
+                             T(solver.skel().order() * 1.3));
     }
     vector<vector<T>> datasBackup = datas;
 
@@ -217,10 +217,10 @@ void testBatchedSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     }
 
     for (int q = 0; q < batchSize; q++) {
-      Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[q]);
+      Matrix<T> verifyMat = solver.skel().densify(datasBackup[q]);
       { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat); }
 
-      Matrix<T> computedMat = solver.factorSkel.densify(datas[q]);
+      Matrix<T> computedMat = solver.skel().densify(datas[q]);
 
       ASSERT_NEAR(
           Matrix<T>(
@@ -270,9 +270,9 @@ void testBatchedSparseElimAndFactor_Many(
     int batchSize = batchSizes[i];
     vector<vector<T>> datas(batchSize);
     for (int q = 0; q < batchSize; q++) {
-      datas[q] = randomData<T>(solver.factorSkel.dataSize(), -1.0, 1.0, 37 + q);
-      solver.factorSkel.damp(datas[q], T(0),
-                             T(solver.factorSkel.order() * 1.3));
+      datas[q] = randomData<T>(solver.skel().dataSize(), -1.0, 1.0, 37 + q);
+      solver.skel().damp(datas[q], T(0),
+                             T(solver.skel().order() * 1.3));
     }
     vector<vector<T>> datasBackup = datas;
 
@@ -292,10 +292,10 @@ void testBatchedSparseElimAndFactor_Many(
     }
 
     for (int q = 0; q < batchSize; q++) {
-      Matrix<T> verifyMat = solver.factorSkel.densify(datasBackup[q]);
+      Matrix<T> verifyMat = solver.skel().densify(datasBackup[q]);
       { Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat); }
 
-      Matrix<T> computedMat = solver.factorSkel.densify(datas[q]);
+      Matrix<T> computedMat = solver.skel().densify(datas[q]);
 
       ASSERT_NEAR(
           Matrix<T>(

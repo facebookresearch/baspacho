@@ -89,6 +89,10 @@ struct Solver {
     return factorSkel.paramMatDataStart(paramIndex);
   }
 
+  CoalescedBlockMatrixSkel& skel() { return factorSkel; }
+
+  const CoalescedBlockMatrixSkel& skel() const { return factorSkel; }
+
  private:
   void initElimination();
 

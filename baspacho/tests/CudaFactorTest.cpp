@@ -64,7 +64,7 @@ void testCoalescedFactor(OpsPtr&& ops) {
     dataGpu.get(data);
   }
 
-  Matrix<T> computedMat = solver.factorSkel.densify(data);
+  Matrix<T> computedMat = solver.skel().densify(data);
 
   cout << "Verif:\n" << verifyMat << endl;
   cout << "Cmptd:\n" << computedMat << endl;
@@ -119,7 +119,7 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
       dataGpu.get(data);
     }
 
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
         Matrix<T>(
@@ -177,7 +177,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
       dataGpu.get(data);
     }
 
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
         Matrix<T>(
@@ -234,7 +234,7 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
       dataGpu.get(data);
     }
 
-    Matrix<T> computedMat = solver.factorSkel.densify(data);
+    Matrix<T> computedMat = solver.skel().densify(data);
     ASSERT_NEAR(
         Matrix<T>(
             (verifyMat - computedMat).template triangularView<Eigen::Lower>())
