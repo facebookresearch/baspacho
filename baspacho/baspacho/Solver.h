@@ -2,7 +2,6 @@
 
 #include <memory>
 #include <unordered_set>
-
 #include "baspacho/baspacho/CoalescedBlockMatrix.h"
 #include "baspacho/baspacho/MatOps.h"
 #include "baspacho/baspacho/SparseStructure.h"
@@ -68,6 +67,9 @@ struct Solver {
                         bool verbose = false) const;
 
   template <typename T>
+  void factorFrom(T* data, int64_t paramIndex, bool verbose = false) const;
+
+  template <typename T>
   void solveLFrom(const T* data, int64_t paramIndex, T* vecData, int64_t stride,
                   int nRHS) const;
 
@@ -103,6 +105,10 @@ struct Solver {
 
   template <typename T>
   void eliminateBoard(NumericCtx<T>& numCtx, T* data, int64_t ptr) const;
+
+  template <typename T>
+  void internalFactorRange(T* data, int64_t startParamIndex,
+                           int64_t endParamIndex, bool verbose = false) const;
 
   template <typename T>
   void internalSolveLRange(SolveCtx<T>& slvCtx, const T* data,

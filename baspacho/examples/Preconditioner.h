@@ -1,7 +1,6 @@
 #pragma once
 
 #include <iostream>
-
 #include "baspacho/baspacho/Solver.h"
 
 /* abstract preconditioner class */
@@ -140,4 +139,76 @@ class BlockGaussSeidelPrecond : public Preconditioner<T> {
   int64_t paramStart;
   int64_t vecSize;
   std::vector<T> matData;
+};
+
+/* lower precision-solve preconditioner */
+template <typename T>
+class LowerPrecSolvePrecond;
+
+template <>
+class LowerPrecSolvePrecond<double> : public Preconditioner<double> {
+ public:
+  using T = double;
+  LowerPrecSolvePrecond(BaSpaCho::Solver& solver, int64_t paramStart)
+      : solver(solver),
+        vecSize(solver.order() - solver.paramVecDataStart(paramStart)),
+        paramStart(paramStart) {}
+
+  virtual ~LowerPrecSolvePrecond() {}
+
+  virtual void init(double* data) override {
+    int64_t offset = solver.paramMatDataStart(paramStart);
+    int64_t size = solver.dataSize() - offset;
+    matData.resize(size);
+
+    float epsilon = 0.0;
+    while (true) {
+      Eigen::Map<Eigen::Vector<float, Eigen::Dynamic>>(matData.data(), size) =
+          Eigen::Map<const Eigen::Vector<double, Eigen::Dynamic>>(data + offset,
+                                                                  size)
+              .cast<float>();
+      std::cout << "Trying with epsilon = " << epsilon << std::endl;
+      if (epsilon > 0) {
+        auto acc = solver.accessor();
+        for (int64_t i = paramStart; i < solver.skel().numSpans(); i++) {
+          auto diag =
+              acc.plainAcc.diagBlock(matData.data() - offset, i).diagonal();
+          diag *= 1.0 + epsilon;
+          diag.array() += epsilon;
+        }
+        epsilon *= 3.0;
+      } else {
+        epsilon = 1e-8;
+      }
+      solver.factorFrom(matData.data() - offset, paramStart);
+      if (std::isfinite(Eigen::Map<Eigen::Vector<float, Eigen::Dynamic>>(
+                            matData.data(), size)
+                            .sum())) {
+        std::cout << "Success!" << std::endl;
+        break;
+      }
+    }
+  }
+
+  virtual void operator()(double* outVec, const double* inVec) override {
+    Eigen::Vector<float, Eigen::Dynamic> temp =
+        Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>>(inVec, vecSize)
+            .cast<float>();
+
+    solver.solveLFrom(  //
+        matData.data() - solver.paramMatDataStart(paramStart), paramStart,
+        temp.data() - solver.paramVecDataStart(paramStart), vecSize, 1);
+    solver.solveLtFrom(  //
+        matData.data() - solver.paramMatDataStart(paramStart), paramStart,
+        temp.data() - solver.paramVecDataStart(paramStart), vecSize, 1);
+
+    Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(outVec, vecSize) =
+        temp.cast<double>();
+  }
+
+ private:
+  BaSpaCho::Solver& solver;
+  int64_t vecSize;
+  int64_t paramStart;
+  std::vector<float> matData;
 };

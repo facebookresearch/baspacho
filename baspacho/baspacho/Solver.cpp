@@ -1,12 +1,9 @@
 
 #include "Solver.h"
-
 #include <dispenso/parallel_for.h>
-
 #include <Eigen/Eigenvalues>
 #include <iostream>
 #include <numeric>
-
 #include "baspacho/baspacho/DebugMacros.h"
 #include "baspacho/baspacho/EliminationTree.h"
 #include "baspacho/baspacho/Utils.h"
@@ -175,6 +172,17 @@ void Solver::factor(T* data, bool verbose) const {
 
 template <typename T>
 void Solver::factorUpTo(T* data, int64_t paramIndex, bool verbose) const {
+  internalFactorRange(data, 0, paramIndex, verbose);
+}
+
+template <typename T>
+void Solver::factorFrom(T* data, int64_t paramIndex, bool verbose) const {
+  internalFactorRange(data, paramIndex, factorSkel.numSpans(), verbose);
+}
+
+#if 0
+template <typename T>
+void Solver::factorUpTo(T* data, int64_t paramIndex, bool verbose) const {
   BASPACHO_CHECK_GE(paramIndex, 0);
   BASPACHO_CHECK_LT(paramIndex, (int64_t)factorSkel.spanOffsetInLump.size());
   BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[paramIndex], 0);
@@ -212,6 +220,65 @@ void Solver::factorUpTo(T* data, int64_t paramIndex, bool verbose) const {
       int64_t origLump = factorSkel.boardColLump[rPtr];
       if (origLump >= upToLump) {
         break;
+      }
+      eliminateBoard(*numCtx, data, rPtr);
+    }
+
+    if (l < upToLump) {
+      factorLump(*numCtx, data, l);
+    }
+  }
+}
+#endif
+
+template <typename T>
+void Solver::internalFactorRange(T* data, int64_t startParamIndex,
+                                 int64_t endParamIndex, bool verbose) const {
+  BASPACHO_CHECK_GE(startParamIndex, 0);
+  BASPACHO_CHECK_LE(startParamIndex, endParamIndex);
+  BASPACHO_CHECK_LT(endParamIndex, (int64_t)factorSkel.spanOffsetInLump.size());
+  BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[startParamIndex], 0);
+  BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[endParamIndex], 0);
+  int64_t startLump = factorSkel.spanToLump[startParamIndex];
+  int64_t upToLump = factorSkel.spanToLump[endParamIndex];
+
+  NumericCtxPtr<T> numCtx = symCtx->createNumericCtx<T>(maxElimTempSize, data);
+
+  for (int64_t l = 0; l + 1 < (int64_t)elimLumpRanges.size(); l++) {
+    if (elimLumpRanges[l + 1] > upToLump) {
+      BASPACHO_CHECK_EQ(elimLumpRanges[l], upToLump);
+      return;
+    } else if (startLump > elimLumpRanges[l]) {
+      BASPACHO_CHECK_GE(startLump, elimLumpRanges[l + 1]);
+      continue;
+    }
+    if (verbose) {
+      std::cout << "Elim set: " << l << " (" << elimLumpRanges[l] << ".."
+                << elimLumpRanges[l + 1] << ")" << std::endl;
+    }
+    numCtx->doElimination(*elimCtxs[l], data, elimLumpRanges[l],
+                          elimLumpRanges[l + 1]);
+  }
+
+  int64_t denseOpsFromLump = elimLumpRanges.empty() ? 0 : elimLumpRanges.back();
+  if (verbose) {
+    std::cout << "Block-Fact from: " << denseOpsFromLump << std::endl;
+  }
+
+  for (int64_t l = std::max(startLump, denseOpsFromLump);
+       l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
+    numCtx->prepareAssemble(l);
+
+    //  iterate over columns having a non-trivial a-block
+    for (int64_t rPtr = startElimRowPtr[l - denseOpsFromLump],
+                 rEnd = factorSkel.boardRowPtr[l + 1] -
+                        1;  // skip last (diag block)
+         rPtr < rEnd; rPtr++) {
+      int64_t origLump = factorSkel.boardColLump[rPtr];
+      if (origLump >= upToLump) {
+        break;
+      } else if (origLump < startLump) {
+        continue;
       }
       eliminateBoard(*numCtx, data, rPtr);
     }
@@ -508,6 +575,16 @@ template void Solver::factorUpTo<vector<double*>>(vector<double*>* data,
                                                   int64_t paramIndex,
                                                   bool verbose) const;
 template void Solver::factorUpTo<vector<float*>>(vector<float*>* data,
+                                                 int64_t paramIndex,
+                                                 bool verbose) const;
+template void Solver::factorFrom<double>(double* data, int64_t paramIndex,
+                                         bool verbose) const;
+template void Solver::factorFrom<float>(float* data, int64_t paramIndex,
+                                        bool verbose) const;
+template void Solver::factorFrom<vector<double*>>(vector<double*>* data,
+                                                  int64_t paramIndex,
+                                                  bool verbose) const;
+template void Solver::factorFrom<vector<float*>>(vector<float*>* data,
                                                  int64_t paramIndex,
                                                  bool verbose) const;
 template void Solver::solveLUpTo<double>(const double* matData,
