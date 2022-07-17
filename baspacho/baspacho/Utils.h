@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -11,7 +13,10 @@ std::string timeStamp();
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
-struct OpStat {
+using hrc = std::chrono::high_resolution_clock;
+using tdelta = std::chrono::duration<double>;
+
+/*struct OpStat {
   int64_t numRuns = 0;
   double totTime = 0;
   double maxTime = 0;
@@ -25,11 +30,63 @@ struct OpInstance {
   ~OpInstance();
   OpStat& stat;
   TimePoint start;
+};*/
+
+template <typename... Args>
+struct OpStat {
+  struct Instance {
+    Instance() : stat(nullptr) {}
+
+    Instance(Instance&& that) : stat(that.stat), start(that.start) { that.stat = nullptr; }
+
+    Instance(OpStat* stat, const Args&... args)
+        : stat(stat), start(stat ? hrc::now() : TimePoint()), argsTuple(args...) {}
+
+    ~Instance() {
+      if (!stat) {
+        return;
+      }
+      double time = tdelta(hrc::now() - start).count();
+      stat->numRuns++;
+      stat->lastTime = time;
+      stat->maxTime = std::max(stat->maxTime, time);
+      stat->totTime += time;
+      if (stat->callBack) {
+        std::apply([&](auto&&... args) { stat->callBack(time, args...); }, argsTuple);
+      }
+    }
+
+    OpStat* stat;
+    TimePoint start;
+    std::tuple<Args...> argsTuple;
+  };
+
+  std::string toString() const {
+    std::stringstream ss;
+    ss << "#=" << numRuns << ", time=" << totTime << "s, last=" << lastTime << "s, max=" << maxTime
+       << "s";
+    return ss.str();
+  }
+
+  void reset() {
+    numRuns = 0;
+    totTime = 0;
+    maxTime = 0;
+    lastTime = 0;
+  }
+
+  Instance instance(const Args&... args) { return enabled ? Instance(this, args...) : Instance(); }
+
+  bool enabled = true;
+  int64_t numRuns = 0;
+  double totTime = 0;
+  double maxTime = 0;
+  double lastTime = 0;
+  std::function<void(double, const Args&... args)> callBack;
 };
 
 template <typename T>
-bool isStrictlyIncreasing(const std::vector<T>& v, std::size_t begin,
-                          std::size_t e) {
+bool isStrictlyIncreasing(const std::vector<T>& v, std::size_t begin, std::size_t e) {
   std::size_t i = begin + 1;
   while (i < e && (v[i] > v[i - 1])) {
     i++;
@@ -38,8 +95,7 @@ bool isStrictlyIncreasing(const std::vector<T>& v, std::size_t begin,
 }
 
 template <typename T>
-bool isWeaklyIncreasing(const std::vector<T>& v, std::size_t begin,
-                        std::size_t e) {
+bool isWeaklyIncreasing(const std::vector<T>& v, std::size_t begin, std::size_t e) {
   std::size_t i = begin + 1;
   while (i < e && (v[i] >= v[i - 1])) {
     i++;
@@ -74,16 +130,15 @@ inline int64_t bisect(const int64_t* array, int64_t size, int64_t needle) {
 
 // appends all elements x shifted by a given amount (x + shift)
 template <class ForwardIt>
-inline void shiftConcat(std::vector<int64_t>& target, int64_t shift,
-                        ForwardIt first, ForwardIt last) {
+inline void shiftConcat(std::vector<int64_t>& target, int64_t shift, ForwardIt first,
+                        ForwardIt last) {
   while (first != last) {
     target.push_back(shift + *first++);
   }
 }
 
 template <typename T, typename ForwardIt>
-void leftPermute(ForwardIt it, const std::vector<int64_t>& perm,
-                 const std::vector<T>& w) {
+void leftPermute(ForwardIt it, const std::vector<int64_t>& perm, const std::vector<T>& w) {
   for (size_t i = 0; i < perm.size(); i++) {
     *(it + perm[i]) = w[i];
   }

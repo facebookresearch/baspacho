@@ -1,10 +1,7 @@
 
 #include "baspacho/baspacho/Utils.h"
-
 #include <ctime>
 #include <iomanip>
-#include <sstream>
-
 #include "baspacho/baspacho/DebugMacros.h"
 
 namespace BaSpaCho {
@@ -20,12 +17,11 @@ string timeStamp() {
   auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
   const time_t t_c = system_clock::to_time_t(now);
   stringstream ss;
-  ss << put_time(localtime(&t_c), "%T") << "." << setfill('0') << setw(3)
-     << ms.count();
+  ss << put_time(localtime(&t_c), "%T") << "." << setfill('0') << setw(3) << ms.count();
   return ss.str();
 }
 
-string OpStat::toString() const {
+/*string OpStat::toString() const {
   stringstream ss;
   ss << "#=" << numRuns << ", time=" << totTime << "s, last=" << lastTime
      << "s, max=" << maxTime << "s";
@@ -46,7 +42,7 @@ OpInstance::~OpInstance() {
   stat.lastTime = tdelta(hrc::now() - start).count();
   stat.maxTime = max(stat.maxTime, stat.lastTime);
   stat.totTime += stat.lastTime;
-}
+}*/
 
 std::vector<int64_t> composePermutations(const std::vector<int64_t>& v,
                                          const std::vector<int64_t>& w) {
