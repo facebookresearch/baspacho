@@ -21,3 +21,10 @@ set(simple_opt_sources
 add_executable(simple_opt ${simple_opt_sources})
 target_link_libraries (simple_opt BaSpaCho testing)
 
+
+set(opt_comp_model_sources 
+    PCG.cpp
+    OptimizeCompModel.cpp)
+
+add_executable(opt_comp_model ${opt_comp_model_sources})
+target_link_libraries (opt_comp_model BaSpaCho testing)
