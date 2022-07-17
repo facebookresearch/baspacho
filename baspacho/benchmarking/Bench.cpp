@@ -1,5 +1,6 @@
 
 #include <chrono>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -57,8 +58,45 @@ void bangGpu() {
 }
 #endif
 
+unordered_map<int, vector<tuple<int, double>>> potrfStats;
+unordered_map<int, vector<tuple<int, int, double>>> trsmStats;
+unordered_map<int, vector<tuple<int, int, int, double>>> sygeStats;
+unordered_map<int, vector<tuple<int, int, double>>> asmblStats;
+
+void saveAllStats() {
+  for (auto [i, stats] : potrfStats) {
+    ofstream out("stats_potrf_" + to_string(i) + ".csv");
+    out.precision(numeric_limits<double>::max_digits10 + 2);
+    for (auto [n, t] : stats) {
+      out << n << "\t" << t << "\n";
+    }
+  }
+  for (auto [i, stats] : trsmStats) {
+    ofstream out("stats_trsm_" + to_string(i) + ".csv");
+    out.precision(numeric_limits<double>::max_digits10 + 2);
+    for (auto [n, k, t] : stats) {
+      out << n << "\t" << k << "\t" << t << "\n";
+    }
+  }
+  for (auto [i, stats] : sygeStats) {
+    ofstream out("stats_syge_" + to_string(i) + ".csv");
+    out.precision(numeric_limits<double>::max_digits10 + 2);
+    for (auto [m, n, k, t] : stats) {
+      out << m << "\t" << n << "\t" << k << "\t" << t << "\n";
+    }
+  }
+  for (auto [i, stats] : asmblStats) {
+    ofstream out("stats_asmbl_" + to_string(i) + ".csv");
+    out.precision(numeric_limits<double>::max_digits10 + 2);
+    for (auto [r, c, t] : stats) {
+      out << r << "\t" << c << "\t" << t << "\n";
+    }
+  }
+}
+
 BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings,
-                             const std::vector<int64_t> nRHSs = {}, bool verbose = true) {
+                             const vector<int64_t> nRHSs = {}, bool verbose = true,
+                             bool collectStats = false) {
 #ifdef BASPACHO_USE_CUBLAS
   if (settings.backend == BackendCuda) {
     bangGpu();
@@ -67,6 +105,32 @@ BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings
 
   auto startAnalysis = hrc::now();
   SolverPtr solver = createSolver(settings, prob.paramSize, prob.sparseStruct);
+
+  // collect stats
+  if (collectStats) {
+    solver->internalSymbolicContext().potrfStat.callBack = [&](double time, int dataSize, int n) {
+      // cout << "POTRF: d=" << dataSize << ", n=" << n << ", t=" << time << endl;
+      potrfStats[dataSize].emplace_back(n, time);
+    };
+    solver->internalSymbolicContext().trsmStat.callBack = [&](double time, int dataSize, int n,
+                                                              int k) {
+      // cout << "TRSM: d=" << dataSize << ", n=" << n << ", k=" << k << ", t=" << time << endl;
+      trsmStats[dataSize].emplace_back(n, k, time);
+    };
+    solver->internalSymbolicContext().sygeStat.callBack = [&](double time, int dataSize, int m,
+                                                              int n, int k) {
+      // cout << "SYGE: d=" << dataSize << ", m=" << m << ", n=" << n << ", k=" << k << ", t=" <<
+      // time << endl;
+      sygeStats[dataSize].emplace_back(m, n, k, time);
+    };
+    solver->internalSymbolicContext().asmblStat.callBack = [&](double time, int dataSize, int br,
+                                                               int bc) {
+      // cout << "ASMBL: d=" << dataSize << ", br=" << br << ", bc=" << bc << ", t=" << time <<
+      // endl;
+      asmblStats[dataSize].emplace_back(br, bc, time);
+    };
+  }
+
   double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
   // generate mock data, make positive def
@@ -74,7 +138,7 @@ BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings
   solver->skel().damp(data, double(0), double(solver->order() * 1.2));
 
   double factorTime;
-  std::map<int64_t, double> solveTimes;
+  map<int64_t, double> solveTimes;
 #ifdef BASPACHO_USE_CUBLAS
   if (settings.backend == BackendCuda) {
     DevMirror dataGpu(data);
@@ -128,8 +192,8 @@ BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings
 
 #ifdef BASPACHO_USE_CUBLAS
 BenchResults benchmarkSolverBatched(const SparseProblem& prob, const Settings& settings,
-                                    int batchSize, const std::vector<int64_t> nRHSs = {},
-                                    bool verbose = true) {
+                                    int batchSize, const vector<int64_t> nRHSs = {},
+                                    bool verbose = true, bool collectStats = false) {
   bangGpu();
 
   auto startAnalysis = hrc::now();
@@ -149,7 +213,7 @@ BenchResults benchmarkSolverBatched(const SparseProblem& prob, const Settings& s
   }
 
   double factorTime;
-  std::map<int64_t, double> solveTimes;
+  map<int64_t, double> solveTimes;
 
   auto startFactor = hrc::now();
   solver->factor(&datasPtr);
@@ -271,12 +335,11 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
      }},  //
 };
 
-map<string, function<BenchResults(const SparseProblem&, const std::vector<int64_t>& nRHSs, bool)>>
+map<string, function<BenchResults(const SparseProblem&, const vector<int64_t>& nRHSs, bool, bool)>>
     solvers = {
 #ifdef BASPACHO_HAVE_CHOLMOD
         {"1_CHOLMOD",
-         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
-            bool verbose) -> BenchResults {
+         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose) -> BenchResults {
            auto result = benchmarkCholmodSolve(prob.paramSize, prob.sparseStruct, nRHSs, verbose);
            BenchResults retv;
            retv.analysisTime = result.analysisTime;
@@ -286,42 +349,45 @@ map<string, function<BenchResults(const SparseProblem&, const std::vector<int64_
          }},
 #endif  // BASPACHO_HAVE_CHOLMOD
         {"2_BaSpaCho_BLAS_numthreads=16",
-         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs, bool verbose)
-             -> BenchResults { return benchmarkSolver(prob, {}, nRHSs, verbose); }},  //
+         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose,
+            bool collectStats) -> BenchResults {
+           return benchmarkSolver(prob, {}, nRHSs, verbose, collectStats);
+         }},  //
 #ifdef BASPACHO_USE_CUBLAS
         {"3_BaSpaCho_CUDA",
-         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
-            bool verbose) -> BenchResults {
-           return benchmarkSolver(
-               prob, {.findSparseEliminationRanges = true, .backend = BackendCuda}, nRHSs, verbose);
+         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose,
+            bool collectStats) -> BenchResults {
+           return benchmarkSolver(prob,
+                                  {.findSparseEliminationRanges = true, .backend = BackendCuda},
+                                  nRHSs, verbose, collectStats);
          }},
         {"4_BaSpaCho_CUDA_batchsize=4",
-         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
-            bool verbose) -> BenchResults {
+         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose,
+            bool collectStats) -> BenchResults {
            return benchmarkSolverBatched(
                prob, {.findSparseEliminationRanges = true, .backend = BackendCuda},
-               /* batchsize = */ 4, nRHSs, verbose);
+               /* batchsize = */ 4, nRHSs, verbose, collectStats);
          }},
         {"5_BaSpaCho_CUDA_batchsize=8",
-         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
-            bool verbose) -> BenchResults {
+         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose,
+            bool collectStats) -> BenchResults {
            return benchmarkSolverBatched(
                prob, {.findSparseEliminationRanges = true, .backend = BackendCuda},
-               /* batchsize = */ 8, nRHSs, verbose);
+               /* batchsize = */ 8, nRHSs, verbose, collectStats);
          }},
         {"6_BaSpaCho_CUDA_batchsize=16",
-         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
-            bool verbose) -> BenchResults {
+         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose,
+            bool collectStats) -> BenchResults {
            return benchmarkSolverBatched(
                prob, {.findSparseEliminationRanges = true, .backend = BackendCuda},
-               /* batchsize = */ 16, nRHSs, verbose);
+               /* batchsize = */ 16, nRHSs, verbose, collectStats);
          }},
 #endif  // BASPACHO_USE_CUBLAS
 };
 
 struct BenchmarkSettings {
   int numIterations = 5;
-  int verbose = true;
+  int verbose = false;
   regex selectProblems = regex("");
   regex excludeProblems;
   regex selectSolvers = regex("");
@@ -329,6 +395,7 @@ struct BenchmarkSettings {
   string referenceSolver;
   vector<int64_t> nRHSs;
   set<string> operations = {"factor"};
+  bool collectStats = false;
 };
 
 static string ANALYSIS = "analysis";
@@ -343,8 +410,8 @@ map<string, string> timingLabels = {
 void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
   if (!settings.referenceSolver.empty()) {
     if (solvers.find(settings.referenceSolver) == solvers.end()) {
-      std::cerr << "Solver '" << settings.referenceSolver
-                << "' does not exist or not available at compile time" << std::endl;
+      cerr << "Solver '" << settings.referenceSolver
+           << "' does not exist or not available at compile time" << endl;
       exit(1);
     }
   }
@@ -394,7 +461,7 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
           cout << endl;
         }
 
-        auto benchResults = solv(prob, settings.nRHSs, settings.verbose);
+        auto benchResults = solv(prob, settings.nRHSs, settings.verbose, settings.collectStats);
 
         if (settings.verbose) {
           stringstream ss;
@@ -485,7 +552,8 @@ void help() {
        << "\n -R regex     [R]egex for selecting problem types"
        << "\n -X regex     regex for e[X]cluding problem types"
        << "\n -B solver    solver selected as [B]baseline"
-       << "\n -O ops       comma-sep list of operations (default: factor)" << endl;
+       << "\n -O ops       comma-sep list of operations (default: factor)"
+       << "\n -Z           save stats on blas operations in CVS files" << endl;
 
   cout << "\nOperations:" << endl;
   for (const auto& [label, desc] : timingLabels) {
@@ -503,8 +571,6 @@ void help() {
 
 int main(int argc, char* argv[]) {
   BenchmarkSettings settings;
-  // settings.referenceSolver = "CHOLMOD";
-  settings.verbose = false;
 
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-h")) {
@@ -513,6 +579,8 @@ int main(int argc, char* argv[]) {
     }
     if (!strcmp(argv[i], "-v")) {
       settings.verbose = true;
+    } else if (!strcmp(argv[i], "-Z")) {
+      settings.collectStats = true;
     } else if (!strcmp(argv[i], "-n") && i < argc - 1) {
       settings.numIterations = stoi(argv[++i]);
     } else if (!strcmp(argv[i], "-R") && i < argc - 1) {
@@ -534,7 +602,7 @@ int main(int argc, char* argv[]) {
         string substr;
         getline(ss, substr, ',');
         if (substr.rfind(SOLVE_, 0) == 0) {
-          std::string arg = substr.substr(SOLVE_.size());
+          string arg = substr.substr(SOLVE_.size());
           try {
             size_t endpos;
             int64_t nRHS = stoi(arg, &endpos);
@@ -562,6 +630,10 @@ int main(int argc, char* argv[]) {
   }
 
   runBenchmarks(settings);
+
+  if (settings.collectStats) {
+    saveAllStats();
+  }
 
   return 0;
 }

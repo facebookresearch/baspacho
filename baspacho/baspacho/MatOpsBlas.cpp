@@ -158,7 +158,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
                         int64_t dstStride,  //
                         int64_t srcColDataOffset, int64_t srcRectWidth, int64_t numBlockRows,
                         int64_t numBlockCols) override {
-    auto timer = sym.asmblStat.instance();
+    auto timer = sym.asmblStat.instance(sizeof(T), numBlockRows, numBlockCols);
     const CoalescedBlockMatrixSkel& skel = sym.skel;
     const int64_t* chainRowsTillEnd = skel.chainRowsTillEnd.data() + srcColDataOffset;
     const int64_t* pToSpan = skel.chainRowSpan.data() + srcColDataOffset;
@@ -228,7 +228,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
 template <>
 void BlasNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
-  auto timer = sym.potrfStat.instance();
+  auto timer = sym.potrfStat.instance(sizeof(double), n);
   sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
   LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', n, data + offA, n);
@@ -236,7 +236,7 @@ void BlasNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
 
 template <>
 void BlasNumericCtx<float>::potrf(int64_t n, float* data, int64_t offA) {
-  auto timer = sym.potrfStat.instance();
+  auto timer = sym.potrfStat.instance(sizeof(float), n);
   sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
   LAPACKE_spotrf(LAPACK_COL_MAJOR, 'U', n, data + offA, n);
@@ -244,7 +244,7 @@ void BlasNumericCtx<float>::potrf(int64_t n, float* data, int64_t offA) {
 
 template <>
 void BlasNumericCtx<double>::trsm(int64_t n, int64_t k, double* data, int64_t offA, int64_t offB) {
-  auto timer = sym.trsmStat.instance();
+  auto timer = sym.trsmStat.instance(sizeof(double), n, k);
 
   // TSRM should be fast but appears very slow in OpenBLAS
   static constexpr bool slowTrsmWorkaround = BASPACHO_USE_TRSM_WORAROUND;
@@ -269,7 +269,7 @@ void BlasNumericCtx<double>::trsm(int64_t n, int64_t k, double* data, int64_t of
 
 template <>
 void BlasNumericCtx<float>::trsm(int64_t n, int64_t k, float* data, int64_t offA, int64_t offB) {
-  auto timer = sym.trsmStat.instance();
+  auto timer = sym.trsmStat.instance(sizeof(float), n, k);
 
   // TSRM should be fast but appears very slow in OpenBLAS
   static constexpr bool slowTrsmWorkaround = BASPACHO_USE_TRSM_WORAROUND;
@@ -295,7 +295,7 @@ void BlasNumericCtx<float>::trsm(int64_t n, int64_t k, float* data, int64_t offA
 template <>
 void BlasNumericCtx<double>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const double* data,
                                           int64_t offset) {
-  auto timer = sym.sygeStat.instance();
+  auto timer = sym.sygeStat.instance(sizeof(double), m, n, k);
   BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
 
   // in some cases it could be faster with syrk+gemm
@@ -323,7 +323,7 @@ void BlasNumericCtx<double>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const
 template <>
 void BlasNumericCtx<float>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const float* data,
                                          int64_t offset) {
-  auto timer = sym.sygeStat.instance();
+  auto timer = sym.sygeStat.instance(sizeof(float), m, n, k);
   BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
 
   // in some cases it could be faster with syrk+gemm

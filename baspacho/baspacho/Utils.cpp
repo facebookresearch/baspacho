@@ -21,29 +21,6 @@ string timeStamp() {
   return ss.str();
 }
 
-/*string OpStat::toString() const {
-  stringstream ss;
-  ss << "#=" << numRuns << ", time=" << totTime << "s, last=" << lastTime
-     << "s, max=" << maxTime << "s";
-  return ss.str();
-}
-
-void OpStat::reset() {
-  numRuns = 0;
-  totTime = 0;
-  maxTime = 0;
-  lastTime = 0;
-}
-
-OpInstance::OpInstance(OpStat& stat) : stat(stat), start(hrc::now()) {}
-
-OpInstance::~OpInstance() {
-  stat.numRuns++;
-  stat.lastTime = tdelta(hrc::now() - start).count();
-  stat.maxTime = max(stat.maxTime, stat.lastTime);
-  stat.totTime += stat.lastTime;
-}*/
-
 std::vector<int64_t> composePermutations(const std::vector<int64_t>& v,
                                          const std::vector<int64_t>& w) {
   BASPACHO_CHECK_EQ(v.size(), w.size());

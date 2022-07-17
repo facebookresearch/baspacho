@@ -16,22 +16,6 @@ using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using hrc = std::chrono::high_resolution_clock;
 using tdelta = std::chrono::duration<double>;
 
-/*struct OpStat {
-  int64_t numRuns = 0;
-  double totTime = 0;
-  double maxTime = 0;
-  double lastTime = 0;
-  std::string toString() const;
-  void reset();
-};
-
-struct OpInstance {
-  OpInstance(OpStat& stat);
-  ~OpInstance();
-  OpStat& stat;
-  TimePoint start;
-};*/
-
 template <typename... Args>
 struct OpStat {
   struct Instance {

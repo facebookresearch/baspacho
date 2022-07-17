@@ -74,13 +74,13 @@ struct SymbolicCtx {
   template <typename T>
   SolveCtxPtr<T> createSolveCtx(int nRHS, const T* data);
 
-  mutable OpStat<> potrfStat;
+  mutable OpStat<int, int> potrfStat;
   mutable int64_t potrfBiggestN = 0;
-  mutable OpStat<> trsmStat;
-  mutable OpStat<> sygeStat;
+  mutable OpStat<int, int, int> trsmStat;
+  mutable OpStat<int, int, int, int> sygeStat;
   mutable int64_t gemmCalls = 0;
   mutable int64_t syrkCalls = 0;
-  mutable OpStat<> asmblStat;
+  mutable OpStat<int, int, int> asmblStat;
 
   mutable OpStat<> solveSparseLStat;
   mutable OpStat<> solveSparseLtStat;

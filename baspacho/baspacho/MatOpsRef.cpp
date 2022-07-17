@@ -127,7 +127,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
   }
 
   virtual void potrf(int64_t n, T* data, int64_t offA) override {
-    auto timer = sym.potrfStat.instance();
+    auto timer = sym.potrfStat.instance(sizeof(T), n);
     sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
 
     Eigen::Map<MatRMaj<T>> matA(data + offA, n, n);
@@ -135,7 +135,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
   }
 
   virtual void trsm(int64_t n, int64_t k, T* data, int64_t offA, int64_t offB) override {
-    auto timer = sym.trsmStat.instance();
+    auto timer = sym.trsmStat.instance(sizeof(T), n, k);
 
     using MatCMajD = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 
@@ -147,7 +147,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
 
   virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                             int64_t offset) override {
-    auto timer = sym.sygeStat.instance();
+    auto timer = sym.sygeStat.instance(sizeof(T), m, n, k);
     BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
 
     const T* AB = data + offset;
@@ -173,7 +173,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
                         int64_t dstStride,  //
                         int64_t srcColDataOffset, int64_t srcRectWidth, int64_t numBlockRows,
                         int64_t numBlockCols) override {
-    auto timer = sym.asmblStat.instance();
+    auto timer = sym.asmblStat.instance(sizeof(T), numBlockRows, numBlockCols);
     const CoalescedBlockMatrixSkel& skel = sym.skel;
     const int64_t* chainRowsTillEnd = skel.chainRowsTillEnd.data() + srcColDataOffset;
     const int64_t* pToSpan = skel.chainRowSpan.data() + srcColDataOffset;

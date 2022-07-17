@@ -473,7 +473,7 @@ struct CudaNumericCtx : NumericCtx<T> {
                         int64_t dstStride,  //
                         int64_t srcColDataOffset, int64_t srcRectWidth, int64_t numBlockRows,
                         int64_t numBlockCols) override {
-    auto timer = sym.asmblStat.instance();
+    auto timer = sym.asmblStat.instance(sizeof(T), numBlockRows, numBlockCols);
     const int64_t* pChainRowsTillEnd = sym.devChainRowsTillEnd.ptr + srcColDataOffset;
     const int64_t* pToSpan = sym.devChainRowSpan.ptr + srcColDataOffset;
     const int64_t* pSpanToChainOffset = devSpanToChainOffset;
@@ -495,7 +495,7 @@ struct CudaNumericCtx : NumericCtx<T> {
 
 template <>
 void CudaNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
-  auto timer = sym.potrfStat.instance();
+  auto timer = sym.potrfStat.instance(sizeof(double), n);
   sym.potrfBiggestN = max(sym.potrfBiggestN, n);
 
   int workspaceSize;
@@ -518,7 +518,7 @@ void CudaNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
 
 template <>
 void CudaNumericCtx<float>::potrf(int64_t n, float* data, int64_t offA) {
-  auto timer = sym.potrfStat.instance();
+  auto timer = sym.potrfStat.instance(sizeof(float), n);
   sym.potrfBiggestN = max(sym.potrfBiggestN, n);
 
   int workspaceSize;
@@ -541,7 +541,7 @@ void CudaNumericCtx<float>::potrf(int64_t n, float* data, int64_t offA) {
 
 template <>
 void CudaNumericCtx<double>::trsm(int64_t n, int64_t k, double* data, int64_t offA, int64_t offB) {
-  auto timer = sym.trsmStat.instance();
+  auto timer = sym.trsmStat.instance(sizeof(double), n, k);
 
   double alpha(1.0);
   cublasCHECK(cublasDtrsm(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
@@ -550,7 +550,7 @@ void CudaNumericCtx<double>::trsm(int64_t n, int64_t k, double* data, int64_t of
 
 template <>
 void CudaNumericCtx<float>::trsm(int64_t n, int64_t k, float* data, int64_t offA, int64_t offB) {
-  auto timer = sym.trsmStat.instance();
+  auto timer = sym.trsmStat.instance(sizeof(float), n, k);
 
   float alpha(1.0);
   cublasCHECK(cublasStrsm(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
@@ -560,7 +560,7 @@ void CudaNumericCtx<float>::trsm(int64_t n, int64_t k, float* data, int64_t offA
 template <>
 void CudaNumericCtx<double>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const double* data,
                                           int64_t offset) {
-  auto timer = sym.sygeStat.instance();
+  auto timer = sym.sygeStat.instance(sizeof(double), m, n, k);
 
   double alpha(1.0), beta(0.0);
   cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha, data + offset, k,
@@ -572,7 +572,7 @@ void CudaNumericCtx<double>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const
 template <>
 void CudaNumericCtx<float>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const float* data,
                                          int64_t offset) {
-  auto timer = sym.sygeStat.instance();
+  auto timer = sym.sygeStat.instance(sizeof(float), m, n, k);
 
   float alpha(1.0), beta(0.0);
   cublasCHECK(cublasSgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha, data + offset, k,
@@ -692,7 +692,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
                         int64_t srcColDataOffset, int64_t srcRectWidth, int64_t numBlockRows,
                         int64_t numBlockCols) override {
     BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
-    auto timer = sym.asmblStat.instance();
+    auto timer = sym.asmblStat.instance(sizeof(T) + data->size() * 100, numBlockRows, numBlockCols);
     DevPtrMirror<T> dataDev(*data, 0);
     const int64_t* pChainRowsTillEnd = sym.devChainRowsTillEnd.ptr + srcColDataOffset;
     const int64_t* pToSpan = sym.devChainRowSpan.ptr + srcColDataOffset;
@@ -724,7 +724,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
 
 template <>
 void CudaNumericCtx<vector<double*>>::potrf(int64_t n, vector<double*>* data, int64_t offA) {
-  auto timer = sym.potrfStat.instance();
+  auto timer = sym.potrfStat.instance(sizeof(double) + data->size() * 100, n);
   DevPtrMirror<double> A(*data, offA);
 
   int* devInfo;
@@ -743,7 +743,7 @@ void CudaNumericCtx<vector<double*>>::potrf(int64_t n, vector<double*>* data, in
 
 template <>
 void CudaNumericCtx<vector<float*>>::potrf(int64_t n, vector<float*>* data, int64_t offA) {
-  auto timer = sym.potrfStat.instance();
+  auto timer = sym.potrfStat.instance(sizeof(float) + data->size() * 100, n);
   DevPtrMirror<float> A(*data, offA);
 
   int* devInfo;
@@ -763,7 +763,7 @@ void CudaNumericCtx<vector<float*>>::potrf(int64_t n, vector<float*>* data, int6
 template <>
 void CudaNumericCtx<vector<double*>>::trsm(int64_t n, int64_t k, vector<double*>* data,
                                            int64_t offA, int64_t offB) {
-  auto timer = sym.trsmStat.instance();
+  auto timer = sym.trsmStat.instance(sizeof(double) + data->size() * 100, n, k);
   DevPtrMirror<double> A(*data, offA);
   DevPtrMirror<double> B(*data, offB);
 
@@ -776,7 +776,7 @@ void CudaNumericCtx<vector<double*>>::trsm(int64_t n, int64_t k, vector<double*>
 template <>
 void CudaNumericCtx<vector<float*>>::trsm(int64_t n, int64_t k, vector<float*>* data, int64_t offA,
                                           int64_t offB) {
-  auto timer = sym.trsmStat.instance();
+  auto timer = sym.trsmStat.instance(sizeof(float) + data->size() * 100, n, k);
   DevPtrMirror<float> A(*data, offA);
   DevPtrMirror<float> B(*data, offB);
 
@@ -790,7 +790,7 @@ template <>
 void CudaNumericCtx<vector<double*>>::saveSyrkGemm(int64_t m, int64_t n, int64_t k,
                                                    const vector<double*>* data, int64_t offset) {
   BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
-  auto timer = sym.sygeStat.instance();
+  auto timer = sym.sygeStat.instance(sizeof(double) + data->size() * 100, m, n, k);
   DevPtrMirror<double> A(*data, offset);
   double alpha(1.0), beta(0.0);
   cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha, A.ptr, k,
@@ -802,7 +802,7 @@ template <>
 void CudaNumericCtx<vector<float*>>::saveSyrkGemm(int64_t m, int64_t n, int64_t k,
                                                   const vector<float*>* data, int64_t offset) {
   BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
-  auto timer = sym.sygeStat.instance();
+  auto timer = sym.sygeStat.instance(sizeof(float) + data->size() * 100, m, n, k);
   DevPtrMirror<float> A(*data, offset);
   float alpha(1.0), beta(0.0);
   cublasCHECK(cublasSgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha, A.ptr, k,
