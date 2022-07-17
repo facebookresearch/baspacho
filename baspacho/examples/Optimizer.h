@@ -1,3 +1,4 @@
+#pragma once
 
 #include <cxxabi.h>
 #include <sophus/se3.hpp>
@@ -7,6 +8,7 @@
 #include <typeindex>
 #include <unordered_set>
 #include "baspacho/baspacho/Solver.h"
+#include "baspacho/examples/AtomicOps.h"
 #include "baspacho/examples/PCG.h"
 #include "baspacho/examples/Preconditioner.h"
 #include "baspacho/examples/SoftLoss.h"
@@ -217,6 +219,7 @@ class FactorStore : public FactorStoreBase {
     return loss->val(err.squaredNorm()) * 0.5;
   }
 
+  template <typename Ops>
   double computeSingleGradHess(int64_t i, double* gradData,
                                const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) {
     auto [factor, loss, args] = boundFactors[i];
@@ -240,14 +243,15 @@ class FactorStore : public FactorStoreBase {
 
       // Hessian diagonal contribution
       auto const& iJac = std::get<i>(jacobians);
-      acc.diagBlock(hessData, iIndex) += dSoftErr * (iJac.transpose() * iJac);
+      auto dBlock = acc.diagBlock(hessData, iIndex);
+      Ops::matrixAdd(dBlock, dSoftErr * (iJac.transpose() * iJac));
 
       // gradient contribution
       static constexpr int iTangentDim =
           std::remove_reference_t<decltype(*std::get<i>(args))>::TangentDim;
       int64_t paramStart = acc.paramStart(iIndex);
-      Eigen::Map<Eigen::Vector<double, iTangentDim>>(gradData + paramStart) +=
-          dSoftErr * (err.transpose() * iJac);
+      Eigen::Map<Eigen::Vector<double, iTangentDim>> gradSeg(gradData + paramStart);
+      Ops::vectorAdd(gradSeg, dSoftErr * (err.transpose() * iJac));
 
       forEach<0, i>([&, this](auto jWrap) {
         static constexpr int j = decltype(jWrap)::value;
@@ -258,7 +262,8 @@ class FactorStore : public FactorStoreBase {
 
         // Hessian off-diagonal contribution
         auto const& jJac = std::get<j>(jacobians);
-        acc.block(hessData, iIndex, jIndex) += dSoftErr * (iJac.transpose() * jJac);
+        auto odBlock = acc.block(hessData, iIndex, jIndex);
+        Ops::matrixAdd(odBlock, dSoftErr * (iJac.transpose() * jJac));
       });
     });
 
@@ -277,7 +282,7 @@ class FactorStore : public FactorStoreBase {
                                  double* hessData) override {
     double retv = 0;
     for (size_t i = 0; i < boundFactors.size(); i++) {
-      retv += computeSingleGradHess(i, gradData, acc, hessData);
+      retv += computeSingleGradHess<PlainOps>(i, gradData, acc, hessData);
     }
     return retv;
   }
