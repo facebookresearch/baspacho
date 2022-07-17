@@ -6,14 +6,13 @@
 // Preconditioned conjugate gradient
 class PCG {
  public:
-  using TransFunc =
-      std::function<void(Eigen::VectorXd&, const Eigen::VectorXd&)>;
+  using TransFunc = std::function<void(Eigen::VectorXd&, const Eigen::VectorXd&)>;
   using NumFunc = std::function<double(double)>;
 
-  PCG(const TransFunc& applyInvM, const TransFunc& applyA,
-      double wantedResidual, int maxSteps, bool trace = false)
-      : applyInvM(applyInvM),
-        applyA(applyA),
+  PCG(TransFunc&& applyInvM, TransFunc&& applyA, double wantedResidual, int maxSteps,
+      bool trace = false)
+      : applyInvM(std::move(applyInvM)),
+        applyA(std::move(applyA)),
         wantedResidual(wantedResidual),
         maxSteps(maxSteps),
         trace(trace) {}

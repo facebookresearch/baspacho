@@ -5,7 +5,7 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 QualifierAlignment: Left
 
-# ColumnLimit:     100
+ColumnLimit:     100
 
 IncludeBlocks: Merge
 IncludeCategories:

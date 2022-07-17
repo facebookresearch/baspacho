@@ -1,16 +1,16 @@
 
 #include <cxxabi.h>
-
 #include <sophus/se3.hpp>
 #include <Eigen/Geometry>
 #include <iostream>
 #include <memory>
 #include <typeindex>
 #include <unordered_set>
-
 #include "baspacho/baspacho/Solver.h"
+#include "baspacho/examples/PCG.h"
+#include "baspacho/examples/Preconditioner.h"
 #include "baspacho/examples/SoftLoss.h"
-#include "baspacho/testing/TestingUtils.h" // temporary
+#include "baspacho/testing/TestingUtils.h"  // temporary
 
 // C++ utils for variadic templates
 template <typename... Vars>
@@ -78,13 +78,9 @@ struct VarUtil<Eigen::Vector<double, N>> {
     value += step;
   }
 
-  static double* dataPtr(Eigen::Vector<double, N>& value) {
-    return value.data();
-  }
+  static double* dataPtr(Eigen::Vector<double, N>& value) { return value.data(); }
 
-  static const double* dataPtr(const Eigen::Vector<double, N>& value) {
-    return value.data();
-  }
+  static const double* dataPtr(const Eigen::Vector<double, N>& value) { return value.data(); }
 };
 
 template <>
@@ -97,13 +93,9 @@ struct VarUtil<Sophus::SE3d> {
     value = Sophus::SE3d::exp(step) * value;
   }
 
-  static double* dataPtr(Sophus::SE3d& value) {
-    return value.data();
-  }
+  static double* dataPtr(Sophus::SE3d& value) { return value.data(); }
 
-  static const double* dataPtr(const Sophus::SE3d& value) {
-    return value.data();
-  }
+  static const double* dataPtr(const Sophus::SE3d& value) { return value.data(); }
 };
 
 // Generic variable class
@@ -119,13 +111,12 @@ class Variable : public VarBase {
   static constexpr int DataDim = VarUtil<DataType>::DataDim;
   static constexpr int TangentDim = VarUtil<DataType>::TangentDim;
 
-  void setConstant(bool constant) {
-    index = constant ? kConstantVar : kUnsetIndex;
-  }
+  void setConstant(bool constant) { index = constant ? kConstantVar : kUnsetIndex; }
 
-  bool isOptimized() const {
-    return index >= 0;
-  }
+  bool isOptimized() const { return index >= 0; }
+
+  template <typename... Args>
+  Variable(Args&&... args) : value(std::forward<Args>(args)...) {}
 
   DataType value;
   uint64_t index = kUnsetIndex;
@@ -136,9 +127,8 @@ class VariableStoreBase {
  public:
   virtual ~VariableStoreBase() {}
 
-  virtual void applyStep(
-      const Eigen::VectorXd& step,
-      const BaSpaCho::PermutedCoalescedAccessor& acc) = 0;
+  virtual void applyStep(const Eigen::VectorXd& step,
+                         const BaSpaCho::PermutedCoalescedAccessor& acc) = 0;
 
   virtual int64_t totalSize() const = 0;
 
@@ -154,9 +144,7 @@ class VariableStore : public VariableStoreBase {
  public:
   virtual ~VariableStore() {}
 
-  virtual int64_t totalSize() const override {
-    return Variable::DataDim * variables.size();
-  }
+  virtual int64_t totalSize() const override { return Variable::DataDim * variables.size(); }
 
   virtual double* backup(double* data) const override {
     for (auto var : variables) {
@@ -180,9 +168,8 @@ class VariableStore : public VariableStoreBase {
     return data;
   }
 
-  virtual void applyStep(
-      const Eigen::VectorXd& step,
-      const BaSpaCho::PermutedCoalescedAccessor& acc) override {
+  virtual void applyStep(const Eigen::VectorXd& step,
+                         const BaSpaCho::PermutedCoalescedAccessor& acc) override {
     for (auto var : variables) {
       VarUtil<typename Variable::DataType>::tangentStep(
           step.segment<Variable::TangentDim>(acc.paramStart(var->index)), var->value);
@@ -206,15 +193,12 @@ class FactorStoreBase {
 
   virtual double computeCost() = 0;
 
-  virtual double computeGradHess(
-      double* gradData,
-      const BaSpaCho::PermutedCoalescedAccessor& acc,
-      double* hessData) = 0;
+  virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
+                                 double* hessData) = 0;
 
-  virtual void registerVariables(
-      std::vector<int64_t>& sizes,
-      std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
-      TypedStore<VariableStoreBase>& varStores) = 0;
+  virtual void registerVariables(std::vector<int64_t>& sizes,
+                                 std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
+                                 TypedStore<VariableStoreBase>& varStores) = 0;
 };
 
 template <typename Factor, typename SoftLoss, typename... Variables>
@@ -228,27 +212,22 @@ class FactorStore : public FactorStoreBase {
 
   double computeSingleCost(int64_t i) {
     auto [factor, loss, args] = boundFactors[i];
-    ErrorType err = std::apply( // expanding argument pack...
-        [&](auto&&... args) { return factor(args->value..., (args, nullptr)...); },
-        args);
-    return loss->val(err.squaredNorm());
+    ErrorType err = std::apply(  // expanding argument pack...
+        [&](auto&&... args) { return factor(args->value..., (args, nullptr)...); }, args);
+    return loss->val(err.squaredNorm()) * 0.5;
   }
 
-  double computeSingleGradHess(
-      int64_t i,
-      double* gradData,
-      const BaSpaCho::PermutedCoalescedAccessor& acc,
-      double* hessData) {
+  double computeSingleGradHess(int64_t i, double* gradData,
+                               const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) {
     auto [factor, loss, args] = boundFactors[i];
 
     std::tuple<Eigen::Matrix<double, ErrorSize, Variables::TangentDim>...> jacobians;
-    ErrorType err = withTuple<0, sizeof...(Variables)>( // expanding argument pack...
+    ErrorType err = withTuple<0, sizeof...(Variables)>(  // expanding argument pack...
         [&](auto... iWraps) {
-          return factor(
-              std::get<decltype(iWraps)::value>(args)->value...,
-              (std::get<decltype(iWraps)::value>(args)->index == kConstantVar
-                   ? nullptr
-                   : &std::get<decltype(iWraps)::value>(jacobians))...);
+          return factor(std::get<decltype(iWraps)::value>(args)->value...,
+                        (std::get<decltype(iWraps)::value>(args)->index == kConstantVar
+                             ? nullptr
+                             : &std::get<decltype(iWraps)::value>(jacobians))...);
         });
     auto [softErr, dSoftErr] = loss->jet2(err.squaredNorm());
 
@@ -283,7 +262,7 @@ class FactorStore : public FactorStoreBase {
       });
     });
 
-    return softErr;
+    return softErr * 0.5;
   }
 
   virtual double computeCost() override {
@@ -294,10 +273,8 @@ class FactorStore : public FactorStoreBase {
     return retv;
   }
 
-  virtual double computeGradHess(
-      double* gradData,
-      const BaSpaCho::PermutedCoalescedAccessor& acc,
-      double* hessData) override {
+  virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
+                                 double* hessData) override {
     double retv = 0;
     for (size_t i = 0; i < boundFactors.size(); i++) {
       retv += computeSingleGradHess(i, gradData, acc, hessData);
@@ -305,10 +282,9 @@ class FactorStore : public FactorStoreBase {
     return retv;
   }
 
-  virtual void registerVariables(
-      std::vector<int64_t>& sizes,
-      std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
-      TypedStore<VariableStoreBase>& varStores) {
+  virtual void registerVariables(std::vector<int64_t>& sizes,
+                                 std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
+                                 TypedStore<VariableStoreBase>& varStores) {
     forEach<0, sizeof...(Variables)>([&, this](auto iWrap) {
       static constexpr int i = decltype(iWrap)::value;
       using Variable =
@@ -347,21 +323,21 @@ class Optimizer {
  public:
   TypedStore<FactorStoreBase> factorStores;
   TypedStore<VariableStoreBase> variableStores;
-  std::vector<int64_t> paramSize;
+  std::vector<int64_t> paramSizes;
   std::vector<int64_t> elimRanges;
   TrivialLoss defaultLoss;
 
   template <typename Factor, typename SoftLoss, typename... Variables>
-  std::enable_if_t<std::is_base_of_v<Loss, SoftLoss>>
-  addFactor(Factor&& f, const SoftLoss& l, Variables&... v) {
+  std::enable_if_t<std::is_base_of_v<Loss, SoftLoss>> addFactor(Factor&& f, const SoftLoss& l,
+                                                                Variables&... v) {
     static_assert((std::is_base_of_v<VarBase, Variables> && ...));
     auto& store = factorStores.get<FactorStore<Factor, SoftLoss, Variables...>>();
     store.boundFactors.emplace_back(std::move(f), &l, std::make_tuple(&v...));
   }
 
   template <typename Factor, typename Variable0, typename... Variables>
-  std::enable_if_t<!std::is_base_of_v<Loss, Variable0>>
-  addFactor(Factor&& f, Variable0& v0, Variables&... v) {
+  std::enable_if_t<!std::is_base_of_v<Loss, Variable0>> addFactor(Factor&& f, Variable0& v0,
+                                                                  Variables&... v) {
     static_assert(
         (std::is_base_of_v<VarBase, Variable0> && ... && std::is_base_of_v<VarBase, Variables>));
     auto& store = factorStores.get<FactorStore<Factor, TrivialLoss, Variable0, Variables...>>();
@@ -371,8 +347,8 @@ class Optimizer {
   template <typename Variable>
   void registerVariable(Variable& v) {
     if (v.index == kUnsetIndex) {
-      v.index = paramSize.size();
-      paramSize.push_back(Variable::TangentDim);
+      v.index = paramSizes.size();
+      paramSizes.push_back(Variable::TangentDim);
       variableStores.get<VariableStore<Variable>>().variables.push_back(&v);
     }
   }
@@ -381,13 +357,11 @@ class Optimizer {
     if (elimRanges.empty()) {
       elimRanges.push_back(0);
     }
-    elimRanges.push_back(paramSize.size());
+    elimRanges.push_back(paramSizes.size());
   }
 
-  double computeGradHess(
-      double* gradData,
-      const BaSpaCho::PermutedCoalescedAccessor& acc,
-      double* hessData) {
+  double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
+                         double* hessData) {
     double retv = 0.0;
     for (auto& [ti, fStore] : factorStores.stores) {
       retv += fStore->computeGradHess(gradData, acc, hessData);
@@ -431,46 +405,119 @@ class Optimizer {
     }
   }
 
-  void addDamping(
-      Eigen::VectorXd& hess,
-      const BaSpaCho::PermutedCoalescedAccessor& acc,
-      int64_t nVars,
-      double lambda) {
+  void addDamping(Eigen::VectorXd& hess, const BaSpaCho::PermutedCoalescedAccessor& acc,
+                  int64_t nVars, double lambda) {
     for (int64_t i = 0; i < nVars; i++) {
       auto diag = acc.diagBlock(hess.data(), i).diagonal();
       diag *= (1.0 + lambda);
     }
   }
 
-  void optimize() {
-    // collect variable sizes and lower off-diagonal blocks
+  // creates a solver
+  BaSpaCho::SolverPtr initSolver() {
+    // collect variable sizes and (lower) off-diagonal blocks that need to be set
     std::unordered_set<std::pair<int64_t, int64_t>, pair_hash> blockSet;
     for (auto& [ti, fStore] : factorStores.stores) {
-      fStore->registerVariables(paramSize, blockSet, variableStores);
+      fStore->registerVariables(paramSizes, blockSet, variableStores);
     }
     std::vector<std::pair<int64_t, int64_t>> blocks(blockSet.begin(), blockSet.end());
     std::sort(blocks.begin(), blocks.end());
 
-    // create a csr block structure
+    // create a csr structure for the parameter blocks
     std::vector<int64_t> ptrs{0}, inds;
     int64_t curRow = 0;
     for (auto [row, col] : blocks) {
       while (curRow < row) {
-        inds.push_back(curRow); // diagonal
+        inds.push_back(curRow);  // diagonal
         ptrs.push_back(inds.size());
         curRow++;
       }
       inds.push_back(col);
     }
-    while (curRow < paramSize.size()) {
-      inds.push_back(curRow); // diagonal
+    while (curRow < paramSizes.size()) {
+      inds.push_back(curRow);  // diagonal
       ptrs.push_back(inds.size());
       curRow++;
     }
 
     // create sparse linear solver
-    BaSpaCho::SolverPtr solver = createSolver(
-        {}, paramSize, BaSpaCho::SparseStructure(std::move(ptrs), std::move(inds)), elimRanges);
+    return createSolver({}, paramSizes, BaSpaCho::SparseStructure(std::move(ptrs), std::move(inds)),
+                        elimRanges);
+  }
+
+  // creates a preconditioner for solving the
+  std::unique_ptr<Preconditioner<double>> initPreconditioner(const BaSpaCho::Solver& solver,
+                                                             int paramStart,
+                                                             const std::string& type) {
+    if (paramStart == solver.skel().numSpans()) {
+      return std::unique_ptr<Preconditioner<double>>();
+    } else if (type == "none") {
+      return std::make_unique<IdentityPrecond<double>>(solver, paramStart);
+    } else if (type == "jacobi") {
+      return std::make_unique<BlockJacobiPrecond<double>>(solver, paramStart);
+    } else if (type == "jacobi") {
+      return std::make_unique<BlockGaussSeidelPrecond<double>>(solver, paramStart);
+    } else if (type == "lower-prec-solve") {
+      return std::make_unique<LowerPrecSolvePrecond<double>>(solver, paramStart);
+    } else {
+      throw std::runtime_error("Unknown preconditioner '" + type + "'");
+    }
+  }
+
+  std::function<void(Eigen::VectorXd&)> solveFunction(BaSpaCho::Solver& solver,
+                                                      Eigen::VectorXd& hess, int iterativeStart,
+                                                      const std::string& precondType) {
+    if (iterativeStart == solver.skel().numSpans()) {
+      return [&](Eigen::VectorXd& vec) -> void {
+        solver.factor(hess.data());
+        solver.solve(hess.data(), vec.data(), solver.order(), 1);
+      };
+    } else {
+      std::shared_ptr<Preconditioner<double>> precond;
+      if (precondType == "none") {
+        precond = std::make_shared<IdentityPrecond<double>>(solver, iterativeStart);
+      } else if (precondType == "jacobi") {
+        precond = std::make_shared<BlockJacobiPrecond<double>>(solver, iterativeStart);
+      } else if (precondType == "gauss-seidel") {
+        precond = std::make_shared<BlockGaussSeidelPrecond<double>>(solver, iterativeStart);
+      } else if (precondType == "lower-prec-solve") {
+        precond = std::make_shared<LowerPrecSolvePrecond<double>>(solver, iterativeStart);
+      } else {
+        throw std::runtime_error("Unknown preconditioner '" + precondType + "'");
+      }
+
+      int64_t order = solver.order();
+      int64_t secStart = solver.paramVecDataStart(iterativeStart);
+      int64_t secSize = order - secStart;
+      auto pcg = std::make_shared<PCG>(
+          [precond = precond](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
+            u.resize(v.size());
+            (*precond)(u.data(), v.data());
+          },
+          [&, order, secStart](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
+            u.resize(v.size());
+            u.setZero();
+            solver.addMvFrom(hess.data(), iterativeStart, v.data() - secStart, order,
+                             u.data() - secStart, order, 1);
+          },
+          1e-10, 40, true);
+
+      return [&, pcg = pcg, order, secStart, secSize](Eigen::VectorXd& vec) -> void {
+        solver.factorUpTo(hess.data(), iterativeStart);
+        solver.solveLUpTo(hess.data(), iterativeStart, vec.data(), order, 1);
+
+        Eigen::VectorXd tmp;
+        pcg->solve(tmp, vec.segment(secStart, secSize));
+        vec.segment(secStart, secSize) = tmp;
+
+        solver.solveLtUpTo(hess.data(), iterativeStart, vec.data(), order, 1);
+      };
+    }
+  }
+
+  void optimize() {
+    // create sparse linear solver
+    BaSpaCho::SolverPtr solver = initSolver();
     auto accessor = solver->accessor();
 
     // linear system data
@@ -478,6 +525,7 @@ class Optimizer {
     Eigen::VectorXd grad(solver->order());
     Eigen::VectorXd hess(solver->dataSize());
     Eigen::VectorXd step(solver->order());
+    auto solveFunc = solveFunction(*solver, hess, solver->skel().numSpans(), "jacobi");
 
     // iteration loop
     while (true) {
