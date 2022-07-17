@@ -9,16 +9,13 @@
 namespace BaSpaCho {
 
 struct Solver {
-  Solver(CoalescedBlockMatrixSkel&& factorSkel,
-         std::vector<int64_t>&& elimLumpRanges,
-         std::vector<int64_t>&& permutation, int64_t canFactorUpTo,
-         OpsPtr&& ops);
+  Solver(CoalescedBlockMatrixSkel&& factorSkel, std::vector<int64_t>&& elimLumpRanges,
+         std::vector<int64_t>&& permutation, int64_t canFactorUpTo, OpsPtr&& ops);
 
-  Solver(CoalescedBlockMatrixSkel&& factorSkel,
-         std::vector<int64_t>&& elimLumpRanges,
+  Solver(CoalescedBlockMatrixSkel&& factorSkel, std::vector<int64_t>&& elimLumpRanges,
          std::vector<int64_t>&& permutation, OpsPtr&& ops)
-      : Solver(std::move(factorSkel), std::move(elimLumpRanges),
-               std::move(permutation), -1, std::move(ops)) {}
+      : Solver(std::move(factorSkel), std::move(elimLumpRanges), std::move(permutation), -1,
+               std::move(ops)) {}
 
   PermutedCoalescedAccessor accessor() const {
     PermutedCoalescedAccessor retv;
@@ -26,9 +23,7 @@ struct Solver {
     return retv;
   }
 
-  PermutedCoalescedAccessor deviceAccessor() const {
-    return symCtx->deviceAccessor();
-  }
+  PermutedCoalescedAccessor deviceAccessor() const { return symCtx->deviceAccessor(); }
 
   void printStats() const;
 
@@ -50,32 +45,26 @@ struct Solver {
   void factorUpTo(T* data, int64_t paramIndex, bool verbose = false) const;
 
   template <typename T>
-  void solveLUpTo(const T* data, int64_t paramIndex, T* vecData, int64_t stride,
-                  int nRHS) const;
+  void solveLUpTo(const T* data, int64_t paramIndex, T* vecData, int64_t stride, int nRHS) const;
 
   template <typename T>
-  void solveLtUpTo(const T* data, int64_t paramIndex, T* vecData,
-                   int64_t stride, int nRHS) const;
+  void solveLtUpTo(const T* data, int64_t paramIndex, T* vecData, int64_t stride, int nRHS) const;
 
   template <typename T>
-  void addMvFrom(const T* matData, int64_t paramIndex, const T* inVecData,
-                 int64_t inStride, T* outVecData, int64_t outStride, int nRHS,
-                 BaseType<T> alpha = 1.0) const;
+  void addMvFrom(const T* matData, int64_t paramIndex, const T* inVecData, int64_t inStride,
+                 T* outVecData, int64_t outStride, int nRHS, BaseType<T> alpha = 1.0) const;
 
   template <typename T>
-  void pseudoFactorFrom(T* data, int64_t paramIndex,
-                        bool verbose = false) const;
+  void pseudoFactorFrom(T* data, int64_t paramIndex, bool verbose = false) const;
 
   template <typename T>
   void factorFrom(T* data, int64_t paramIndex, bool verbose = false) const;
 
   template <typename T>
-  void solveLFrom(const T* data, int64_t paramIndex, T* vecData, int64_t stride,
-                  int nRHS) const;
+  void solveLFrom(const T* data, int64_t paramIndex, T* vecData, int64_t stride, int nRHS) const;
 
   template <typename T>
-  void solveLtFrom(const T* data, int64_t paramIndex, T* vecData,
-                   int64_t stride, int nRHS) const;
+  void solveLtFrom(const T* data, int64_t paramIndex, T* vecData, int64_t stride, int nRHS) const;
 
   int64_t order() const { return factorSkel.order(); }
 
@@ -95,6 +84,17 @@ struct Solver {
 
   const CoalescedBlockMatrixSkel& skel() const { return factorSkel; }
 
+  const std::vector<int64_t>& sparseEliminationLumpRanges() const { return elimLumpRanges; }
+
+  const std::vector<int64_t>& paramPermutation() const { return permutation; }
+
+  SymbolicCtx& internalSymbolicContext() { return *symCtx; }
+
+  SymElimCtx& internalGetElimCtx(size_t i) {
+    BASPACHO_CHECK_LT(i, elimCtxs.size());
+    return *elimCtxs[i];
+  }
+
  private:
   void initElimination();
 
@@ -107,20 +107,17 @@ struct Solver {
   void eliminateBoard(NumericCtx<T>& numCtx, T* data, int64_t ptr) const;
 
   template <typename T>
-  void internalFactorRange(T* data, int64_t startParamIndex,
-                           int64_t endParamIndex, bool verbose = false) const;
+  void internalFactorRange(T* data, int64_t startParamIndex, int64_t endParamIndex,
+                           bool verbose = false) const;
 
   template <typename T>
-  void internalSolveLRange(SolveCtx<T>& slvCtx, const T* data,
-                           int64_t startParamIndex, int64_t endParamIndex,
-                           T* vecData, int64_t stride) const;
+  void internalSolveLRange(SolveCtx<T>& slvCtx, const T* data, int64_t startParamIndex,
+                           int64_t endParamIndex, T* vecData, int64_t stride) const;
 
   template <typename T>
-  void internalSolveLtRange(SolveCtx<T>& slvCtx, const T* data,
-                            int64_t startParamIndex, int64_t endParamIndex,
-                            T* vecData, int64_t stride) const;
+  void internalSolveLtRange(SolveCtx<T>& slvCtx, const T* data, int64_t startParamIndex,
+                            int64_t endParamIndex, T* vecData, int64_t stride) const;
 
- public:
   CoalescedBlockMatrixSkel factorSkel;
   std::vector<int64_t> elimLumpRanges;
   std::vector<int64_t> permutation;  // *on indices*: v'[p[i]] = v[i];
@@ -155,10 +152,8 @@ struct Settings {
   AddFillPolicy addFillPolicy = AddFillComplete;
 };
 
-SolverPtr createSolver(const Settings& settings,
-                       const std::vector<int64_t>& paramSize,
-                       const SparseStructure& ss,
-                       const std::vector<int64_t>& elimLumpRanges = {},
+SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& paramSize,
+                       const SparseStructure& ss, const std::vector<int64_t>& elimLumpRanges = {},
                        const std::unordered_set<int64_t>& elimLastIds = {});
 
 }  // end namespace BaSpaCho

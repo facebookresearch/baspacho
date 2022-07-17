@@ -1,7 +1,6 @@
 
 #include <chrono>
 #include <iomanip>
-
 #include "baspacho/baspacho/Solver.h"
 #include "baspacho/baspacho/Utils.h"
 #include "baspacho/benchmarking/BaAtLarge.h"
@@ -70,8 +69,8 @@ struct Optimizer {
       auto& pt = data.points[obs.ptIdx];
       Eigen::Matrix<double, 2, 3> ptJac;
       Eigen::Matrix<double, 2, 6> camJac;
-      Vec2 err = Cost::compute_residual(obs.imgPos, pt, cam.T_W_C, cam.f_k1_k2,
-                                        &ptJac, &camJac, nullptr);
+      Vec2 err =
+          Cost::compute_residual(obs.imgPos, pt, cam.T_W_C, cam.f_k1_k2, &ptJac, &camJac, nullptr);
 
       int64_t ptId = obs.ptIdx;
       int64_t camId = numPts + obs.camIdx;
@@ -105,8 +104,8 @@ struct Optimizer {
       auto& pt = data.points[obs.ptIdx];
       Eigen::Matrix<double, 2, 3> ptJac;
       Eigen::Matrix<double, 2, 6> camJac;
-      Vec2 err = Cost::compute_residual(obs.imgPos, pt, cam.T_W_C, cam.f_k1_k2,
-                                        &ptJac, &camJac, nullptr);
+      Vec2 err =
+          Cost::compute_residual(obs.imgPos, pt, cam.T_W_C, cam.f_k1_k2, &ptJac, &camJac, nullptr);
       totCost += 0.5 * err.squaredNorm();
 
       int64_t ptId = obs.ptIdx;
@@ -135,9 +134,9 @@ struct Optimizer {
     auto now = hrc::now();
     double factorTime = tdelta(startSolve - startFactor).count();
     double schurTime =  // "Schur" is first sparse elim range
-        solver->elimCtxs[0]->elimStat.totTime;
-    cout << fixed << setprecision(3) << "  <timings - costs: "
-         << tdelta(startFactor - startGradHess).count()
+        solver->internalGetElimCtx(0).elimStat.totTime;
+    cout << fixed << setprecision(3)
+         << "  <timings - costs: " << tdelta(startFactor - startGradHess).count()
          << "s, factor: " << factorTime << "s (points elim: " << schurTime
          << "s, cam-cam: " << (factorTime - schurTime)
          << "s), solve: " << tdelta(now - startSolve).count() << "s>" << endl;
@@ -173,9 +172,8 @@ struct Optimizer {
     }
     for (int64_t i = numPts; i < totNumParams; i++) {
       BASPACHO_CHECK_LE(accessor.paramStart(i) + 6, step.size());
-      data.cameras[i - numPts].T_W_C =
-          Sophus::SE3d::exp(-step.segment<6>(accessor.paramStart(i))) *
-          data.cameras[i - numPts].T_W_C;
+      data.cameras[i - numPts].T_W_C = Sophus::SE3d::exp(-step.segment<6>(accessor.paramStart(i))) *
+                                       data.cameras[i - numPts].T_W_C;
     }
   }
 
@@ -192,8 +190,7 @@ struct Optimizer {
 
       bool bad = newCost > cost;
       bool good = newCost < cost * 0.999;
-      cout << "[" << i << "] cost: " << scientific << setprecision(3) << cost
-           << " -> " << newCost
+      cout << "[" << i << "] cost: " << scientific << setprecision(3) << cost << " -> " << newCost
            << (good  ? "!"
                : bad ? "?"
                      : "~");
@@ -221,8 +218,8 @@ struct Optimizer {
       } else if (relRed < 0.4) {
         lambda *= 1.3;
       }
-      cout << " -> " << lambda << ", model-red: " << setprecision(2) << modelRed
-           << fixed << ", rel-red: " << relRed << endl;
+      cout << " -> " << lambda << ", model-red: " << setprecision(2) << modelRed << fixed
+           << ", rel-red: " << relRed << endl;
       if (i >= lastGood + 3 && i >= lastFailed + 3) {
         cout << "converged!" << endl;
         break;

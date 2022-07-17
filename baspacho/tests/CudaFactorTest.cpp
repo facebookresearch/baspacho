@@ -1,12 +1,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
 #include <Eigen/Eigenvalues>
 #include <iostream>
 #include <numeric>
 #include <random>
 #include <sstream>
-
 #include "baspacho/baspacho/CoalescedBlockMatrix.h"
 #include "baspacho/baspacho/CudaDefs.h"
 #include "baspacho/baspacho/EliminationTree.h"
@@ -39,14 +37,11 @@ struct Epsilon<float> {
 template <typename T>
 void testCoalescedFactor(OpsPtr&& ops) {
   vector<set<int64_t>> colBlocks{{0, 3, 5}, {1}, {2, 4}, {3}, {4}, {5}};
-  SparseStructure ss =
-      columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
+  SparseStructure ss = columnsToCscStruct(colBlocks).transpose().addFullEliminationFill();
   vector<int64_t> spanStart{0, 2, 5, 7, 10, 12, 15};
   vector<int64_t> lumpToSpan{0, 2, 4, 6};
-  SparseStructure groupedSs =
-      columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
-  CoalescedBlockMatrixSkel factorSkel(spanStart, lumpToSpan, groupedSs.ptrs,
-                                      groupedSs.inds);
+  SparseStructure groupedSs = columnsToCscStruct(joinColums(csrStructToColumns(ss), lumpToSpan));
+  CoalescedBlockMatrixSkel factorSkel(spanStart, lumpToSpan, groupedSs.ptrs, groupedSs.inds);
 
   vector<T> data(factorSkel.dataSize());
   iota(data.begin(), data.end(), 13);
@@ -69,20 +64,13 @@ void testCoalescedFactor(OpsPtr&& ops) {
   cout << "Verif:\n" << verifyMat << endl;
   cout << "Cmptd:\n" << computedMat << endl;
 
-  ASSERT_NEAR(
-      Matrix<T>(
-          (verifyMat - computedMat).template triangularView<Eigen::Lower>())
-          .norm(),
-      0, Epsilon<T>::value);
+  ASSERT_NEAR(Matrix<T>((verifyMat - computedMat).template triangularView<Eigen::Lower>()).norm(),
+              0, Epsilon<T>::value);
 }
 
-TEST(CudaFactor, CoalescedFactor_double) {
-  testCoalescedFactor<double>(cudaOps());
-}
+TEST(CudaFactor, CoalescedFactor_double) { testCoalescedFactor<double>(cudaOps()); }
 
-TEST(CudaFactor, CoalescedFactor_float) {
-  testCoalescedFactor<float>(cudaOps());
-}
+TEST(CudaFactor, CoalescedFactor_float) { testCoalescedFactor<float>(cudaOps()); }
 
 template <typename T>
 void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
@@ -94,15 +82,14 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
     vector<int64_t> invPerm = inversePermutation(permutation);
     SparseStructure sortedSs = ss.symmetricPermutation(invPerm, false);
 
-    vector<int64_t> paramSize =
-        randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
+    vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
     et.computeMerges(/* compute sparse elim ranges = */ false);
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
     factorSkel.damp(data, T(0), T(factorSkel.order() * 1.5));
@@ -121,11 +108,8 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
 
     Matrix<T> computedMat = solver.skel().densify(data);
 
-    ASSERT_NEAR(
-        Matrix<T>(
-            (verifyMat - computedMat).template triangularView<Eigen::Lower>())
-            .norm(),
-        0, Epsilon<T>::value2);
+    ASSERT_NEAR(Matrix<T>((verifyMat - computedMat).template triangularView<Eigen::Lower>()).norm(),
+                0, Epsilon<T>::value2);
   }
 }
 
@@ -148,15 +132,14 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     vector<int64_t> invPerm = inversePermutation(permutation);
     SparseStructure sortedSs = ss;
 
-    vector<int64_t> paramSize =
-        randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
+    vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
     et.computeMerges(/* compute sparse elim ranges = */ true);
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
     factorSkel.damp(data, T(0), T(factorSkel.order() * 1.5));
@@ -173,18 +156,16 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     // call doElimination with data on device
     {
       DevMirror<T> dataGpu(data);
-      numCtx->doElimination(*solver.elimCtxs[0], dataGpu.ptr, 0, largestIndep);
+      numCtx->doElimination(solver.internalGetElimCtx(0), dataGpu.ptr, 0, largestIndep);
       dataGpu.get(data);
     }
 
     Matrix<T> computedMat = solver.skel().densify(data);
 
-    ASSERT_NEAR(
-        Matrix<T>(
-            (verifyMat - computedMat).template triangularView<Eigen::Lower>())
-            .leftCols(largestIndep)
-            .norm(),
-        0, Epsilon<T>::value);
+    ASSERT_NEAR(Matrix<T>((verifyMat - computedMat).template triangularView<Eigen::Lower>())
+                    .leftCols(largestIndep)
+                    .norm(),
+                0, Epsilon<T>::value);
   }
 }
 
@@ -207,15 +188,14 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
     vector<int64_t> invPerm = inversePermutation(permutation);
     SparseStructure sortedSs = ss;
 
-    vector<int64_t> paramSize =
-        randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
+    vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
     et.computeMerges(/* compute sparse elim ranges = */ true);
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
     factorSkel.damp(data, T(0), T(factorSkel.order() * 1.5));
@@ -235,11 +215,8 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
     }
 
     Matrix<T> computedMat = solver.skel().densify(data);
-    ASSERT_NEAR(
-        Matrix<T>(
-            (verifyMat - computedMat).template triangularView<Eigen::Lower>())
-            .norm(),
-        0, Epsilon<T>::value2);
+    ASSERT_NEAR(Matrix<T>((verifyMat - computedMat).template triangularView<Eigen::Lower>()).norm(),
+                0, Epsilon<T>::value2);
   }
 }
 

@@ -5,7 +5,6 @@
 #include <map>
 #include <random>
 #include <regex>
-
 #include "baspacho/baspacho/DebugMacros.h"
 #include "baspacho/baspacho/Solver.h"
 #include "baspacho/testing/TestingMatGen.h"
@@ -44,10 +43,8 @@ void bangGpu() {
     void* ptr;
     vector<uint8_t> bytes(100000);
     cuCHECK(cudaMalloc(&ptr, bytes.size() * sizeof(uint8_t)));
-    cuCHECK(cudaMemcpy(ptr, bytes.data(), bytes.size() * sizeof(uint8_t),
-                       cudaMemcpyHostToDevice));
-    cuCHECK(cudaMemcpy(bytes.data(), ptr, bytes.size() * sizeof(uint8_t),
-                       cudaMemcpyDeviceToHost));
+    cuCHECK(cudaMemcpy(ptr, bytes.data(), bytes.size() * sizeof(uint8_t), cudaMemcpyHostToDevice));
+    cuCHECK(cudaMemcpy(bytes.data(), ptr, bytes.size() * sizeof(uint8_t), cudaMemcpyDeviceToHost));
     cuCHECK(cudaFree(ptr));
     cublasHandle_t cublasH = nullptr;
     cusolverDnHandle_t cusolverDnH = nullptr;
@@ -60,10 +57,8 @@ void bangGpu() {
 }
 #endif
 
-BenchResults benchmarkSolver(const SparseProblem& prob,
-                             const Settings& settings,
-                             const std::vector<int64_t> nRHSs = {},
-                             bool verbose = true) {
+BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings,
+                             const std::vector<int64_t> nRHSs = {}, bool verbose = true) {
 #ifdef BASPACHO_USE_CUBLAS
   if (settings.backend == BackendCuda) {
     bangGpu();
@@ -75,10 +70,8 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
   double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
   // generate mock data, make positive def
-  vector<double> data =
-      randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-  solver->factorSkel.damp(data, double(0),
-                          double(solver->factorSkel.order() * 1.2));
+  vector<double> data = randomData(solver->dataSize(), -1.0, 1.0, 37);
+  solver->skel().damp(data, double(0), double(solver->order() * 1.2));
 
   double factorTime;
   std::map<int64_t, double> solveTimes;
@@ -90,8 +83,7 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
     factorTime = tdelta(hrc::now() - startFactor).count();
 
     for (int64_t nRHS : nRHSs) {
-      vector<double> vecData =
-          randomData(nRHS * solver->order(), -1.0, 1.0, 38);
+      vector<double> vecData = randomData(nRHS * solver->order(), -1.0, 1.0, 38);
       DevMirror vecDataGpu(vecData);
 
       // heat up
@@ -110,8 +102,7 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
     factorTime = tdelta(hrc::now() - startFactor).count();
 
     for (int64_t nRHS : nRHSs) {
-      vector<double> vecData =
-          randomData(nRHS * solver->order(), -1.0, 1.0, 38);
+      vector<double> vecData = randomData(nRHS * solver->order(), -1.0, 1.0, 38);
 
       // heat up
       vector<double> vecDataCp = vecData;
@@ -125,7 +116,7 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
 
   if (verbose) {
     solver->printStats();
-    cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges) << endl;
+    cout << "sparse elim ranges: " << printVec(solver->sparseEliminationLumpRanges()) << endl;
   }
 
   BenchResults retv;
@@ -136,9 +127,8 @@ BenchResults benchmarkSolver(const SparseProblem& prob,
 }
 
 #ifdef BASPACHO_USE_CUBLAS
-BenchResults benchmarkSolverBatched(const SparseProblem& prob,
-                                    const Settings& settings, int batchSize,
-                                    const std::vector<int64_t> nRHSs = {},
+BenchResults benchmarkSolverBatched(const SparseProblem& prob, const Settings& settings,
+                                    int batchSize, const std::vector<int64_t> nRHSs = {},
                                     bool verbose = true) {
   bangGpu();
 
@@ -152,9 +142,8 @@ BenchResults benchmarkSolverBatched(const SparseProblem& prob,
   vector<DevMirror<double>> datasGpu(batchSize);
   vector<double*> datasPtr(batchSize);
   for (int q = 0; q < batchSize; q++) {
-    datas[q] =
-        randomData<double>(solver->factorSkel.dataSize(), -1.0, 1.0, 37 + q);
-    solver->factorSkel.damp(datas[q], double(0), double(order * 1.3));
+    datas[q] = randomData<double>(solver->dataSize(), -1.0, 1.0, 37 + q);
+    solver->skel().damp(datas[q], double(0), double(order * 1.3));
     datasGpu[q].load(datas[q]);
     datasPtr[q] = datasGpu[q].ptr;
   }
@@ -190,7 +179,7 @@ BenchResults benchmarkSolverBatched(const SparseProblem& prob,
 
   if (verbose) {
     solver->printStats();
-    cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges) << endl;
+    cout << "sparse elim ranges: " << printVec(solver->sparseEliminationLumpRanges()) << endl;
   }
 
   BenchResults retv;
@@ -201,8 +190,7 @@ BenchResults benchmarkSolverBatched(const SparseProblem& prob,
 }
 #endif  // BASPACHO_USE_CUBLAS
 
-SparseProblem matGenToSparseProblem(SparseMatGenerator& gen, int64_t pSizeMin,
-                                    int64_t pSizeMax) {
+SparseProblem matGenToSparseProblem(SparseMatGenerator& gen, int64_t pSizeMin, int64_t pSizeMax) {
   SparseProblem retv;
   retv.sparseStruct = columnsToCscStruct(gen.columns).transpose();
   if (pSizeMin == pSizeMax) {
@@ -249,26 +237,22 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
     // base is grid
     {"30_GRID_size=100x100_fill=1.0_conn=2_bsize=3",
      [](int64_t seed) -> SparseProblem {
-       SparseMatGenerator gen =
-           SparseMatGenerator::genGrid(100, 100, 1.0, 2, seed);
+       SparseMatGenerator gen = SparseMatGenerator::genGrid(100, 100, 1.0, 2, seed);
        return matGenToSparseProblem(gen, 3, 3);
      }},  //
     {"31_GRID_size=150x150_fill=1.0_conn=2_bsize=3",
      [](int64_t seed) -> SparseProblem {
-       SparseMatGenerator gen =
-           SparseMatGenerator::genGrid(150, 150, 1.0, 2, seed);
+       SparseMatGenerator gen = SparseMatGenerator::genGrid(150, 150, 1.0, 2, seed);
        return matGenToSparseProblem(gen, 3, 3);
      }},  //
     {"32_GRID_size=200x200_fill=0.25_conn=2_bsize=3",
      [](int64_t seed) -> SparseProblem {
-       SparseMatGenerator gen =
-           SparseMatGenerator::genGrid(200, 200, 0.25, 2, seed);
+       SparseMatGenerator gen = SparseMatGenerator::genGrid(200, 200, 0.25, 2, seed);
        return matGenToSparseProblem(gen, 3, 3);
      }},  //
     {"33_GRID_size=200x200_fill=0.05_conn=3_bsize=3",
      [](int64_t seed) -> SparseProblem {
-       SparseMatGenerator gen =
-           SparseMatGenerator::genGrid(150, 150, 0.05, 3, seed);
+       SparseMatGenerator gen = SparseMatGenerator::genGrid(150, 150, 0.05, 3, seed);
        return matGenToSparseProblem(gen, 3, 3);
      }},  //
 
@@ -287,15 +271,13 @@ map<string, function<SparseProblem(int64_t)>> problemGenerators = {
      }},  //
 };
 
-map<string, function<BenchResults(const SparseProblem&,
-                                  const std::vector<int64_t>& nRHSs, bool)>>
+map<string, function<BenchResults(const SparseProblem&, const std::vector<int64_t>& nRHSs, bool)>>
     solvers = {
 #ifdef BASPACHO_HAVE_CHOLMOD
         {"1_CHOLMOD",
          [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
             bool verbose) -> BenchResults {
-           auto result = benchmarkCholmodSolve(
-               prob.paramSize, prob.sparseStruct, nRHSs, verbose);
+           auto result = benchmarkCholmodSolve(prob.paramSize, prob.sparseStruct, nRHSs, verbose);
            BenchResults retv;
            retv.analysisTime = result.analysisTime;
            retv.factorTime = result.factorTime;
@@ -304,41 +286,34 @@ map<string, function<BenchResults(const SparseProblem&,
          }},
 #endif  // BASPACHO_HAVE_CHOLMOD
         {"2_BaSpaCho_BLAS_numthreads=16",
-         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
-            bool verbose) -> BenchResults {
-           return benchmarkSolver(prob, {}, nRHSs, verbose);
-         }},  //
+         [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs, bool verbose)
+             -> BenchResults { return benchmarkSolver(prob, {}, nRHSs, verbose); }},  //
 #ifdef BASPACHO_USE_CUBLAS
         {"3_BaSpaCho_CUDA",
          [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
             bool verbose) -> BenchResults {
            return benchmarkSolver(
-               prob,
-               {.findSparseEliminationRanges = true, .backend = BackendCuda},
-               nRHSs, verbose);
+               prob, {.findSparseEliminationRanges = true, .backend = BackendCuda}, nRHSs, verbose);
          }},
         {"4_BaSpaCho_CUDA_batchsize=4",
          [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
             bool verbose) -> BenchResults {
            return benchmarkSolverBatched(
-               prob,
-               {.findSparseEliminationRanges = true, .backend = BackendCuda},
+               prob, {.findSparseEliminationRanges = true, .backend = BackendCuda},
                /* batchsize = */ 4, nRHSs, verbose);
          }},
         {"5_BaSpaCho_CUDA_batchsize=8",
          [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
             bool verbose) -> BenchResults {
            return benchmarkSolverBatched(
-               prob,
-               {.findSparseEliminationRanges = true, .backend = BackendCuda},
+               prob, {.findSparseEliminationRanges = true, .backend = BackendCuda},
                /* batchsize = */ 8, nRHSs, verbose);
          }},
         {"6_BaSpaCho_CUDA_batchsize=16",
          [](const SparseProblem& prob, const std::vector<int64_t>& nRHSs,
             bool verbose) -> BenchResults {
            return benchmarkSolverBatched(
-               prob,
-               {.findSparseEliminationRanges = true, .backend = BackendCuda},
+               prob, {.findSparseEliminationRanges = true, .backend = BackendCuda},
                /* batchsize = */ 16, nRHSs, verbose);
          }},
 #endif  // BASPACHO_USE_CUBLAS
@@ -369,16 +344,14 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
   if (!settings.referenceSolver.empty()) {
     if (solvers.find(settings.referenceSolver) == solvers.end()) {
       std::cerr << "Solver '" << settings.referenceSolver
-                << "' does not exist or not available at compile time"
-                << std::endl;
+                << "' does not exist or not available at compile time" << std::endl;
       exit(1);
     }
   }
   int numSolversToTest = 0;
   for (auto [solvName, solv] : solvers) {
-    if (solvName != settings.referenceSolver &&
-        (!regex_search(solvName, settings.selectSolvers) ||
-         regex_search(solvName, settings.excludeSolvers))) {
+    if (solvName != settings.referenceSolver && (!regex_search(solvName, settings.selectSolvers) ||
+                                                 regex_search(solvName, settings.excludeSolvers))) {
       continue;
     }
     numSolversToTest++;
@@ -410,8 +383,8 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
 
         stringstream ss;
         ss << setfill('.') << setw(it + 1) << ""
-           << "(" << it + 1 << "/" << settings.numIterations << ", " << solvName
-           << " " << solvIdx << "/" << numSolversToTest << ")";
+           << "(" << it + 1 << "/" << settings.numIterations << ", " << solvName << " " << solvIdx
+           << "/" << numSolversToTest << ")";
         solvIdx++;
         string str = ss.str();
         int clearSize = max(0, prevLen - (int)str.size());
@@ -442,8 +415,7 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
     }
     stringstream ss;
     ss << setfill('.') << setw(settings.numIterations) << ""
-       << "(" << settings.numIterations << "/" << settings.numIterations
-       << ", done!)";
+       << "(" << settings.numIterations << "/" << settings.numIterations << ", done!)";
     string str = ss.str();
     int clearSize = max(0, prevLen - (int)str.size());
     cout << "\r" << str << setfill(' ') << setw(clearSize) << "" << endl;
@@ -454,13 +426,11 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
       }
       cout << "Operation: " << label << endl;
       auto it = solverTimings.find(settings.referenceSolver);
-      const vector<double>* refTimings =
-          (it != solverTimings.end()) ? &it->second : nullptr;
+      const vector<double>* refTimings = (it != solverTimings.end()) ? &it->second : nullptr;
       if (refTimings) {
         auto& timings = *refTimings;
         stringstream ss;
-        ss << "- " << settings.referenceSolver
-           << " (basis for comparison):\n    ";
+        ss << "- " << settings.referenceSolver << " (basis for comparison):\n    ";
         for (size_t i = 0; i < timings.size(); i++) {
           stringstream tss;
           if (timings[i] > 0.1) {
@@ -493,8 +463,7 @@ void runBenchmarks(const BenchmarkSettings& settings, int seed = 37) {
           }
           if (refTimings) {
             double percent = (timings[i] / (*refTimings)[i] - 1.0) * 100.0;
-            tss << " (" << (percent > 0 ? "+" : "") << fixed << setprecision(2)
-                << percent << "%)";
+            tss << " (" << (percent > 0 ? "+" : "") << fixed << setprecision(2) << percent << "%)";
           }
           tss << (i == timings.size() - 1 ? "" : ", ");
           ss << left << setfill(' ') << setw(20) << tss.str();
@@ -516,8 +485,7 @@ void help() {
        << "\n -R regex     [R]egex for selecting problem types"
        << "\n -X regex     regex for e[X]cluding problem types"
        << "\n -B solver    solver selected as [B]baseline"
-       << "\n -O ops       comma-sep list of operations (default: factor)"
-       << endl;
+       << "\n -O ops       comma-sep list of operations (default: factor)" << endl;
 
   cout << "\nOperations:" << endl;
   for (const auto& [label, desc] : timingLabels) {

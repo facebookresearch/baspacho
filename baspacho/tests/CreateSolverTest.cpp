@@ -1,12 +1,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
 #include <Eigen/Eigenvalues>
 #include <iostream>
 #include <numeric>
 #include <random>
 #include <sstream>
-
 #include "baspacho/baspacho/CoalescedBlockMatrix.h"
 #include "baspacho/baspacho/EliminationTree.h"
 #include "baspacho/baspacho/Solver.h"
@@ -41,7 +39,7 @@ static constexpr int64_t minNumSparseElimNodes = 50;
 
 template <typename T>
 void check(Solver& solver, int seed) {
-  cout << "elims: " << printVec(solver.elimLumpRanges) << endl;
+  cout << "elims: " << printVec(solver.sparseEliminationLumpRanges()) << endl;
   cout << "maxf: " << solver.maxFactorParam() << endl;
   cout << "nnz: " << solver.dataSize() << endl;
 
@@ -62,12 +60,9 @@ void check(Solver& solver, int seed) {
   solver.factorUpTo(data.data(), factorUpTo);
   Matrix<T> computedMat = solver.skel().densify(data);
 
-  ASSERT_NEAR(
-      Matrix<T>(
-          (verifyMat - computedMat).template triangularView<Eigen::Lower>())
-              .norm() /
-          Matrix<T>(verifyMat.template triangularView<Eigen::Lower>()).norm(),
-      0, Epsilon<T>::value2);
+  ASSERT_NEAR(Matrix<T>((verifyMat - computedMat).template triangularView<Eigen::Lower>()).norm() /
+                  Matrix<T>(verifyMat.template triangularView<Eigen::Lower>()).norm(),
+              0, Epsilon<T>::value2);
 }
 
 template <typename T>
@@ -79,49 +74,40 @@ void testCreateSolver_Many() {
     SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(ss.ptrs.size() - 1, 2, 3, 47);
 
     {
-      auto solver = createSolver(
-          {.backend = BackendRef, .addFillPolicy = AddFillComplete}, paramSize,
-          ss, {0, 100});
+      auto solver = createSolver({.backend = BackendRef, .addFillPolicy = AddFillComplete},
+                                 paramSize, ss, {0, 100});
       ASSERT_EQ(solver->maxFactorParam(), numParams);
       check<T>(*solver, 4 * i + 0);
     }
 
     {
-      auto solver = createSolver(
-          {.backend = BackendRef, .addFillPolicy = AddFillForAutoElims},
-          paramSize, ss, {0, 100});
+      auto solver = createSolver({.backend = BackendRef, .addFillPolicy = AddFillForAutoElims},
+                                 paramSize, ss, {0, 100});
       ASSERT_GE(solver->maxFactorParam(), 150);
       check<T>(*solver, 4 * i + 1);
     }
 
     {
-      auto solver = createSolver(
-          {.backend = BackendRef, .addFillPolicy = AddFillForGivenElims},
-          paramSize, ss, {0, 100});
+      auto solver = createSolver({.backend = BackendRef, .addFillPolicy = AddFillForGivenElims},
+                                 paramSize, ss, {0, 100});
       ASSERT_EQ(solver->maxFactorParam(), 100);
       check<T>(*solver, 4 * i + 2);
     }
 
     {
-      auto solver =
-          createSolver({.backend = BackendRef, .addFillPolicy = AddFillNone},
-                       paramSize, ss, {0, 100});
+      auto solver = createSolver({.backend = BackendRef, .addFillPolicy = AddFillNone}, paramSize,
+                                 ss, {0, 100});
       ASSERT_EQ(solver->maxFactorParam(), 0);
       check<T>(*solver, 4 * i + 3);
     }
   }
 }
 
-TEST(CreateSolver, testCreateSolver_Many_double) {
-  testCreateSolver_Many<double>();
-}
+TEST(CreateSolver, testCreateSolver_Many_double) { testCreateSolver_Many<double>(); }
 
-TEST(CreateSolver, testCreateSolver_Many_float) {
-  testCreateSolver_Many<float>();
-}
+TEST(CreateSolver, testCreateSolver_Many_float) { testCreateSolver_Many<float>(); }

@@ -565,14 +565,15 @@ class Optimizer {
       grad.setZero();
       hess.setZero();
       double currentCost = computeGradHess(grad.data(), accessor, hess.data());
-      addDamping(hess, accessor, solver->permutation.size(), 1e-4);
+      addDamping(hess, accessor, solver->paramPermutation().size(), 1e-4);
 
       std::cout << "grad:" << grad.transpose() << std::endl;
       std::vector<double> hessCp(hess.data(), hess.data() + hess.size());
-      Eigen::MatrixXd H = solver->factorSkel.densify(hessCp);
+      Eigen::MatrixXd H = solver->skel().densify(hessCp);
       H.triangularView<Eigen::Upper>() = H.triangularView<Eigen::Lower>().transpose();
       std::cout << "hess:\n" << H << std::endl;
-      std::cout << "perm:\n" << BaSpaCho::testing::printVec(solver->permutation) << std::endl;
+      std::cout << "perm:\n"
+                << BaSpaCho::testing::printVec(solver->paramPermutation()) << std::endl;
 
       solver->factor(hess.data());
 

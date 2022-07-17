@@ -31,15 +31,14 @@ void runTest(const std::string& precondArg, int seed) {
   vector<int64_t> paramSize = randomVec(ss.ptrs.size() - 1, 2, 3, 47);
 
   cout << "creating solver..." << endl;
-  auto solver = createSolver(
-      {.backend = BackendRef, .addFillPolicy = AddFillForAutoElims}, paramSize,
-      ss, {0, 100});
+  auto solver = createSolver({.backend = BackendRef, .addFillPolicy = AddFillForAutoElims},
+                             paramSize, ss, {0, 100});
 
   int64_t nocross = solver->maxFactorParam();
   cout << "max factor: " << nocross << " / " << paramSize.size() << endl;
 
   int order = solver->order();
-  BASPACHO_CHECK_EQ(solver->factorSkel.spanOffsetInLump[nocross], 0);
+  BASPACHO_CHECK_EQ(solver->skel().spanOffsetInLump[nocross], 0);
 
   cout << "generating prob..." << endl;
   using T = double;
@@ -49,8 +48,7 @@ void runTest(const std::string& precondArg, int seed) {
   {
     auto acc = solver->accessor();
     mt19937 gen(seed);
-    uniform_real_distribution<> dis(solver->order() * 0.1,
-                                    solver->order() * 0.5);
+    uniform_real_distribution<> dis(solver->order() * 0.1, solver->order() * 0.5);
     for (int64_t i = 0; i < (int64_t)paramSize.size(); i++) {
       acc.plainAcc.diagBlock(matData.data(), i).diagonal().array() += dis(gen);
     }
@@ -96,8 +94,8 @@ void runTest(const std::string& precondArg, int seed) {
       [&](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
         u.resize(v.size());
         u.setZero();
-        solver->addMvFrom(matData.data(), nocross, v.data() - secStart, order,
-                          u.data() - secStart, order, 1);
+        solver->addMvFrom(matData.data(), nocross, v.data() - secStart, order, u.data() - secStart,
+                          order, 1);
       },
       1e-10, 40, true);
 
@@ -115,8 +113,7 @@ void runTest(const std::string& precondArg, int seed) {
 
   Vector<T> b2(order);
   b2.setZero();
-  solver->addMvFrom(origMatData.data(), 0, x.data(), order, b2.data(), order,
-                    1);
+  solver->addMvFrom(origMatData.data(), 0, x.data(), order, b2.data(), order, 1);
 
   cout << "rel residual: " << (b - b2).norm() / b.norm() << endl;
 }
@@ -135,10 +132,9 @@ int main(int argc, char* argv[]) {
       precond = argv[i + 1];
       i += 2;
     } else if (!strcmp(argv[i], "-h")) {
-      std::cout
-          << "Arguments:\n"
-          << "  -p preconditioner (none,jacobi,gauss-seidel,lower-prec-solve)\n"
-          << std::endl;
+      std::cout << "Arguments:\n"
+                << "  -p preconditioner (none,jacobi,gauss-seidel,lower-prec-solve)\n"
+                << std::endl;
       return 0;
     } else {
       std::cout << "Unknown arg " << argv[i] << " (help: -h)" << std::endl;

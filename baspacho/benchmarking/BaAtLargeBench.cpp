@@ -1,6 +1,5 @@
 
 #include <chrono>
-
 #include "baspacho/baspacho/CoalescedBlockMatrix.h"
 #include "baspacho/baspacho/DebugMacros.h"
 #include "baspacho/baspacho/EliminationTree.h"
@@ -65,15 +64,12 @@ void testSolvers(Data& data) {
             "system)"
          << endl;
     auto startAnalysis = hrc::now();
-    auto solver =
-        createSolver({.numThreads = 16}, paramSize, origSs, {0, numPts});
+    auto solver = createSolver({.numThreads = 16}, paramSize, origSs, {0, numPts});
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     // generate mock data, make positive def
-    vector<double> matData =
-        randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-    solver->factorSkel.damp(matData, double(0),
-                            double(solver->factorSkel.order() * 1.2));
+    vector<double> matData = randomData(solver->dataSize(), -1.0, 1.0, 37);
+    solver->skel().damp(matData, double(0), double(solver->order() * 1.2));
 
     cout << "heating up factor..." << endl;
     solver->factor(matData.data());  // heat up
@@ -85,12 +81,11 @@ void testSolvers(Data& data) {
     double factorTime = tdelta(hrc::now() - startFactor).count();
 
     solver->printStats();
-    double elimTime = solver->elimCtxs[0]->elimStat.totTime;
+    double elimTime = solver->internalGetElimCtx(0).elimStat.totTime;
     cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
     cout << "Total Factor Time....: " << factorTime << "s" << endl;
     cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl
-         << endl;
+    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl << endl;
   }
 
   if (1) {
@@ -99,15 +94,12 @@ void testSolvers(Data& data) {
             "system)"
          << endl;
     auto startAnalysis = hrc::now();
-    auto solver =
-        createSolver({.numThreads = 1}, paramSize, origSs, {0, numPts});
+    auto solver = createSolver({.numThreads = 1}, paramSize, origSs, {0, numPts});
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     // generate mock data, make positive def
-    vector<double> matData =
-        randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-    solver->factorSkel.damp(matData, double(0),
-                            double(solver->factorSkel.order() * 1.2));
+    vector<double> matData = randomData(solver->dataSize(), -1.0, 1.0, 37);
+    solver->skel().damp(matData, double(0), double(solver->order() * 1.2));
 
     cout << "heating up factor..." << endl;
     solver->factor(matData.data());  // heat up
@@ -119,12 +111,11 @@ void testSolvers(Data& data) {
     double factorTime = tdelta(hrc::now() - startFactor).count();
 
     solver->printStats();
-    double elimTime = solver->elimCtxs[0]->elimStat.totTime;
+    double elimTime = solver->internalGetElimCtx(0).elimStat.totTime;
     cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
     cout << "Total Factor Time....: " << factorTime << "s" << endl;
     cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl
-         << endl;
+    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl << endl;
   }
 
 #if defined(BASPACHO_USE_CUBLAS) || defined(BASPACHO_HAVE_CHOLMOD)
@@ -141,21 +132,17 @@ void testSolvers(Data& data) {
     cout << "Testing CUDA (on full Points+Cameras system)" << endl;
     {
       cout << "heating up cuda..." << endl;
-      auto solver = createSolver({.backend = BackendCuda}, paramSize, origSs,
-                                 {0, numPts});
+      auto solver = createSolver({.backend = BackendCuda}, paramSize, origSs, {0, numPts});
     }
     auto startAnalysis = hrc::now();
-    auto solver =
-        createSolver({.backend = BackendCuda}, paramSize, origSs, {0, numPts});
+    auto solver = createSolver({.backend = BackendCuda}, paramSize, origSs, {0, numPts});
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges) << endl;
 
     // generate mock data, make positive def
-    vector<double> matData =
-        randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-    solver->factorSkel.damp(matData, double(0),
-                            double(solver->factorSkel.order() * 1.2));
+    vector<double> matData = randomData(solver->dataSize(), -1.0, 1.0, 37);
+    solver->skel().damp(matData, double(0), double(solver->order() * 1.2));
 
     {
       cout << "heating up factor..." << endl;
@@ -174,12 +161,11 @@ void testSolvers(Data& data) {
     }
 
     solver->printStats();
-    double elimTime = solver->elimCtxs[0]->elimStat.totTime;
+    double elimTime = solver->internalGetElimCtx(0).elimStat.totTime;
     cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
     cout << "Total Factor Time....: " << factorTime << "s" << endl;
     cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl
-         << endl;
+    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl << endl;
   }
 #endif  // BASPACHO_USE_CUBLAS
 
@@ -189,16 +175,13 @@ void testSolvers(Data& data) {
     cout << "===========================================" << endl;
     cout << "Testing CUDA (on reduced Camera-Camera matrix)" << endl;
     auto startAnalysis = hrc::now();
-    auto solver = createSolver(
-        {.findSparseEliminationRanges = false, .backend = BackendCuda}, camSz,
-        camCamSs);
+    auto solver = createSolver({.findSparseEliminationRanges = false, .backend = BackendCuda},
+                               camSz, camCamSs);
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
     // generate mock data, make positive def
-    vector<double> matData =
-        randomData(solver->factorSkel.dataSize(), -1.0, 1.0, 37);
-    solver->factorSkel.damp(matData, double(0),
-                            double(solver->factorSkel.order() * 1.2));
+    vector<double> matData = randomData(solver->dataSize(), -1.0, 1.0, 37);
+    solver->skel().damp(matData, double(0), double(solver->order() * 1.2));
 
     {
       cout << "heating up factor..." << endl;
