@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cxxabi.h>
+#include <dispenso/parallel_for.h>
 #include <sophus/se3.hpp>
 #include <Eigen/Geometry>
 #include <iostream>
@@ -15,9 +16,6 @@
 #include "baspacho/testing/TestingUtils.h"  // temporary
 
 // C++ utils for variadic templates
-template <typename... Vars>
-struct Pack;
-
 template <int i>
 struct IntWrap {
   static constexpr int value = i;
@@ -193,10 +191,10 @@ class FactorStoreBase {
  public:
   virtual ~FactorStoreBase() {}
 
-  virtual double computeCost() = 0;
+  virtual double computeCost(dispenso::ThreadPool* threadPool = nullptr) = 0;
 
   virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
-                                 double* hessData) = 0;
+                                 double* hessData, dispenso::ThreadPool* threadPool = nullptr) = 0;
 
   virtual void registerVariables(std::vector<int64_t>& sizes,
                                  std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
@@ -270,21 +268,50 @@ class FactorStore : public FactorStoreBase {
     return softErr * 0.5;
   }
 
-  virtual double computeCost() override {
-    double retv = 0;
-    for (size_t i = 0; i < boundFactors.size(); i++) {
-      retv += computeSingleCost(i);
+  virtual double computeCost(dispenso::ThreadPool* threadPool = nullptr) override {
+    if (threadPool) {  // multi-threaded
+      std::vector<double> perThreadCost;
+      dispenso::TaskSet taskSet(*threadPool);
+      dispenso::parallel_for(
+          taskSet, perThreadCost, []() -> double { return 0.0; },
+          dispenso::makeChunkedRange(0L, boundFactors.size(), 5L),
+          [this](double& threadCost, int64_t iBegin, int64_t iEnd) {
+            for (int64_t i = iBegin; i < iEnd; i++) {
+              threadCost += computeSingleCost(i);
+            }
+          });
+      return Eigen::Map<Eigen::VectorXd>(perThreadCost.data(), perThreadCost.size()).sum();
+    } else {  // single-threaded
+      double retv = 0;
+      for (size_t i = 0; i < boundFactors.size(); i++) {
+        retv += computeSingleCost(i);
+      }
+      return retv;
     }
-    return retv;
   }
 
   virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
-                                 double* hessData) override {
-    double retv = 0;
-    for (size_t i = 0; i < boundFactors.size(); i++) {
-      retv += computeSingleGradHess<PlainOps>(i, gradData, acc, hessData);
+                                 double* hessData,
+                                 dispenso::ThreadPool* threadPool = nullptr) override {
+    if (threadPool) {  // multi-threaded
+      std::vector<double> perThreadCost;
+      dispenso::TaskSet taskSet(*threadPool);
+      dispenso::parallel_for(
+          taskSet, perThreadCost, []() -> double { return 0.0; },
+          dispenso::makeChunkedRange(0L, boundFactors.size(), 5L),
+          [gradData, &acc, hessData, this](double& threadCost, int64_t iBegin, int64_t iEnd) {
+            for (int64_t i = iBegin; i < iEnd; i++) {
+              threadCost += computeSingleGradHess<LockedSharedOps>(i, gradData, acc, hessData);
+            }
+          });
+      return Eigen::Map<Eigen::VectorXd>(perThreadCost.data(), perThreadCost.size()).sum();
+    } else {  // single-threaded
+      double retv = 0;
+      for (size_t i = 0; i < boundFactors.size(); i++) {
+        retv += computeSingleGradHess<PlainOps>(i, gradData, acc, hessData);
+      }
+      return retv;
     }
-    return retv;
   }
 
   virtual void registerVariables(std::vector<int64_t>& sizes,
@@ -330,6 +357,7 @@ class Optimizer {
   TypedStore<VariableStoreBase> variableStores;
   std::vector<int64_t> paramSizes;
   std::vector<int64_t> elimRanges;
+  mutable dispenso::ThreadPool threadPool{16};
   TrivialLoss defaultLoss;
 
   template <typename Factor, typename SoftLoss, typename... Variables>
@@ -369,7 +397,7 @@ class Optimizer {
                          double* hessData) {
     double retv = 0.0;
     for (auto& [ti, fStore] : factorStores.stores) {
-      retv += fStore->computeGradHess(gradData, acc, hessData);
+      retv += fStore->computeGradHess(gradData, acc, hessData, &threadPool);
     }
     return retv;
   }
@@ -377,7 +405,7 @@ class Optimizer {
   double computeCost() {
     double retv = 0.0;
     for (auto& [ti, fStore] : factorStores.stores) {
-      retv += fStore->computeCost();
+      retv += fStore->computeCost(&threadPool);
     }
     return retv;
   }

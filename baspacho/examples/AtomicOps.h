@@ -51,7 +51,7 @@ struct IEEEMagicLock<float> {
 struct LockedSharedOps {
   template <typename U, typename V>
   static inline __attribute__((always_inline)) void matrixAdd(U& u, const V& v) {
-    using T = decltype(u(0, 0));
+    using T = std::remove_reference_t<decltype(u[0])>;
     T u00 = IEEEMagicLock<T>::lock(&u(0, 0)) + v(0, 0);  // lock u(0,0)
     for (int j = 1; j < u.cols(); j++) {                 // add all other elements
       u(0, j) += v(0, j);
@@ -66,7 +66,7 @@ struct LockedSharedOps {
 
   template <typename U, typename V>
   static inline __attribute__((always_inline)) void vectorAdd(U& u, const V& v) {
-    using T = decltype(u[0]);
+    using T = std::remove_reference_t<decltype(u[0])>;
     T u0 = IEEEMagicLock<T>::lock(&u[0]) + v[0];  // lock u[0]
     for (int j = 1; j < u.size(); j++) {          // add all other elements
       u[j] += v[j];
