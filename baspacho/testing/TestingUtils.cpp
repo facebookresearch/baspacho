@@ -1,9 +1,7 @@
 
 #include "baspacho/testing/TestingUtils.h"
-
 #include <algorithm>
 #include <random>
-
 #include "baspacho/baspacho/DebugMacros.h"
 
 namespace BaSpaCho::testing {
@@ -17,14 +15,12 @@ vector<int64_t> randomPermutation(size_t size, int64_t seed) {
   return retv;
 }
 
-vector<int64_t> randomVec(size_t size, int64_t low, int64_t high,
-                          int64_t seed) {
+vector<int64_t> randomVec(size_t size, int64_t low, int64_t high, int64_t seed) {
   mt19937 gen(seed);
   return randomVec(size, low, high, gen);
 }
 
-vector<int64_t> randomVec(size_t size, int64_t low, int64_t high,
-                          std::mt19937& gen) {
+vector<int64_t> randomVec(size_t size, int64_t low, int64_t high, std::mt19937& gen) {
   vector<int64_t> retv(size);
   uniform_int_distribution el(low, high);
   for (int64_t i = 0; i < size; i++) {
@@ -49,17 +45,12 @@ std::vector<T> randomData(size_t size, T low, T high, std::mt19937& gen) {
   return retv;
 }
 
-template std::vector<double> randomData(size_t size, double low, double high,
-                                        int64_t seed);
-template std::vector<float> randomData(size_t size, float low, float high,
-                                       int64_t seed);
-template std::vector<double> randomData(size_t size, double low, double high,
-                                        std::mt19937& gen);
-template std::vector<float> randomData(size_t size, float low, float high,
-                                       std::mt19937& gen);
+template std::vector<double> randomData(size_t size, double low, double high, int64_t seed);
+template std::vector<float> randomData(size_t size, float low, float high, int64_t seed);
+template std::vector<double> randomData(size_t size, double low, double high, std::mt19937& gen);
+template std::vector<float> randomData(size_t size, float low, float high, std::mt19937& gen);
 
-vector<int64_t> randomPartition(int64_t weight, int64_t low, int64_t high,
-                                int64_t seed) {
+vector<int64_t> randomPartition(int64_t weight, int64_t low, int64_t high, int64_t seed) {
   mt19937 gen(seed);
   vector<int64_t> retv;
   uniform_int_distribution<int64_t> el(low, high);
@@ -154,9 +145,8 @@ vector<set<int64_t>> randomCols(int64_t size, double fill, int64_t seed) {
   return columns;
 }
 
-std::vector<std::set<int64_t>> joinColums(
-    const std::vector<std::set<int64_t>>& columns,
-    std::vector<int64_t> lumpStart) {
+std::vector<std::set<int64_t>> joinColums(const std::vector<std::set<int64_t>>& columns,
+                                          std::vector<int64_t> lumpStart) {
   BASPACHO_CHECK_EQ(lumpStart[lumpStart.size() - 1], columns.size());
   std::vector<std::set<int64_t>> retv;
   for (int64_t a = 0; a < lumpStart.size() - 1; a++) {
@@ -198,8 +188,7 @@ SparseStructure columnsToCscStruct(const vector<set<int64_t>>& columns) {
 }
 
 // naive implementation
-void naiveAddEliminationEntries(vector<set<int64_t>>& columns, int64_t start,
-                                int64_t end) {
+void naiveAddEliminationEntries(vector<set<int64_t>>& columns, int64_t start, int64_t end) {
   BASPACHO_CHECK_LE(end, columns.size());
   for (int i = start; i < end; i++) {
     set<int64_t>& cBlocks = columns[i];
@@ -216,8 +205,8 @@ void naiveAddEliminationEntries(vector<set<int64_t>>& columns, int64_t start,
   }
 }
 
-vector<set<int64_t>> makeIndependentElimSet(vector<set<int64_t>>& columns,
-                                            int64_t start, int64_t end) {
+vector<set<int64_t>> makeIndependentElimSet(vector<set<int64_t>>& columns, int64_t start,
+                                            int64_t end) {
   vector<set<int64_t>> retvCols(columns.size());
   for (size_t i = 0; i < columns.size(); i++) {
     if (i < start || i >= end) {

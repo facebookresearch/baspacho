@@ -1,19 +1,17 @@
 #pragma once
 
-#include <cxxabi.h>
 #include <dispenso/parallel_for.h>
 #include <sophus/se3.hpp>
 #include <Eigen/Geometry>
 #include <iostream>
 #include <memory>
-#include <typeindex>
 #include <unordered_set>
 #include "baspacho/baspacho/Solver.h"
 #include "baspacho/examples/AtomicOps.h"
 #include "baspacho/examples/PCG.h"
 #include "baspacho/examples/Preconditioner.h"
 #include "baspacho/examples/SoftLoss.h"
-#include "baspacho/testing/TestingUtils.h"  // temporary
+#include "baspacho/examples/Utils.h"
 
 // C++ utils for variadic templates
 template <int i>
@@ -38,15 +36,6 @@ decltype(auto) withTuple(F&& f, Args&&... args) {
   }
 }
 
-// introspection util
-template <typename T>
-std::string prettyTypeName() {
-  char* c_str = abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, nullptr);
-  std::string retv(c_str);
-  free(c_str);
-  return retv;
-}
-
 // typed storage
 template <typename Base>
 struct TypedStore {
@@ -56,7 +45,8 @@ struct TypedStore {
     std::unique_ptr<Base>& pStoreT = stores[ti];
     if (!pStoreT) {
       pStoreT.reset(new Derived);
-      std::cout << "New type: " << prettyTypeName<Derived>() << std::endl;
+      std::cout << "New type: " << prettyTypeName<Base>() << " -> " << prettyTypeName<Derived>()
+                << std::endl;
     }
     return dynamic_cast<Derived&>(*pStoreT);
   }
@@ -559,6 +549,98 @@ class Optimizer {
     Eigen::VectorXd hess(solver->dataSize());
     Eigen::VectorXd step(solver->order());
     auto solveFunc = solveFunction(*solver, hess, solver->skel().numSpans(), "jacobi");
+    double damping = 1e-5;
+
+    const double costReductionForImprovement = 0.999;
+    const int stopIfNoImprovementFor = 3;
+    const int distanceFromTroubledIteration = 3;
+    const int maxIts = 50;
+    int iterationNum = 1;
+    int lastImprovementIteration = 0;  // last iteration we had a significant improvement
+    int lastTroubledIteration = 0;
+
+    // iteration loop
+    while (true) {
+      grad.setZero();
+      hess.setZero();
+      double prevCost = computeGradHess(grad.data(), accessor, hess.data());
+      addDamping(hess, accessor, solver->paramPermutation().size(), damping);
+
+      step = grad;
+      solveFunc(step);
+
+      // cost reduction that would occur perfectly quadratic
+      double modelCostReduction = step.dot(grad) * 0.5;
+      step *= -1.0;
+      double gradNorm = grad.norm();
+      double stepNorm = step.norm();
+
+      backupVariables(variablesBackup);
+      applyStep(step, accessor);
+      double newCost = computeCost();
+      double relativeCostReduction = (prevCost - newCost) / modelCostReduction;
+
+      const char* smiley;
+      bool wasSignificantImprovement = newCost < costReductionForImprovement * prevCost;
+      double currentCost = 0.0;
+      if (newCost > prevCost) {
+        smiley = ":'(";
+        damping *= 3;
+        restoreVariables(variablesBackup);
+        currentCost = prevCost;
+        if (damping > 1e8) {
+          std::cout << "damping out of range, quadratic model failing?!" << std::endl;
+          break;
+        }
+        lastTroubledIteration = iterationNum;
+      } else {
+        if (prevCost - newCost > 0.3 * modelCostReduction) {
+          smiley = wasSignificantImprovement ? ";-)" : ":-/";
+          damping *= 0.7;
+        } else {
+          smiley = ":-*";
+          damping *= 1.5;
+        }
+        currentCost = newCost;
+      }
+
+      std::cout << " " << smiley << " cost: " << prevCost << " -> " << newCost << " ("
+                << percentageString(newCost / prevCost - 1.0, 2) << ")\n"  //
+                << "     n." << iterationNum << "; PCG its="
+                << "TBD"
+                << ", relRes="
+                << "TBD"
+                << "; lmbd: " << damping << ", relRed: " << percentageString(relativeCostReduction)
+                << ", |G|: " << gradNorm  //
+                << ", |S|: " << stepNorm << std::endl;
+      iterationNum++;
+      if (wasSignificantImprovement) {
+        lastImprovementIteration = iterationNum;
+      }
+      if (iterationNum >= lastImprovementIteration + stopIfNoImprovementFor &&
+          iterationNum >= lastTroubledIteration + distanceFromTroubledIteration) {
+        std::cout << " >.< converged! (no improvement for " << stopIfNoImprovementFor
+                  << " iterations)" << std::endl;
+        break;
+      } else if (iterationNum >= maxIts) {
+        std::cout << " X-| iteration limit reached! (" << maxIts << " iterations)" << std::endl;
+        break;
+      }
+    }
+  }
+
+#if 0
+  void optimize_old() {
+    // create sparse linear solver
+    BaSpaCho::SolverPtr solver = initSolver();
+    auto accessor = solver->accessor();
+
+    // linear system data
+    std::vector<double> variablesBackup(variableBackupSize());
+    Eigen::VectorXd grad(solver->order());
+    Eigen::VectorXd hess(solver->dataSize());
+    Eigen::VectorXd step(solver->order());
+    auto solveFunc = solveFunction(*solver, hess, solver->skel().numSpans(), "jacobi");
 
     // iteration loop
     while (true) {
@@ -605,4 +687,5 @@ class Optimizer {
       break;
     }
   }
+#endif
 };
