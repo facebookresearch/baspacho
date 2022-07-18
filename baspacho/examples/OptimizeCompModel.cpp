@@ -1,5 +1,6 @@
 
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -14,6 +15,7 @@ using namespace std;
 using Vec1 = Eigen::Vector<double, 1>;
 using Mat11 = Eigen::Matrix<double, 1, 1>;
 
+// csv loading utility
 vector<vector<double>> loadCsv(const string& path) {
   ifstream iStr(path);
   if (!iStr) {
@@ -46,6 +48,40 @@ vector<vector<double>> loadCsv(const string& path) {
   return retv;
 }
 
+// t ~= a + b*n + c*n^2 + d*n^3
+void optimizePotrfModel(const vector<vector<double>>& samples) {
+  BASPACHO_CHECK_EQ(samples[0].size(), 2);
+  double n3coeff_sum = 0.0;
+  for (auto& nt : samples) {
+    double n = nt[0], t = nt[1];
+    n3coeff_sum += log(t / (n * n * n));
+  }
+  double n3coeff = exp(n3coeff_sum / samples.size());
+
+  using Vec4 = Eigen::Vector<double, 4>;
+  using Mat14 = Eigen::Matrix<double, 1, 4>;
+  Variable<Vec4> coeffs{0.0, 0.0, 0.0, n3coeff};
+
+  Optimizer opt;
+  for (auto& nt : samples) {
+    double n = nt[0], t = nt[1];
+    double s = 1.0 / t;  // scaling factor
+    opt.addFactor(
+        [=](const Vec4& c, Mat14* dc) -> Vec1 {
+          if (dc) {
+            (*dc)(0, 0) = s;
+            (*dc)(0, 1) = n * s;
+            (*dc)(0, 2) = n * n * s;
+            (*dc)(0, 3) = n * n * n * s;
+          }
+          return Vec1(s * (c[0] + n * (c[1] + n * (c[2] + n * c[3])) - t));
+        },
+        coeffs);
+  }
+
+  opt.optimize();
+}
+
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     cout << "Usage: opt_comp_model file.csv";
@@ -56,7 +92,9 @@ int main(int argc, char* argv[]) {
   }
   cout << "CSV data have " << csvData[0].size() << " entries per line" << endl;
 
-  vector<Variable<Vec1>> pointVars = {{-2}, {-1}, {0}, {0.5}, {1.5}, {2.5}};
+  optimizePotrfModel(csvData);
+
+  /*vector<Variable<Vec1>> pointVars = {{-2}, {-1}, {0}, {0.5}, {1.5}, {2.5}};
 
   Optimizer opt;
   for (size_t i = 0; i < pointVars.size() - 1; i++) {
@@ -74,7 +112,7 @@ int main(int argc, char* argv[]) {
         pointVars[i], pointVars[i + 1]);
   }
 
-  opt.optimize();
+  opt.optimize();*/
 
   return 0;
 }
