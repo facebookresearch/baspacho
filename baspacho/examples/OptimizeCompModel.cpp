@@ -65,14 +65,11 @@ void optimizePotrfModel(const vector<vector<double>>& samples) {
   Optimizer opt;
   for (auto& nt : samples) {
     double n = nt[0], t = nt[1];
-    double s = 1.0 / t;  // scaling factor
+    double s = 1.0 / sqrt(t);  // scaling factor
     opt.addFactor(
         [=](const Vec4& c, Mat14* dc) -> Vec1 {
           if (dc) {
-            (*dc)(0, 0) = s;
-            (*dc)(0, 1) = n * s;
-            (*dc)(0, 2) = n * n * s;
-            (*dc)(0, 3) = n * n * n * s;
+            *dc << s, n * s, n * n * s, n * n * n * s;
           }
           return Vec1(s * (c[0] + n * (c[1] + n * (c[2] + n * c[3])) - t));
         },
@@ -80,39 +77,177 @@ void optimizePotrfModel(const vector<vector<double>>& samples) {
   }
 
   opt.optimize();
+
+  stringstream ss;
+  ss.precision(numeric_limits<double>::max_digits10 + 2);
+  auto& c = coeffs.value;
+  ss << "potrf_model = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << " };";
+  cout << ss.str() << endl;
+}
+
+// t ~= a + b*n + c*n^2 + (d + e*n + f*n^2)*k
+void optimizeTrsmModel(const vector<vector<double>>& samples) {
+  BASPACHO_CHECK_EQ(samples[0].size(), 3);
+  double n2k_coeff_sum = 0.0;
+  for (auto& nkt : samples) {
+    double n = nkt[0], k = nkt[1], t = nkt[2];
+    n2k_coeff_sum += log(t / (n * n * k));
+  }
+  double n2k_coeff = exp(n2k_coeff_sum / samples.size());
+
+  using Vec6 = Eigen::Vector<double, 6>;
+  using Mat16 = Eigen::Matrix<double, 1, 6>;
+  Variable<Vec6> coeffs{0.0, 0.0, 0.0, 0.0, 0.0, n2k_coeff};
+
+  Optimizer opt;
+  for (auto& nkt : samples) {
+    double n = nkt[0], k = nkt[1], t = nkt[2];
+    double s = 1.0 / sqrt(t);  // scaling factor
+    opt.addFactor(
+        [=](const Vec6& c, Mat16* dc) -> Vec1 {
+          if (dc) {
+            *dc << s, n * s, n * n * s, k * s, k * n * s, k * n * n * s;
+          }
+          return Vec1(s * (c[0] + n * (c[1] + n * c[2]) + k * (c[3] + n * (c[4] + n * c[5])) - t));
+        },
+        coeffs);
+  }
+
+  opt.optimize();
+
+  stringstream ss;
+  ss.precision(numeric_limits<double>::max_digits10 + 2);
+  auto& c = coeffs.value;
+  ss << "trsm_model = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << ", " << c[4]
+     << ", " << c[5] << " };";
+  cout << ss.str() << endl;
+}
+
+// plain model is:
+//   t ~= a + b*m + c*n + d*k + e*m*n + f*m*k + g*n*k + h*n*m*k
+// symmetrized in m,n it becomes (putting u=m+n, v=mn the basis of sym functions):
+//   t ~= a + b*u + c*v + d*k + e*u*k + f*v*k
+void optimizeSygeModel(const vector<vector<double>>& samples) {
+  BASPACHO_CHECK_EQ(samples[0].size(), 4);
+  double mnk_coeff_sum = 0.0;
+  for (auto& mnkt : samples) {
+    double m = mnkt[0], n = mnkt[1], k = mnkt[2], t = mnkt[3];
+    mnk_coeff_sum += log(t / (m * n * k));
+  }
+  double mnk_coeff = exp(mnk_coeff_sum / samples.size());
+
+  using Vec6 = Eigen::Vector<double, 6>;
+  using Mat16 = Eigen::Matrix<double, 1, 6>;
+  Variable<Vec6> coeffs{0.0, 0.0, 0.0, 0.0, 0.0, mnk_coeff};
+
+  Optimizer opt;
+  for (auto& mnkt : samples) {
+    double m = mnkt[0], n = mnkt[1], k = mnkt[2], t = mnkt[3];
+    double s = 1.0 / sqrt(t);  // scaling factor
+    opt.addFactor(
+        [=](const Vec6& c, Mat16* dc) -> Vec1 {
+          if (dc) {
+            *dc << s, (m + n) * s, (m * n) * s, k * s, k * (m + n) * s, k * (m * n) * s;
+          }
+          return Vec1(s * (c[0] + (m + n) * c[1] + (m * n) * c[2] +  //
+                           k * (c[3] + (m + n) * c[4] + (m * n) * c[5]) - t));
+        },
+        coeffs);
+  }
+
+  opt.optimize();
+
+  stringstream ss;
+  ss.precision(numeric_limits<double>::max_digits10 + 2);
+  auto& c = coeffs.value;
+  ss << "syge_model = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << ", " << c[4]
+     << ", " << c[5] << " };";
+  cout << ss.str() << endl;
+}
+
+// t ~= a + b*br + c*bc + d*br*bc
+void optimizeAsmblModel(const vector<vector<double>>& samples) {
+  BASPACHO_CHECK_EQ(samples[0].size(), 3);
+  double brbc_coeff_sum = 0.0;
+  for (auto& brbct : samples) {
+    double br = brbct[0], bc = brbct[1], t = brbct[2];
+    brbc_coeff_sum += log(t / (br * bc));
+  }
+  double brbc_coeff = exp(brbc_coeff_sum / samples.size());
+
+  using Vec4 = Eigen::Vector<double, 4>;
+  using Mat14 = Eigen::Matrix<double, 1, 4>;
+  Variable<Vec4> coeffs{0.0, 0.0, 0.0, brbc_coeff};
+
+  Optimizer opt;
+  for (auto& brbct : samples) {
+    double br = brbct[0], bc = brbct[1], t = brbct[2];
+    double s = 1.0 / sqrt(t);  // scaling factor
+    opt.addFactor(
+        [=](const Vec4& c, Mat14* dc) -> Vec1 {
+          if (dc) {
+            *dc << s, br * s, bc * s, br * bc * s;
+          }
+          return Vec1(s * (c[0] + br * c[1] + bc * c[2] + br * bc * c[3] - t));
+        },
+        coeffs);
+  }
+
+  opt.optimize();
+
+  stringstream ss;
+  ss.precision(numeric_limits<double>::max_digits10 + 2);
+  auto& c = coeffs.value;
+  ss << "asmbl_model = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << " };";
+  cout << ss.str() << endl;
 }
 
 int main(int argc, char* argv[]) {
-  if (argc < 2) {
-    cout << "Usage: opt_comp_model file.csv";
+  std::string model, input;
+  for (int i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "-m")) {
+      if (i == argc - 1) {
+        cout << "missing arg to -m argument" << endl;
+        return 1;
+      }
+      model = argv[++i];
+    } else if (!strcmp(argv[i], "-i")) {
+      if (i == argc - 1) {
+        cout << "missing arg to -i argument" << endl;
+        return 1;
+      }
+      input = argv[++i];
+    } else if (!strcmp(argv[i], "-h")) {
+      cout << "Usage: -m potrf|trsm|syge|asmbl -i input_file" << endl;
+      return 0;
+    } else {
+      cout << "Unknown arg '" << argv[i] << "' (-h for help)" << endl;
+      return 1;
+    }
   }
-  auto csvData = loadCsv(argv[1]);
+  if (model.empty() || input.empty()) {
+    cout << "missing model/input arguments (-h for help)" << endl;
+    return 1;
+  }
+
+  auto csvData = loadCsv(input);
   if (csvData.empty()) {
     throw runtime_error("Empty csv file!");
   }
-  cout << "CSV data have " << csvData[0].size() << " entries per line" << endl;
+  cout << "loaded CSV data have " << csvData[0].size() << " entries per line" << endl;
 
-  optimizePotrfModel(csvData);
-
-  /*vector<Variable<Vec1>> pointVars = {{-2}, {-1}, {0}, {0.5}, {1.5}, {2.5}};
-
-  Optimizer opt;
-  for (size_t i = 0; i < pointVars.size() - 1; i++) {
-    static constexpr double springLen = 1.0;
-    opt.addFactor(
-        [=](const Vec1& x, const Vec1& y, Mat11* dx, Mat11* dy) -> Vec1 {
-          if (dx) {
-            (*dx)(0, 0) = -1;
-          }
-          if (dy) {
-            (*dy)(0, 0) = 1;
-          }
-          return Vec1(y[0] - x[0] - springLen);
-        },
-        pointVars[i], pointVars[i + 1]);
+  if (model == "potrf") {
+    optimizePotrfModel(csvData);
+  } else if (model == "trsm") {
+    optimizeTrsmModel(csvData);
+  } else if (model == "syge") {
+    optimizeSygeModel(csvData);
+  } else if (model == "asmbl") {
+    optimizeAsmblModel(csvData);
+  } else {
+    cout << "unknown model " << model << endl;
+    return 1;
   }
-
-  opt.optimize();*/
 
   return 0;
 }

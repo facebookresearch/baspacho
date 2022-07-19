@@ -45,7 +45,7 @@ struct TypedStore {
     std::unique_ptr<Base>& pStoreT = stores[ti];
     if (!pStoreT) {
       pStoreT.reset(new Derived);
-      std::cout << "New type: " << prettyTypeName<Base>() << " -> " << prettyTypeName<Derived>()
+      std::cout << "New [" << prettyTypeName<Base>() << "]: " << prettyTypeName<Derived>()
                 << std::endl;
     }
     return dynamic_cast<Derived&>(*pStoreT);
