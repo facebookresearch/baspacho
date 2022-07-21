@@ -32,11 +32,17 @@ struct EliminationTree {
   // utility helper to get span starts from interally stored (sorted) param sizes
   std::vector<int64_t> computeSpanStart();
 
-  // internal
+  // internal (called by processTree)
   void computeNodeHeights(const std::vector<int64_t>& noCrossPoints);
 
-  // internal
+  // internal (called by processTree)
   void computeSparseElimRanges(const std::vector<int64_t>& noCrossPoints);
+
+  // internal (called by processTree)
+  void computeMerges();
+
+  // internal (called by processTree)
+  void collapseMergePointers();
 
   std::vector<int64_t> paramSize;
   const SparseStructure& ss;  // input
@@ -50,6 +56,7 @@ struct EliminationTree {
   std::vector<int64_t> sparseElimRanges;
   std::vector<std::tuple<int64_t, int64_t, int64_t>> unmergedHeightNode;
   std::vector<bool> forbidMerge;
+  std::vector<int64_t> numMergedNodes;
   std::vector<int64_t> mergeWith;
   int64_t numMerges;
 

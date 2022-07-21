@@ -131,36 +131,25 @@ void EliminationTree::computeSparseElimRanges(const vector<int64_t>& noCrossPoin
 
 static constexpr double flopsColOverhead = 2e7;
 
-void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int64_t>& noCrossPoints,
-                                  bool findOnlyElims) {
+void EliminationTree::computeMerges() {
   int64_t ord = ss.order();
 
-  computeNodeHeights(noCrossPoints);
-
-  // Compute the sparse elimination ranges (after permutation is applied),
-  // and set a flag to forbid merge of nodes which will be sparse-eliminated
-  if (detectSparseElimRanges) {
-    computeSparseElimRanges(noCrossPoints);
-  }
-
   priority_queue<tuple<double, int64_t, int64_t>> mergeCandidates;
-  if (!findOnlyElims) {
-    for (int64_t k = ord - 1; k >= 0; k--) {
-      if (forbidMerge[k]) {
-        continue;
-      }
-      int64_t p = parent[k];
-      if (p == -1) {
-        continue;
-      }
-
-      double fillAfterMerge = ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]);
-      mergeCandidates.emplace(fillAfterMerge, k, p);
+  for (int64_t k = ord - 1; k >= 0; k--) {
+    if (forbidMerge[k]) {
+      continue;
     }
+    int64_t p = parent[k];
+    if (p == -1) {
+      continue;
+    }
+
+    double fillAfterMerge = ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]);
+    mergeCandidates.emplace(fillAfterMerge, k, p);
   }
 
   mergeWith.assign(ord, -1);
-  vector<int64_t> numMergedNodes(ord, 1);
+  numMergedNodes.assign(ord, 1);
   numMerges = 0;
   while (!mergeCandidates.empty()) {
     auto [wasFillAfterMerge, k, p] = mergeCandidates.top();
@@ -200,8 +189,12 @@ void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int6
       numMerges++;
     }
   }
+}
 
-  // collapse pointer to parent, make parent become root ancestor
+// collapse pointer to parent, make parent become root ancestor
+void EliminationTree::collapseMergePointers() {
+  int64_t ord = ss.order();
+
   for (int64_t k = ord - 1; k >= 0; k--) {
     int64_t p = mergeWith[k];
     if (p == -1) {
@@ -211,6 +204,28 @@ void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int6
     if (a != -1) {
       mergeWith[k] = a;
     }
+  }
+}
+
+void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int64_t>& noCrossPoints,
+                                  bool findOnlyElims) {
+  int64_t ord = ss.order();
+
+  computeNodeHeights(noCrossPoints);
+
+  // Compute the sparse elimination ranges (after permutation is applied),
+  // and set a flag to forbid merge of nodes which will be sparse-eliminated
+  if (detectSparseElimRanges) {
+    computeSparseElimRanges(noCrossPoints);
+  }
+
+  if (findOnlyElims) {
+    mergeWith.assign(ord, -1);
+    numMergedNodes.assign(ord, 1);
+    numMerges = 0;
+  } else {
+    computeMerges();
+    collapseMergePointers();
   }
 
   // We create `lumpStart` and `lumpToSpan` arrays for the
