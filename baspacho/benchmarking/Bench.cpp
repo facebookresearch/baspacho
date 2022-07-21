@@ -339,7 +339,8 @@ map<string, function<BenchResults(const SparseProblem&, const vector<int64_t>& n
     solvers = {
 #ifdef BASPACHO_HAVE_CHOLMOD
         {"1_CHOLMOD",
-         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose) -> BenchResults {
+         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose,
+            bool /* collectStats */) -> BenchResults {
            auto result = benchmarkCholmodSolve(prob.paramSize, prob.sparseStruct, nRHSs, verbose);
            BenchResults retv;
            retv.analysisTime = result.analysisTime;

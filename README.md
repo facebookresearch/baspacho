@@ -107,7 +107,7 @@ implementation in SuiteSparse instead of Eigen.
       diagonal blocks 
 - [ ] better heuristics in Node merge, test more configurations
 - [ ] optimize analysis and solve steps
-- [ ] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
+- [X] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
       possibly with mixed-precision preconditioner (fast "rough" factor as float, iterate
       on a double vector for improved precision)
 - [ ] investigate possible support of update/downdate ops (note that such support in CHOLMOD
@@ -115,7 +115,6 @@ implementation in SuiteSparse instead of Eigen.
       simplicial)
 
 ## Caveats
-
 * Only supernodal Cholesky is implemented. We focused on problems having at least a certain degree of
 interconnectedness, which will benefit of Blas libraries and parallelism. If working with a problem where
 simplicial would have better performance (eg banded matrix) just use Cholmod or Eigen. Also, because of
