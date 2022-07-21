@@ -213,11 +213,22 @@ void EliminationTree::computeMerges() {
     // elimination of the merged node. If the flops of the merged node
     // is smaller to the sum of the two nodes (plus an overhead constant)
     // we will merge the nodes.
+#if 0
     double elimFlopsK = sk * sk * sk + sk * sk * rk + sk * rk * rk;
     double elimFlopsP = sp * sp * sp + sp * sp * rp + sp * rp * rp;
     double elimFlopsMerg = sm * sm * sm + sm * sm * rp + sm * rp * rp;
 
     bool willMerge = elimFlopsMerg < elimFlopsK + elimFlopsP + flopsColOverhead;
+#else
+    double tk =
+        potrfModel(sk) + trsmModel(sk, rk) + sygeModel(rk, rk, sk) + asmblModel(rk / 2, sk / 2);
+    double tp =
+        potrfModel(sp) + trsmModel(sp, rp) + sygeModel(rp, rp, sp) + asmblModel(rp / 2, sp / 2);
+    double tm =
+        potrfModel(sm) + trsmModel(sm, rp) + sygeModel(rp, rp, sm) + asmblModel(rp / 2, sm / 2);
+
+    bool willMerge = tm < tk + tp;
+#endif
 
     if (willMerge) {
       mergeWith[k] = p;
