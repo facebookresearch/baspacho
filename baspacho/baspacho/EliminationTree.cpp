@@ -98,8 +98,45 @@ void EliminationTree::computeNodeHeights(ElimTreeProc& proc, const vector<int64_
   }
 }
 
-void EliminationTree::processTree(bool computeSparseElimRanges,
-                                  const vector<int64_t>& noCrossPoints, bool findOnlyElims) {
+void EliminationTree::computeSparseElimRanges(ElimTreeProc& proc,
+                                              const vector<int64_t>& noCrossPoints) {
+  int64_t ord = ss.order();
+  int64_t mergeHeight = 0;
+  sparseElimRanges.push_back(0);
+
+  for (size_t rangeIndex = 0; rangeIndex < noCrossPoints.size() + 1; rangeIndex++) {
+    int64_t rangeStart = rangeIndex == 0 ? 0 : noCrossPoints[rangeIndex - 1];
+    int64_t rangeEnd = rangeIndex < noCrossPoints.size() ? noCrossPoints[rangeIndex] : ord;
+
+    int64_t k0 = rangeStart;
+    while (k0 < rangeEnd) {
+      int64_t k1 = k0;
+
+      while (k1 < rangeEnd && get<0>(proc.unmergedHeightNode[k1]) == mergeHeight &&
+             get<1>(proc.unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
+        k1++;
+      }
+      if (k1 - k0 < minNumSparseElimNodes) {  // skip, too small
+        break;
+      }
+      mergeHeight++;
+      for (int64_t k = k0; k < k1; k++) {
+        proc.forbidMerge[get<2>(proc.unmergedHeightNode[k])] = true;
+      }
+      sparseElimRanges.push_back(k1);
+      k0 = k1;
+    }
+    if (k0 < rangeEnd) {
+      break;
+    }
+  }
+  if (sparseElimRanges.size() == 1) {
+    sparseElimRanges.pop_back();
+  }
+}
+
+void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int64_t>& noCrossPoints,
+                                  bool findOnlyElims) {
   int64_t ord = ss.order();
   ElimTreeProc proc(ord);
 
@@ -107,39 +144,8 @@ void EliminationTree::processTree(bool computeSparseElimRanges,
 
   // Compute the sparse elimination ranges (after permutation is applied),
   // and set a flag to forbid merge of nodes which will be sparse-eliminated
-  if (computeSparseElimRanges) {
-    int64_t mergeHeight = 0;
-    sparseElimRanges.push_back(0);
-
-    for (size_t rangeIndex = 0; rangeIndex < noCrossPoints.size() + 1; rangeIndex++) {
-      int64_t rangeStart = rangeIndex == 0 ? 0 : noCrossPoints[rangeIndex - 1];
-      int64_t rangeEnd = rangeIndex < noCrossPoints.size() ? noCrossPoints[rangeIndex] : ord;
-
-      int64_t k0 = rangeStart;
-      while (k0 < rangeEnd) {
-        int64_t k1 = k0;
-
-        while (k1 < rangeEnd && get<0>(proc.unmergedHeightNode[k1]) == mergeHeight &&
-               get<1>(proc.unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
-          k1++;
-        }
-        if (k1 - k0 < minNumSparseElimNodes) {  // skip, too small
-          break;
-        }
-        mergeHeight++;
-        for (int64_t k = k0; k < k1; k++) {
-          proc.forbidMerge[get<2>(proc.unmergedHeightNode[k])] = true;
-        }
-        sparseElimRanges.push_back(k1);
-        k0 = k1;
-      }
-      if (k0 < rangeEnd) {
-        break;
-      }
-    }
-    if (sparseElimRanges.size() == 1) {
-      sparseElimRanges.pop_back();
-    }
+  if (detectSparseElimRanges) {
+    computeSparseElimRanges(proc, noCrossPoints);
   }
 
   priority_queue<tuple<double, int64_t, int64_t>> mergeCandidates;

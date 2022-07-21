@@ -23,17 +23,20 @@ struct EliminationTree {
   void buildTree();
 
   // executed the processing
-  void processTree(bool computeSparseElimRanges, const std::vector<int64_t>& noCrossPoints = {},
+  void processTree(bool detectSparseElimRanges, const std::vector<int64_t>& noCrossPoints = {},
                    bool findOnlyElims = false);
 
   // computes the aggregate struct (where nodes have been merged)
   void computeAggregateStruct(bool fillOnlyForElims = false);
 
+  // utility helper to get span starts from interally stored (sorted) param sizes
+  std::vector<int64_t> computeSpanStart();
+
   // internal
   void computeNodeHeights(ElimTreeProc& proc, const std::vector<int64_t>& noCrossPoints);
 
-  // utility helper
-  std::vector<int64_t> computeSpanStart();
+  // internal
+  void computeSparseElimRanges(ElimTreeProc& proc, const std::vector<int64_t>& noCrossPoints);
 
   std::vector<int64_t> paramSize;
   const SparseStructure& ss;  // input
