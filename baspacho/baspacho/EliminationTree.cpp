@@ -54,17 +54,6 @@ void EliminationTree::buildTree() {
   }
 }
 
-static constexpr int64_t maxSparseElimNodeSize = 12;
-static constexpr int64_t minNumSparseElimNodes = 50;
-static constexpr double flopsColOverhead = 2e7;
-
-struct ElimTreeProc {
-  vector<tuple<int64_t, int64_t, int64_t>> unmergedHeightNode;
-  vector<bool> forbidMerge;
-
-  ElimTreeProc(int64_t ord) : unmergedHeightNode(ord), forbidMerge(ord, false) {}
-};
-
 // Compute node heights:
 // depending on the structure of the matrix, if we have many small leaf
 // nodes (height = 0) we can eliminate them with a sparse elimination
@@ -74,8 +63,11 @@ struct ElimTreeProc {
 // merged nodes and blas operations.
 // In order to do so we sort nodes according to height.
 // TODO: consider allowing some initial merge of very small nodes?
-void EliminationTree::computeNodeHeights(ElimTreeProc& proc, const vector<int64_t>& noCrossPoints) {
+void EliminationTree::computeNodeHeights(const vector<int64_t>& noCrossPoints) {
   int64_t ord = ss.order();
+
+  unmergedHeightNode.resize(ord);
+  forbidMerge.assign(ord, false);
 
   vector<int64_t> height(ord, 0);
   for (size_t rangeIndex = 0; rangeIndex < noCrossPoints.size() + 1; rangeIndex++) {
@@ -83,23 +75,25 @@ void EliminationTree::computeNodeHeights(ElimTreeProc& proc, const vector<int64_
     int64_t rangeEnd = rangeIndex < noCrossPoints.size() ? noCrossPoints[rangeIndex] : ord;
 
     for (int64_t k = rangeStart; k < rangeEnd; k++) {
-      proc.unmergedHeightNode[k] = make_tuple(height[k], nodeSize[k], k);
+      unmergedHeightNode[k] = make_tuple(height[k], nodeSize[k], k);
 
       int64_t par = parent[k];
       if (par == -1) {
         continue;
       }
       if (par >= rangeEnd) {
-        proc.forbidMerge[k] = true;
+        forbidMerge[k] = true;
       }
       height[par] = max(height[par], height[k] + 1);
     }
-    sort(proc.unmergedHeightNode.begin() + rangeStart, proc.unmergedHeightNode.begin() + rangeEnd);
+    sort(unmergedHeightNode.begin() + rangeStart, unmergedHeightNode.begin() + rangeEnd);
   }
 }
 
-void EliminationTree::computeSparseElimRanges(ElimTreeProc& proc,
-                                              const vector<int64_t>& noCrossPoints) {
+static constexpr int64_t maxSparseElimNodeSize = 12;
+static constexpr int64_t minNumSparseElimNodes = 50;
+
+void EliminationTree::computeSparseElimRanges(const vector<int64_t>& noCrossPoints) {
   int64_t ord = ss.order();
   int64_t mergeHeight = 0;
   sparseElimRanges.push_back(0);
@@ -112,8 +106,8 @@ void EliminationTree::computeSparseElimRanges(ElimTreeProc& proc,
     while (k0 < rangeEnd) {
       int64_t k1 = k0;
 
-      while (k1 < rangeEnd && get<0>(proc.unmergedHeightNode[k1]) == mergeHeight &&
-             get<1>(proc.unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
+      while (k1 < rangeEnd && get<0>(unmergedHeightNode[k1]) == mergeHeight &&
+             get<1>(unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
         k1++;
       }
       if (k1 - k0 < minNumSparseElimNodes) {  // skip, too small
@@ -121,7 +115,7 @@ void EliminationTree::computeSparseElimRanges(ElimTreeProc& proc,
       }
       mergeHeight++;
       for (int64_t k = k0; k < k1; k++) {
-        proc.forbidMerge[get<2>(proc.unmergedHeightNode[k])] = true;
+        forbidMerge[get<2>(unmergedHeightNode[k])] = true;
       }
       sparseElimRanges.push_back(k1);
       k0 = k1;
@@ -135,23 +129,24 @@ void EliminationTree::computeSparseElimRanges(ElimTreeProc& proc,
   }
 }
 
+static constexpr double flopsColOverhead = 2e7;
+
 void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int64_t>& noCrossPoints,
                                   bool findOnlyElims) {
   int64_t ord = ss.order();
-  ElimTreeProc proc(ord);
 
-  computeNodeHeights(proc, noCrossPoints);
+  computeNodeHeights(noCrossPoints);
 
   // Compute the sparse elimination ranges (after permutation is applied),
   // and set a flag to forbid merge of nodes which will be sparse-eliminated
   if (detectSparseElimRanges) {
-    computeSparseElimRanges(proc, noCrossPoints);
+    computeSparseElimRanges(noCrossPoints);
   }
 
   priority_queue<tuple<double, int64_t, int64_t>> mergeCandidates;
   if (!findOnlyElims) {
     for (int64_t k = ord - 1; k >= 0; k--) {
-      if (proc.forbidMerge[k]) {
+      if (forbidMerge[k]) {
         continue;
       }
       int64_t p = parent[k];
@@ -228,7 +223,7 @@ void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int6
   vector<int64_t> unpermutedRootSpanToLump(ord, -1);
 
   for (int64_t i = 0; i < ord; i++) {
-    auto [height, unmergedSize, k] = proc.unmergedHeightNode[i];
+    auto [height, unmergedSize, k] = unmergedHeightNode[i];
     if (mergeWith[k] != -1) {
       continue;
     }

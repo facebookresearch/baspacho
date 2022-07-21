@@ -33,10 +33,10 @@ struct EliminationTree {
   std::vector<int64_t> computeSpanStart();
 
   // internal
-  void computeNodeHeights(ElimTreeProc& proc, const std::vector<int64_t>& noCrossPoints);
+  void computeNodeHeights(const std::vector<int64_t>& noCrossPoints);
 
   // internal
-  void computeSparseElimRanges(ElimTreeProc& proc, const std::vector<int64_t>& noCrossPoints);
+  void computeSparseElimRanges(const std::vector<int64_t>& noCrossPoints);
 
   std::vector<int64_t> paramSize;
   const SparseStructure& ss;  // input
@@ -48,6 +48,8 @@ struct EliminationTree {
 
   // generated data, processTree
   std::vector<int64_t> sparseElimRanges;
+  std::vector<std::tuple<int64_t, int64_t, int64_t>> unmergedHeightNode;
+  std::vector<bool> forbidMerge;
   std::vector<int64_t> mergeWith;
   int64_t numMerges;
 
