@@ -49,7 +49,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBLA_VENDOR=Intel10_64lp
 ```
 Compiling and testing:
 ```
-cmake --build build -v -- -j16 && ctest --test-dir build
+cmake --build build -- -j16 && ctest --test-dir build
 ```
 Benchmarking (using CHOLMOD as baseline):
 ```

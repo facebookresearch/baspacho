@@ -574,7 +574,7 @@ static SolverPtr createSolverQ(const Settings& settings, const std::vector<int64
 
   EliminationTree et(sortedParamSize, sortedSs);
   et.buildTree();
-  et.computeMerges(settings.findSparseEliminationRanges);
+  et.processTree(settings.findSparseEliminationRanges);
   et.computeAggregateStruct();
 
   CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
@@ -654,8 +654,8 @@ SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& par
   // compute as ordinary elimination tree on br-corner
   EliminationTree et(sortedBottomParamSize, sortedSsBottom);
   et.buildTree();
-  et.computeMerges(settings.findSparseEliminationRanges, noCrossPoints,
-                   settings.addFillPolicy == AddFillForAutoElims);
+  et.processTree(settings.findSparseEliminationRanges, noCrossPoints,
+                 settings.addFillPolicy == AddFillForAutoElims);
   et.computeAggregateStruct(settings.addFillPolicy == AddFillForAutoElims);
 
   // ss last rows are to be permuted according to etTotalInvPerm

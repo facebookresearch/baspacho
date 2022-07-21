@@ -98,7 +98,7 @@ void testBatchedCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47 + i);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ false);
+    et.processTree(/* compute sparse elim ranges = */ false);
     et.computeAggregateStruct();
 
     CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
@@ -165,7 +165,7 @@ void testBatchedSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true);
+    et.processTree(/* compute sparse elim ranges = */ true);
     et.computeAggregateStruct();
 
     CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
@@ -237,7 +237,7 @@ void testBatchedSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 5, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true);
+    et.processTree(/* compute sparse elim ranges = */ true);
     et.computeAggregateStruct();
 
     CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,

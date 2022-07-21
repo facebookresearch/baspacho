@@ -1,12 +1,10 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
 #include <iostream>
 #include <numeric>
 #include <random>
 #include <sstream>
-
 #include "baspacho/baspacho/CoalescedBlockMatrix.h"
 #include "baspacho/baspacho/DebugMacros.h"
 #include "baspacho/baspacho/EliminationTree.h"
@@ -38,12 +36,11 @@ TEST(EliminationTree, Build) {
 
     et.buildTree();
 
-    et.computeMerges(/* compute sparse elim ranges = */ false, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ false, {nocross});
 
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel skel(et.computeSpanStart(), et.lumpToSpan,
-                                  et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel skel(et.computeSpanStart(), et.lumpToSpan, et.colStart, et.rowParam);
     ASSERT_EQ(skel.spanOffsetInLump[nocross], 0);
 
     int64_t totData = skel.chainData[skel.chainData.size() - 1];
@@ -68,8 +65,7 @@ TEST(EliminationTree, Build) {
 
     // permuted and elim-filled must be contained
     SparseStructure checkSs =
-        ss.symmetricPermutation(et.permInverse, false, true)
-            .addFullEliminationFill();
+        ss.symmetricPermutation(et.permInverse, false, true).addFullEliminationFill();
     std::cout << "check:\n" << printPattern(checkSs, false) << std::endl;
     for (int64_t i = 0; i < checkSs.ptrs.size() - 1; i++) {
       int64_t start = checkSs.ptrs[i];

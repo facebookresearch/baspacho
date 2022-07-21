@@ -46,17 +46,16 @@ void testPartialFactor_Many(const std::function<OpsPtr()>& genOps) {
     SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ true, {nocross});
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
     ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -81,9 +80,7 @@ void testPartialFactor_Many(const std::function<OpsPtr()>& genOps) {
     Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
-        Matrix<T>(
-            (verifyMat - computedMat).template triangularView<Eigen::Lower>())
-                .norm() /
+        Matrix<T>((verifyMat - computedMat).template triangularView<Eigen::Lower>()).norm() /
             Matrix<T>(verifyMat.template triangularView<Eigen::Lower>()).norm(),
         0, Epsilon<T>::value2);
   }
@@ -106,17 +103,16 @@ void testSplitFactor_Many(const std::function<OpsPtr()>& genOps) {
     SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ true, {nocross});
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
     ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -133,9 +129,7 @@ void testSplitFactor_Many(const std::function<OpsPtr()>& genOps) {
     Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
-        Matrix<T>(
-            (verifyMat - computedMat).template triangularView<Eigen::Lower>())
-                .norm() /
+        Matrix<T>((verifyMat - computedMat).template triangularView<Eigen::Lower>()).norm() /
             Matrix<T>(verifyMat.template triangularView<Eigen::Lower>()).norm(),
         0, Epsilon<T>::value2);
   }
@@ -165,17 +159,16 @@ void testPartialSolveL_Many(const std::function<OpsPtr()>& genOps) {
     SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ true, {nocross});
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
     ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -224,17 +217,16 @@ void testPartialSolveLt_Many(const std::function<OpsPtr()>& genOps) {
     SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ true, {nocross});
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
     ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -283,17 +275,16 @@ void testPartialAddMv_Many(const std::function<OpsPtr()>& genOps) {
     SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ true, {nocross});
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
     ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
     // test from 0
@@ -319,19 +310,15 @@ void testPartialAddMv_Many(const std::function<OpsPtr()>& genOps) {
       Matrix<T> vecOut = Eigen::Map<Matrix<T>>(vecOutData.data(), order, nRHS);
       Matrix<T> vecRef = vecOut;
       vecRef.bottomRows(afterBar) +=
-          mat.bottomRightCorner(afterBar, afterBar)
-              .template triangularView<Eigen::Lower>() *
+          mat.bottomRightCorner(afterBar, afterBar).template triangularView<Eigen::Lower>() *
           vecIn.bottomRows(afterBar);
-      vecRef.bottomRows(afterBar) +=
-          mat.bottomRightCorner(afterBar, afterBar)
-              .template triangularView<Eigen::StrictlyLower>()
-              .transpose() *
-          vecIn.bottomRows(afterBar);
-      solver.addMvFrom(data.data(), nocross, vecIn.data(), order, vecOut.data(),
-                       order, nRHS);
+      vecRef.bottomRows(afterBar) += mat.bottomRightCorner(afterBar, afterBar)
+                                         .template triangularView<Eigen::StrictlyLower>()
+                                         .transpose() *
+                                     vecIn.bottomRows(afterBar);
+      solver.addMvFrom(data.data(), nocross, vecIn.data(), order, vecOut.data(), order, nRHS);
 
-      ASSERT_NEAR((vecOut - vecRef).norm() / vecRef.norm(), 0,
-                  Epsilon<T>::value2);
+      ASSERT_NEAR((vecOut - vecRef).norm() / vecRef.norm(), 0, Epsilon<T>::value2);
     }
   }
 }
@@ -361,17 +348,16 @@ void testPseudoFactor_Many(const std::function<OpsPtr()>& genOps) {
     SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ true, {nocross});
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
     ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -400,9 +386,7 @@ void testPseudoFactor_Many(const std::function<OpsPtr()>& genOps) {
     Matrix<T> computedMat = solver.skel().densify(data);
 
     ASSERT_NEAR(
-        Matrix<T>(
-            (verifyMat - computedMat).template triangularView<Eigen::Lower>())
-                .norm() /
+        Matrix<T>((verifyMat - computedMat).template triangularView<Eigen::Lower>()).norm() /
             Matrix<T>(verifyMat.template triangularView<Eigen::Lower>()).norm(),
         0, Epsilon<T>::value2);
   }
@@ -433,17 +417,16 @@ void testPartialSolveLFrom_Many(const std::function<OpsPtr()>& genOps) {
     SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ true, {nocross});
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
     ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
@@ -490,17 +473,16 @@ void testPartialSolveLtFrom_Many(const std::function<OpsPtr()>& genOps) {
     SparseStructure sortedSs = columnsToCscStruct(colBlocks).transpose();
 
     // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross =
-        (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
     EliminationTree et(paramSize, sortedSs);
     et.buildTree();
-    et.computeMerges(/* compute sparse elim ranges = */ true, {nocross});
+    et.processTree(/* compute sparse elim ranges = */ true, {nocross});
     et.computeAggregateStruct();
 
-    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan,
-                                        et.colStart, et.rowParam);
+    CoalescedBlockMatrixSkel factorSkel(et.computeSpanStart(), et.lumpToSpan, et.colStart,
+                                        et.rowParam);
     ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
 
     vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
