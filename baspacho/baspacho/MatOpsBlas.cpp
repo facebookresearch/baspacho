@@ -66,7 +66,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
       }
     } else {
       dispenso::TaskSet taskSet(sym.threadPool);
-      dispenso::parallel_for(taskSet, dispenso::makeChunkedRange(spanBegin, spanEnd, 1UL),
+      dispenso::parallel_for(taskSet, dispenso::makeChunkedRange(spanBegin, spanEnd, 1L),
                              [&](int64_t sBegin, int64_t sEnd) {
                                for (int64_t s = sBegin; s < sEnd; s++) {
                                  factorSpan(skel, data, s);
@@ -89,7 +89,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
       }
     } else {
       dispenso::TaskSet taskSet(sym.threadPool);
-      dispenso::parallel_for(taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
+      dispenso::parallel_for(taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5L),
                              [&](int64_t lBegin, int64_t lEnd) {
                                for (int64_t l = lBegin; l < lEnd; l++) {
                                  factorLump(skel, data, l);
@@ -102,7 +102,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
       int64_t numSpans = skel.spanStart.size() - 1;
       if (!sym.useThreads) {
         std::vector<int64_t> spanToChainOffset(numSpans);
-        for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
+        for (int64_t sRel = 0L; sRel < numElimRows; sRel++) {
           eliminateRowChain(elim, skel, data, sRel, spanToChainOffset);
         }
       } else {
@@ -123,7 +123,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
       }
     } else {
       if (!sym.useThreads) {
-        for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
+        for (int64_t sRel = 0L; sRel < numElimRows; sRel++) {
           eliminateVerySparseRowChain(elim, skel, data, sRel);
         }
       } else {
@@ -188,7 +188,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
       }
     } else {
       dispenso::TaskSet taskSet(sym.threadPool);
-      dispenso::parallel_for(taskSet, dispenso::makeChunkedRange(0, numBlockRows, 3UL),
+      dispenso::parallel_for(taskSet, dispenso::makeChunkedRange(0L, numBlockRows, 3L),
                              [&](int64_t rFrom, int64_t rTo) {
                                for (int64_t r = rFrom; r < rTo; r++) {
                                  int64_t rBegin = chainRowsTillEnd[r - 1] - rectRowBegin;
@@ -255,7 +255,7 @@ void BlasNumericCtx<double>::trsm(int64_t n, int64_t k, double* data, int64_t of
     Eigen::Map<const MatCMajD> matA(data + offA, n, n);
     dispenso::TaskSet taskSet(sym.threadPool);
     dispenso::parallel_for(
-        taskSet, dispenso::makeChunkedRange(0, k, 16UL), [&](int64_t k1, int64_t k2) {
+        taskSet, dispenso::makeChunkedRange(0L, k, 16L), [&](int64_t k1, int64_t k2) {
           Eigen::Map<MatRMaj<double>> matB(data + offB + n * k1, k2 - k1, n);
           matA.template triangularView<Eigen::Upper>().template solveInPlace<Eigen::OnTheRight>(
               matB);
@@ -280,7 +280,7 @@ void BlasNumericCtx<float>::trsm(int64_t n, int64_t k, float* data, int64_t offA
     Eigen::Map<const MatCMajD> matA(data + offA, n, n);
     dispenso::TaskSet taskSet(sym.threadPool);
     dispenso::parallel_for(
-        taskSet, dispenso::makeChunkedRange(0, k, 16UL), [&](int64_t k1, int64_t k2) {
+        taskSet, dispenso::makeChunkedRange(0L, k, 16L), [&](int64_t k1, int64_t k2) {
           Eigen::Map<MatRMaj<float>> matB(data + offB + n * k1, k2 - k1, n);
           matA.template triangularView<Eigen::Upper>().template solveInPlace<Eigen::OnTheRight>(
               matB);
@@ -389,7 +389,7 @@ struct BlasSolveCtx : SolveCtx<T> {
     } else {
       dispenso::TaskSet taskSet(sym.threadPool);
       dispenso::parallel_for(
-          taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
+          taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5L),
           [&](int64_t lBegin, int64_t lEnd) {
             for (int64_t lump = lBegin; lump < lEnd; lump++) {
               int64_t lumpStart = skel.lumpStart[lump];
@@ -407,7 +407,7 @@ struct BlasSolveCtx : SolveCtx<T> {
 
     if (!sym.useThreads) {
       int64_t numElimRows = elim.rowPtr.size() - 1;
-      for (int64_t sRel = 0UL; sRel < numElimRows; sRel++) {
+      for (int64_t sRel = 0L; sRel < numElimRows; sRel++) {
         int64_t rowSpan = sRel + elim.spanRowBegin;
         int64_t rowSpanStart = skel.spanStart[rowSpan];
         int64_t rowSpanSize = skel.spanStart[rowSpan + 1] - rowSpanStart;
@@ -493,7 +493,7 @@ struct BlasSolveCtx : SolveCtx<T> {
     } else {
       dispenso::TaskSet taskSet(sym.threadPool);
       dispenso::parallel_for(
-          taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5UL),
+          taskSet, dispenso::makeChunkedRange(lumpsBegin, lumpsEnd, 5L),
           [&](int64_t lBegin, int64_t lEnd) {
             for (int64_t lump = lBegin; lump < lEnd; lump++) {
               int64_t lumpStart = skel.lumpStart[lump];

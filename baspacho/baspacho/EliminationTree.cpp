@@ -95,7 +95,6 @@ static constexpr int64_t minNumSparseElimNodes = 50;
 
 void EliminationTree::computeSparseElimRanges(const vector<int64_t>& noCrossPoints) {
   int64_t ord = ss.order();
-  int64_t mergeHeight = 0;
   sparseElimRanges.push_back(0);
 
   for (size_t rangeIndex = 0; rangeIndex < noCrossPoints.size() + 1; rangeIndex++) {
@@ -105,15 +104,25 @@ void EliminationTree::computeSparseElimRanges(const vector<int64_t>& noCrossPoin
     int64_t k0 = rangeStart;
     while (k0 < rangeEnd) {
       int64_t k1 = k0;
+      int64_t mergeHeight = get<0>(unmergedHeightNode[k0]);
 
+      int64_t numEasyMerge = 0;
       while (k1 < rangeEnd && get<0>(unmergedHeightNode[k1]) == mergeHeight &&
              get<1>(unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
+        int64_t p = parent[k1];
+        double fillAfterMerge = ((double)nodeRows[k1]) / (nodeRows[p] + nodeSize[p]);
+        if (fillAfterMerge > 0.8) {
+          numEasyMerge++;
+        }
         k1++;
       }
-      if (k1 - k0 < minNumSparseElimNodes) {  // skip, too small
+
+      // skip and stop searching if 1. too small, or 2. most nodes are easily merged
+      if ((k1 - k0) < minNumSparseElimNodes || (k1 - k0) < numEasyMerge * 3) {
         break;
       }
-      mergeHeight++;
+      // cout << k0 << "..." << k1 << " (" << numEasyMerge << "/" << (k1 - k0) << ")" << endl;
+
       for (int64_t k = k0; k < k1; k++) {
         forbidMerge[get<2>(unmergedHeightNode[k])] = true;
       }
@@ -127,6 +136,34 @@ void EliminationTree::computeSparseElimRanges(const vector<int64_t>& noCrossPoin
   if (sparseElimRanges.size() == 1) {
     sparseElimRanges.pop_back();
   }
+}
+
+// t ~= a + b*n + c*n^2 + d*n^3
+double potrfModel(double n) {
+  double c[] = {3.975137677492635046e-07, 0.0 /*-7.384080107915980689e-08*/,
+                5.034549574025795499e-09, 6.502293016861755153e-12};
+  return c[0] + n * (c[1] + n * (c[2] + n * c[3]));
+}
+
+double trsmModel(double n, double k) {
+  double c[] = {1.146889197744097553e-06,          6.405404911372597549e-07,
+                0.0 /*-1.310823260065062174e-09*/, 0.0 /*-2.734271880834972249e-10*/,
+                1.383456786664319804e-09,          2.752945944702002428e-11};
+  return c[0] + n * (c[1] + n * c[2]) + k * (c[3] + n * (c[4] + n * c[5]));
+}
+
+double sygeModel(double m, double n, double k) {
+  double c[] = {7.807840624901230139e-07, 0.0 /*-6.422313720003776029e-09*/,
+                5.625680355500814005e-10, 0.0 /*-2.622329776837938154e-08*/,
+                1.591634874952530293e-09, 2.316558505904654318e-11};
+  return c[0] + (m + n) * c[1] + (m * n) * c[2] +  //
+         k * (c[3] + (m + n) * c[4] + (m * n) * c[5]);
+}
+
+double asmblModel(double br, double bc) {
+  double c[] = {3.865027765792498186e-07, 3.542278666359479735e-08, 1.928966025421573037e-07,
+                3.78354960153969549e-09};
+  return c[0] + br * c[1] + bc * c[2] + br * bc * c[3];
 }
 
 static constexpr double flopsColOverhead = 2e7;
