@@ -19,48 +19,6 @@ EliminationTree::EliminationTree(const vector<int64_t>& paramSize, const SparseS
   BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
 }
 
-// t ~= a + b*n + c*n^2 + d*n^3
-double potrfModel(double n) {
-  double c[] = {3.975137677492635046e-07, 0.0 /*-7.384080107915980689e-08*/,
-                5.034549574025795499e-09, 6.502293016861755153e-12};
-  return c[0] + n * (c[1] + n * (c[2] + n * c[3]));
-}
-
-double trsmModel(double n, double k) {
-  double c[] = {1.146889197744097553e-06,          6.405404911372597549e-07,
-                0.0 /*-1.310823260065062174e-09*/, 0.0 /*-2.734271880834972249e-10*/,
-                1.383456786664319804e-09,          2.752945944702002428e-11};
-  return c[0] + n * (c[1] + n * c[2]) + k * (c[3] + n * (c[4] + n * c[5]));
-}
-
-double sygeModel(double m, double n, double k) {
-  double c[] = {7.807840624901230139e-07, 0.0 /*-6.422313720003776029e-09*/,
-                5.625680355500814005e-10, 0.0 /*-2.622329776837938154e-08*/,
-                1.591634874952530293e-09, 2.316558505904654318e-11};
-  return c[0] + (m + n) * c[1] + (m * n) * c[2] +  //
-         k * (c[3] + (m + n) * c[4] + (m * n) * c[5]);
-}
-
-double asmblModel(double br, double bc) {
-  double c[] = {3.865027765792498186e-07, 3.542278666359479735e-08, 1.928966025421573037e-07,
-                3.78354960153969549e-09};
-  return c[0] + br * c[1] + bc * c[2] + br * bc * c[3];
-}
-
-Eigen::Vector2d sygeModelV(double m, double n) {
-  double c[] = {7.807840624901230139e-07, 0.0 /*-6.422313720003776029e-09*/,
-                5.625680355500814005e-10, 0.0 /*-2.622329776837938154e-08*/,
-                1.591634874952530293e-09, 2.316558505904654318e-11};
-  return Eigen::Vector2d{c[0] + (m + n) * c[1] + (m * n) * c[2],  //
-                         c[3] + (m + n) * c[4] + (m * n) * c[5]};
-}
-
-Eigen::Vector2d asmblModelV(double br) {
-  double c[] = {3.865027765792498186e-07, 3.542278666359479735e-08, 1.928966025421573037e-07,
-                3.78354960153969549e-09};
-  return Eigen::Vector2d{c[0] + br * c[1], c[2] + br * c[3]};
-}
-
 void EliminationTree::buildTree() {
   int64_t ord = ss.order();
   parent.assign(ord, -1);
@@ -122,8 +80,8 @@ void EliminationTree::buildTree() {
     for (int64_t i = c.size() - 1; i >= 0; i--) {
       int64_t row = c[i];
 
-      sygeC += sygeModelV(skippedRows + paramSize[row], paramSize[row]);
-      asmblC += asmblModelV(skippedBlocks + 1);
+      sygeC += compMod.sygeLinEst(skippedRows + paramSize[row], paramSize[row]);
+      asmblC += compMod.asmblLinEst(skippedBlocks + 1);
 
       nodeRowDataEls[row].push_back({.colIdx = col,
                                      .rBlocks = 1,
@@ -284,30 +242,31 @@ void EliminationTree::computeMerges() {
 
     bool willMerge = elimFlopsMerg < elimFlopsK + elimFlopsP + flopsColOverhead;
 #elif 0
-    double tk =
-        potrfModel(sk) + trsmModel(sk, rk) + sygeModel(rk, rk, sk) + asmblModel(rk / 2, sk / 2);
-    double tp =
-        potrfModel(sp) + trsmModel(sp, rp) + sygeModel(rp, rp, sp) + asmblModel(rp / 2, sp / 2);
-    double tm =
-        potrfModel(sm) + trsmModel(sm, rp) + sygeModel(rp, rp, sm) + asmblModel(rp / 2, sm / 2);
+    double tk = compMod.potrfEst(sk) + compMod.trsmEst(sk, rk) + compMod.sygeEst(rk, rk, sk) +
+                compMod.asmblEst(rk / 2, sk / 2);
+    double tp = compMod.potrfEst(sp) + compMod.trsmEst(sp, rp) + compMod.sygeEst(rp, rp, sp) +
+                compMod.asmblEst(rp / 2, sp / 2);
+    double tm = compMod.potrfEst(sm) + compMod.trsmEst(sm, rp) + compMod.sygeEst(rp, rp, sm) +
+                compMod.asmblEst(rp / 2, sm / 2);
 
     bool willMerge = tm < tk + tp;
 #elif 0
-    double tk = potrfModel(sk) + trsmModel(sk, rk) + sygeModel(rk, rk, sk) +
-                asmblModel(nodeRowBlocks[k], numMergedNodes[k]);
-    double tp = potrfModel(sp) + trsmModel(sp, rp) + sygeModel(rp, rp, sp) +
-                asmblModel(nodeRowBlocks[p], numMergedNodes[p]);
-    double tm = potrfModel(sm) + trsmModel(sm, rp) + sygeModel(rp, rp, sm) +
-                asmblModel(nodeRowBlocks[p], numMergedNodes[k] + numMergedNodes[p]);
+    double tk = compMod.potrfEst(sk) + compMod.trsmEst(sk, rk) + compMod.sygeEst(rk, rk, sk) +
+                compMod.asmblEst(nodeRowBlocks[k], numMergedNodes[k]);
+    double tp = compMod.potrfEst(sp) + compMod.trsmEst(sp, rp) + compMod.sygeEst(rp, rp, sp) +
+                compMod.asmblEst(nodeRowBlocks[p], numMergedNodes[p]);
+    double tm = compMod.potrfEst(sm) + compMod.trsmEst(sm, rp) + compMod.sygeEst(rp, rp, sm) +
+                compMod.asmblEst(nodeRowBlocks[p], numMergedNodes[k] + numMergedNodes[p]);
 
     bool willMerge = tm < tk + tp;
 #elif 1
-    double tk = potrfModel(sk) + trsmModel(sk, rk) + sygeCosts[k][0] + sygeCosts[k][1] * sk +
-                asmblCosts[k][0] + asmblCosts[k][1] * numMergedNodes[k];
-    double tp = potrfModel(sp) + trsmModel(sp, rp) + sygeCosts[p][0] + sygeCosts[p][1] * sp +
-                asmblCosts[p][0] + asmblCosts[p][1] * numMergedNodes[p];
-    double tm = potrfModel(sm) + trsmModel(sm, rp) + sygeCosts[p][0] + sygeCosts[p][1] * sm +
-                asmblCosts[p][0] + asmblCosts[p][1] * (numMergedNodes[k] + numMergedNodes[p]);
+    double tk = compMod.potrfEst(sk) + compMod.trsmEst(sk, rk) + sygeCosts[k][0] +
+                sygeCosts[k][1] * sk + asmblCosts[k][0] + asmblCosts[k][1] * numMergedNodes[k];
+    double tp = compMod.potrfEst(sp) + compMod.trsmEst(sp, rp) + sygeCosts[p][0] +
+                sygeCosts[p][1] * sp + asmblCosts[p][0] + asmblCosts[p][1] * numMergedNodes[p];
+    double tm = compMod.potrfEst(sm) + compMod.trsmEst(sm, rp) + sygeCosts[p][0] +
+                sygeCosts[p][1] * sm + asmblCosts[p][0] +
+                asmblCosts[p][1] * (numMergedNodes[k] + numMergedNodes[p]);
     bool willMerge = tm < tk + tp;
 #endif
 
@@ -339,13 +298,13 @@ void EliminationTree::computeMerges() {
           int64_t c = pRD[ip].colIdx;
           auto& sygeC = sygeCosts[c];
           auto& asmblC = asmblCosts[c];
-          sygeC -= sygeModelV(kRD[ik].rowsDown + kRD[ik].rows, kRD[ik].rows);
-          asmblC -= asmblModelV(kRD[ik].rBlocksDown + kRD[ik].rBlocks);
-          sygeC -= sygeModelV(pRD[ip].rowsDown + pRD[ip].rows, pRD[ip].rows);
-          asmblC -= asmblModelV(pRD[ip].rBlocksDown + pRD[ip].rBlocks);
-          sygeC += sygeModelV(pRD[ip].rowsDown + (kRD[ik].rows + pRD[ip].rows),
-                              (kRD[ik].rows + pRD[ip].rows));
-          asmblC += asmblModelV(pRD[ip].rBlocksDown + (kRD[ik].rBlocks + pRD[ip].rBlocks));
+          sygeC -= compMod.sygeLinEst(kRD[ik].rowsDown + kRD[ik].rows, kRD[ik].rows);
+          asmblC -= compMod.asmblLinEst(kRD[ik].rBlocksDown + kRD[ik].rBlocks);
+          sygeC -= compMod.sygeLinEst(pRD[ip].rowsDown + pRD[ip].rows, pRD[ip].rows);
+          asmblC -= compMod.asmblLinEst(pRD[ip].rBlocksDown + pRD[ip].rBlocks);
+          sygeC += compMod.sygeLinEst(pRD[ip].rowsDown + (kRD[ik].rows + pRD[ip].rows),
+                                      (kRD[ik].rows + pRD[ip].rows));
+          asmblC += compMod.asmblLinEst(pRD[ip].rBlocksDown + (kRD[ik].rBlocks + pRD[ip].rBlocks));
 
           newRdEls.push_back({.colIdx = c,
                               .rBlocks = kRD[ik].rBlocks + pRD[ip].rBlocks,
@@ -358,10 +317,10 @@ void EliminationTree::computeMerges() {
       }
       auto& sygeC = sygeCosts[p];
       auto& asmblC = asmblCosts[p];
-      sygeC -= sygeModelV(nodeRows[p] + prevNodeSize, prevNodeSize);
-      asmblC -= asmblModelV(nodeRowBlocks[p] + prevNumMergedNodes);
-      sygeC += sygeModelV(nodeRows[p] + nodeSize[p], nodeSize[p]);
-      asmblC += asmblModelV(nodeRowBlocks[p] + numMergedNodes[p]);
+      sygeC -= compMod.sygeLinEst(nodeRows[p] + prevNodeSize, prevNodeSize);
+      asmblC -= compMod.asmblLinEst(nodeRowBlocks[p] + prevNumMergedNodes);
+      sygeC += compMod.sygeLinEst(nodeRows[p] + nodeSize[p], nodeSize[p]);
+      asmblC += compMod.asmblLinEst(nodeRowBlocks[p] + numMergedNodes[p]);
       newRdEls.push_back({.colIdx = p,
                           .rBlocks = numMergedNodes[p],
                           .rows = nodeSize[p],

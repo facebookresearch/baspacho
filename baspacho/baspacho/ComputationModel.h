@@ -5,13 +5,17 @@
 namespace BaSpaCho {
 
 struct ComputationModel {
-  double potrfEst(double n) { return potrfModel(potrfParams, n); }
+  double potrfEst(double n) const { return potrfModel(potrfParams, n); }
 
-  double trsmEst(double n, double k) { return trsmModel(trsmParams, n, k); }
+  double trsmEst(double n, double k) const { return trsmModel(trsmParams, n, k); }
 
-  double sygeEst(double m, double n, double k) { return sygeModel(sygeParams, m, n, k); }
+  double sygeEst(double m, double n, double k) const { return sygeModel(sygeParams, m, n, k); }
 
-  double asmblEst(double br, double bc) { return asmblModel(asmblParams, br, bc); }
+  double asmblEst(double br, double bc) const { return asmblModel(asmblParams, br, bc); }
+
+  Eigen::Vector2d sygeLinEst(double m, double n) const { return sygeLinModel(sygeParams, m, n); }
+
+  Eigen::Vector2d asmblLinEst(double br) const { return asmblLinModel(asmblParams, br); }
 
   Eigen::Vector<double, 4> potrfParams;
   Eigen::Vector<double, 6> trsmParams;
@@ -49,6 +53,12 @@ struct ComputationModel {
     return {1.0, (m + n), (m * n), k, k * (m + n), k * (m * n)};
   }
 
+  // linear function of k
+  static Eigen::Vector2d sygeLinModel(const Eigen::Vector<double, 6>& p, double m, double n) {
+    return {p[0] + (m + n) * p[1] + (m * n) * p[2],  //
+            p[3] + (m + n) * p[4] + (m * n) * p[5]};
+  }
+
   // t ~= a + b*br + c*bc + d*br*bc
   static double asmblModel(const Eigen::Vector<double, 4>& p, double br, double bc) {
     return p[0] + br * p[1] + bc * p[2] + br * bc * p[3];
@@ -56,6 +66,11 @@ struct ComputationModel {
 
   static Eigen::Matrix<double, 1, 4> dAsmblModel(double br, double bc) {
     return {1.0, br, bc, br * bc};
+  }
+
+  // linear function of bc
+  static Eigen::Vector2d asmblLinModel(const Eigen::Vector<double, 4>& p, double br) {
+    return {p[0] + br * p[1], p[2] + br * p[3]};
   }
 
   // pre-built model collection
