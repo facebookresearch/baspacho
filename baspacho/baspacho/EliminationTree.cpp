@@ -31,8 +31,7 @@ void EliminationTree::buildTree() {
   // skeleton of the algo to iterate on fillup's nodes is from Eigen's
   // `SimplicialCholesky_impl.h` (by Gael Guennebaud),
   // in turn from LDL by Timothy A. Davis.
-  nodeColEls.resize(ord);
-  nodeColDataEls.resize(ord);
+  perColNodes.resize(ord);
   for (int64_t k = 0; k < ord; ++k) {
     /* L(k,:) pattern: all nodes reachable in etree from nz in A(0:k-1,k) */
     parent[k] = -1; /* parent of k is not yet known */
@@ -41,7 +40,6 @@ void EliminationTree::buildTree() {
 
     int64_t start = ss.ptrs[k];
     int64_t end = ss.ptrs[k + 1];
-    auto& col = nodeColEls[k];
     for (int64_t q = start; q < end; q++) {
       int64_t i = ss.inds[q];
       if (i >= k) {
@@ -58,19 +56,16 @@ void EliminationTree::buildTree() {
         /* L(k,i) is nonzero */
         nodeRows[i] += paramSize[k];
         nodeRowBlocks[i]++;
-        col.push_back(i);
-        nodeColDataEls[i].push_back(k);
+        perColNodes[i].push_back(k);
       }
     }
-    sort(col.begin(), col.end());
   }
 
   sygeCosts.resize(ord);
   asmblCosts.resize(ord);
-  nodeRowDataEls.resize(ord);
-  // cout << "A" << endl;
-  for (int64_t col = 0; col < nodeColDataEls.size(); col++) {
-    auto& c = nodeColDataEls[col];
+  perRowNodeStats.resize(ord);
+  for (int64_t col = 0; col < perColNodes.size(); col++) {
+    auto& c = perColNodes[col];
     c.push_back(col);
     sort(c.begin(), c.end());
 
@@ -83,11 +78,11 @@ void EliminationTree::buildTree() {
       sygeC += compMod.sygeLinEst(skippedRows + paramSize[row], paramSize[row]);
       asmblC += compMod.asmblLinEst(skippedBlocks + 1);
 
-      nodeRowDataEls[row].push_back({.colIdx = col,
-                                     .rBlocks = 1,
-                                     .rows = paramSize[row],
-                                     .rBlocksDown = skippedBlocks,
-                                     .rowsDown = skippedRows});
+      perRowNodeStats[row].push_back({.colIdx = col,
+                                      .rBlocks = 1,
+                                      .rows = paramSize[row],
+                                      .rBlocksDown = skippedBlocks,
+                                      .rowsDown = skippedRows});
 
       skippedRows += paramSize[row];
       skippedBlocks++;
@@ -95,7 +90,6 @@ void EliminationTree::buildTree() {
     sygeCosts[col] = sygeC;
     asmblCosts[col] = asmblC;
   }
-  // cout << "B" << endl;
 }
 
 // Compute node heights:
@@ -165,7 +159,6 @@ void EliminationTree::computeSparseElimRanges(const vector<int64_t>& noCrossPoin
       if ((k1 - k0) < minNumSparseElimNodes || (k1 - k0) < numEasyMerge * 3) {
         break;
       }
-      // cout << k0 << "..." << k1 << " (" << numEasyMerge << "/" << (k1 - k0) << ")" << endl;
 
       for (int64_t k = k0; k < k1; k++) {
         forbidMerge[get<2>(unmergedHeightNode[k])] = true;
@@ -235,40 +228,16 @@ void EliminationTree::computeMerges() {
     // in the merged node. This isn't 100% accurate because some children elimination operations
     // might also merge and this is not accounted, but the current estimate should be rather
     // accurate.
-#if 0
-    double elimFlopsK = sk * sk * sk + sk * sk * rk + sk * rk * rk;
-    double elimFlopsP = sp * sp * sp + sp * sp * rp + sp * rp * rp;
-    double elimFlopsMerg = sm * sm * sm + sm * sm * rp + sm * rp * rp;
-
-    bool willMerge = elimFlopsMerg < elimFlopsK + elimFlopsP + flopsColOverhead;
-#elif 0
-    double tk = compMod.potrfEst(sk) + compMod.trsmEst(sk, rk) + compMod.sygeEst(rk, rk, sk) +
-                compMod.asmblEst(rk / 2, sk / 2);
-    double tp = compMod.potrfEst(sp) + compMod.trsmEst(sp, rp) + compMod.sygeEst(rp, rp, sp) +
-                compMod.asmblEst(rp / 2, sp / 2);
-    double tm = compMod.potrfEst(sm) + compMod.trsmEst(sm, rp) + compMod.sygeEst(rp, rp, sm) +
-                compMod.asmblEst(rp / 2, sm / 2);
-
+    double tk = compMod.potrfEst(sk) + compMod.trsmEst(sk, rk) +  //
+                sygeCosts[k][0] + sygeCosts[k][1] * sk +          //
+                asmblCosts[k][0] + asmblCosts[k][1] * numMergedNodes[k];
+    double tp = compMod.potrfEst(sp) + compMod.trsmEst(sp, rp) +  //
+                sygeCosts[p][0] + sygeCosts[p][1] * sp +          //
+                asmblCosts[p][0] + asmblCosts[p][1] * numMergedNodes[p];
+    double tm = compMod.potrfEst(sm) + compMod.trsmEst(sm, rp) +  //
+                sygeCosts[p][0] + sygeCosts[p][1] * sm +          //
+                asmblCosts[p][0] + asmblCosts[p][1] * (numMergedNodes[k] + numMergedNodes[p]);
     bool willMerge = tm < tk + tp;
-#elif 0
-    double tk = compMod.potrfEst(sk) + compMod.trsmEst(sk, rk) + compMod.sygeEst(rk, rk, sk) +
-                compMod.asmblEst(nodeRowBlocks[k], numMergedNodes[k]);
-    double tp = compMod.potrfEst(sp) + compMod.trsmEst(sp, rp) + compMod.sygeEst(rp, rp, sp) +
-                compMod.asmblEst(nodeRowBlocks[p], numMergedNodes[p]);
-    double tm = compMod.potrfEst(sm) + compMod.trsmEst(sm, rp) + compMod.sygeEst(rp, rp, sm) +
-                compMod.asmblEst(nodeRowBlocks[p], numMergedNodes[k] + numMergedNodes[p]);
-
-    bool willMerge = tm < tk + tp;
-#elif 1
-    double tk = compMod.potrfEst(sk) + compMod.trsmEst(sk, rk) + sygeCosts[k][0] +
-                sygeCosts[k][1] * sk + asmblCosts[k][0] + asmblCosts[k][1] * numMergedNodes[k];
-    double tp = compMod.potrfEst(sp) + compMod.trsmEst(sp, rp) + sygeCosts[p][0] +
-                sygeCosts[p][1] * sp + asmblCosts[p][0] + asmblCosts[p][1] * numMergedNodes[p];
-    double tm = compMod.potrfEst(sm) + compMod.trsmEst(sm, rp) + sygeCosts[p][0] +
-                sygeCosts[p][1] * sm + asmblCosts[p][0] +
-                asmblCosts[p][1] * (numMergedNodes[k] + numMergedNodes[p]);
-    bool willMerge = tm < tk + tp;
-#endif
 
     if (willMerge) {
       int64_t prevNodeSize = nodeSize[p];
@@ -278,20 +247,17 @@ void EliminationTree::computeMerges() {
       numMergedNodes[p] += numMergedNodes[k];
       numMerges++;
 
-      auto& kRD = nodeRowDataEls[k];
-      auto& pRD = nodeRowDataEls[p];
-      std::vector<OpCost> newRdEls;
-
-#if 1
+      auto& kRD = perRowNodeStats[k];
+      auto& pRD = perRowNodeStats[p];
       for (size_t ik = 0, ip = 0; ik < kRD.size() || ip < pRD.size(); /* */) {
         if ((ip >= pRD.size()) || (ik < kRD.size() && kRD[ik].colIdx < pRD[ip].colIdx)) {
           if (kRD[ik].colIdx != k) {
-            newRdEls.push_back(kRD[ik]);
+            tmpRowStats.push_back(kRD[ik]);
           }
           ik++;
         } else if ((ik >= kRD.size()) || (ip < pRD.size() && kRD[ik].colIdx > pRD[ip].colIdx)) {
           if (pRD[ip].colIdx != p) {
-            newRdEls.push_back(pRD[ip]);
+            tmpRowStats.push_back(pRD[ip]);
           }
           ip++;
         } else {
@@ -306,11 +272,11 @@ void EliminationTree::computeMerges() {
                                       (kRD[ik].rows + pRD[ip].rows));
           asmblC += compMod.asmblLinEst(pRD[ip].rBlocksDown + (kRD[ik].rBlocks + pRD[ip].rBlocks));
 
-          newRdEls.push_back({.colIdx = c,
-                              .rBlocks = kRD[ik].rBlocks + pRD[ip].rBlocks,
-                              .rows = kRD[ik].rows + pRD[ip].rows,
-                              .rBlocksDown = pRD[ip].rBlocksDown,
-                              .rowsDown = pRD[ip].rowsDown});
+          tmpRowStats.push_back({.colIdx = c,
+                                 .rBlocks = kRD[ik].rBlocks + pRD[ip].rBlocks,
+                                 .rows = kRD[ik].rows + pRD[ip].rows,
+                                 .rBlocksDown = pRD[ip].rBlocksDown,
+                                 .rowsDown = pRD[ip].rowsDown});
           ik++;
           ip++;
         }
@@ -321,13 +287,13 @@ void EliminationTree::computeMerges() {
       asmblC -= compMod.asmblLinEst(nodeRowBlocks[p] + prevNumMergedNodes);
       sygeC += compMod.sygeLinEst(nodeRows[p] + nodeSize[p], nodeSize[p]);
       asmblC += compMod.asmblLinEst(nodeRowBlocks[p] + numMergedNodes[p]);
-      newRdEls.push_back({.colIdx = p,
-                          .rBlocks = numMergedNodes[p],
-                          .rows = nodeSize[p],
-                          .rBlocksDown = nodeRowBlocks[p],
-                          .rowsDown = nodeRows[p]});
-      swap(nodeRowDataEls[p], newRdEls);
-#endif
+      tmpRowStats.push_back({.colIdx = p,
+                             .rBlocks = numMergedNodes[p],
+                             .rows = nodeSize[p],
+                             .rBlocksDown = nodeRowBlocks[p],
+                             .rowsDown = nodeRows[p]});
+      swap(perRowNodeStats[p], tmpRowStats);
+      tmpRowStats.clear();
     }  // willmerge
   }
 }

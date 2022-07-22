@@ -55,16 +55,19 @@ struct EliminationTree {
   std::vector<int64_t> nodeSize;
   std::vector<int64_t> nodeRows;
   std::vector<int64_t> nodeRowBlocks;
-  std::vector<std::vector<int64_t>> nodeColEls;
-  std::vector<std::vector<int64_t>> nodeColDataEls;
-  struct OpCost {
-    int colIdx;
-    int rBlocks;
-    int rows;
-    int rBlocksDown;
-    int rowsDown;
+  std::vector<std::vector<int64_t>> perColNodes;
+  struct NodeStats {
+    int64_t colIdx;
+    int64_t rBlocks;
+    int64_t rows;
+    int64_t rBlocksDown;
+    int64_t rowsDown;
   };
-  std::vector<std::vector<OpCost>> nodeRowDataEls;
+  std::vector<std::vector<NodeStats>> perRowNodeStats;
+  std::vector<NodeStats> tmpRowStats;
+
+  // modelled costs of syge/asmbl ops for a node, as linear
+  // function of node size (resp. size as number of col blocks)
   std::vector<Eigen::Vector2d> sygeCosts;
   std::vector<Eigen::Vector2d> asmblCosts;
 
