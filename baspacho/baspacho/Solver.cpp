@@ -572,7 +572,7 @@ static SolverPtr createSolverQ(const Settings& settings, const std::vector<int64
   std::vector<int64_t> sortedParamSize(paramSize.size());
   leftPermute(sortedParamSize.begin(), invPerm, paramSize);
 
-  EliminationTree et(sortedParamSize, sortedSs);
+  EliminationTree et(sortedParamSize, sortedSs, settings.computationModel);
   et.buildTree();
   et.processTree(settings.findSparseEliminationRanges);
   et.computeAggregateStruct();
@@ -600,8 +600,7 @@ SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& par
 
   SparseStructure ss = ss_;
   if (settings.addFillPolicy != AddFillNone) {
-    ss = ss.addIndependentEliminationFill(elimLumpRanges[0], elimLumpRanges[1]);
-    for (int64_t e = 1; e < (int64_t)elimLumpRanges.size() - 1; e++) {
+    for (int64_t e = 0; e < (int64_t)elimLumpRanges.size() - 1; e++) {
       ss = ss.addIndependentEliminationFill(elimLumpRanges[e], elimLumpRanges[e + 1]);
     }
   }
@@ -652,7 +651,7 @@ SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& par
   }
 
   // compute as ordinary elimination tree on br-corner
-  EliminationTree et(sortedBottomParamSize, sortedSsBottom);
+  EliminationTree et(sortedBottomParamSize, sortedSsBottom, settings.computationModel);
   et.buildTree();
   et.processTree(settings.findSparseEliminationRanges, noCrossPoints,
                  settings.addFillPolicy == AddFillForAutoElims);

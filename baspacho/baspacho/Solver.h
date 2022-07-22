@@ -145,11 +145,15 @@ enum AddFillPolicy {
   AddFillNone,           // no fill added, no reorder
 };
 
+// if not set, a default will be selected depending on the backend
+struct ComputationModel;
+
 struct Settings {
   bool findSparseEliminationRanges = true;
   int numThreads = 16;
   BackendType backend = BackendBlas;
   AddFillPolicy addFillPolicy = AddFillComplete;
+  ComputationModel* computationModel = nullptr;
 };
 
 SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& paramSize,
