@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <sstream>
 #include "Optimizer.h"
+#include "baspacho/baspacho/ComputationModel.h"
 #include "baspacho/baspacho/Solver.h"
 #include "baspacho/baspacho/Utils.h"
 #include "baspacho/testing/TestingUtils.h"
@@ -48,8 +49,13 @@ vector<vector<double>> loadCsv(const string& path) {
   return retv;
 }
 
+using Vec4 = Eigen::Vector<double, 4>;
+using Mat14 = Eigen::Matrix<double, 1, 4>;
+using Vec6 = Eigen::Vector<double, 6>;
+using Mat16 = Eigen::Matrix<double, 1, 6>;
+
 // t ~= a + b*n + c*n^2 + d*n^3
-void optimizePotrfModel(const vector<vector<double>>& samples) {
+Vec4 optimizePotrfModel(const vector<vector<double>>& samples) {
   BASPACHO_CHECK_EQ(samples[0].size(), 2);
   double n3coeff_sum = 0.0;
   for (auto& nt : samples) {
@@ -68,10 +74,8 @@ void optimizePotrfModel(const vector<vector<double>>& samples) {
     double s = 1.0 / sqrt(t);  // scaling factor
     opt.addFactor(
         [=](const Vec4& c, Mat14* dc) -> Vec1 {
-          if (dc) {
-            *dc << s, n * s, n * n * s, n * n * n * s;
-          }
-          return Vec1(s * (c[0] + n * (c[1] + n * (c[2] + n * c[3])) - t));
+          dc && (*dc = ComputationModel::dPotrfModel(n) * s, true);
+          return Vec1{s * (ComputationModel::potrfModel(c, n) - t)};
         },
         coeffs);
   }
@@ -81,12 +85,14 @@ void optimizePotrfModel(const vector<vector<double>>& samples) {
   stringstream ss;
   ss.precision(numeric_limits<double>::max_digits10 + 2);
   auto& c = coeffs.value;
-  ss << "potrf_model = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << " };";
+  ss << "potrfParams = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << " };";
   cout << ss.str() << endl;
+
+  return coeffs.value;
 }
 
 // t ~= a + b*n + c*n^2 + (d + e*n + f*n^2)*k
-void optimizeTrsmModel(const vector<vector<double>>& samples) {
+Vec6 optimizeTrsmModel(const vector<vector<double>>& samples) {
   BASPACHO_CHECK_EQ(samples[0].size(), 3);
   double n2k_coeff_sum = 0.0;
   for (auto& nkt : samples) {
@@ -95,8 +101,6 @@ void optimizeTrsmModel(const vector<vector<double>>& samples) {
   }
   double n2k_coeff = exp(n2k_coeff_sum / samples.size());
 
-  using Vec6 = Eigen::Vector<double, 6>;
-  using Mat16 = Eigen::Matrix<double, 1, 6>;
   Variable<Vec6> coeffs{0.0, 0.0, 0.0, 0.0, 0.0, n2k_coeff};
 
   Optimizer opt;
@@ -105,10 +109,8 @@ void optimizeTrsmModel(const vector<vector<double>>& samples) {
     double s = 1.0 / sqrt(t);  // scaling factor
     opt.addFactor(
         [=](const Vec6& c, Mat16* dc) -> Vec1 {
-          if (dc) {
-            *dc << s, n * s, n * n * s, k * s, k * n * s, k * n * n * s;
-          }
-          return Vec1(s * (c[0] + n * (c[1] + n * c[2]) + k * (c[3] + n * (c[4] + n * c[5])) - t));
+          dc && (*dc = ComputationModel::dTrsmModel(n, k) * s, true);
+          return Vec1{s * (ComputationModel::trsmModel(c, n, k) - t)};
         },
         coeffs);
   }
@@ -118,16 +120,18 @@ void optimizeTrsmModel(const vector<vector<double>>& samples) {
   stringstream ss;
   ss.precision(numeric_limits<double>::max_digits10 + 2);
   auto& c = coeffs.value;
-  ss << "trsm_model = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << ", " << c[4]
+  ss << "trsmParams = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << ", " << c[4]
      << ", " << c[5] << " };";
   cout << ss.str() << endl;
+
+  return coeffs.value;
 }
 
 // plain model is:
 //   t ~= a + b*m + c*n + d*k + e*m*n + f*m*k + g*n*k + h*n*m*k
 // symmetrized in m,n it becomes (putting u=m+n, v=mn the basis of sym functions):
 //   t ~= a + b*u + c*v + d*k + e*u*k + f*v*k
-void optimizeSygeModel(const vector<vector<double>>& samples) {
+Vec6 optimizeSygeModel(const vector<vector<double>>& samples) {
   BASPACHO_CHECK_EQ(samples[0].size(), 4);
   double mnk_coeff_sum = 0.0;
   for (auto& mnkt : samples) {
@@ -146,11 +150,8 @@ void optimizeSygeModel(const vector<vector<double>>& samples) {
     double s = 1.0 / sqrt(t);  // scaling factor
     opt.addFactor(
         [=](const Vec6& c, Mat16* dc) -> Vec1 {
-          if (dc) {
-            *dc << s, (m + n) * s, (m * n) * s, k * s, k * (m + n) * s, k * (m * n) * s;
-          }
-          return Vec1(s * (c[0] + (m + n) * c[1] + (m * n) * c[2] +  //
-                           k * (c[3] + (m + n) * c[4] + (m * n) * c[5]) - t));
+          dc && (*dc = ComputationModel::dSygeModel(m, n, k) * s, true);
+          return Vec1{s * (ComputationModel::sygeModel(c, m, n, k) - t)};
         },
         coeffs);
   }
@@ -160,13 +161,15 @@ void optimizeSygeModel(const vector<vector<double>>& samples) {
   stringstream ss;
   ss.precision(numeric_limits<double>::max_digits10 + 2);
   auto& c = coeffs.value;
-  ss << "syge_model = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << ", " << c[4]
+  ss << "sygeParams = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << ", " << c[4]
      << ", " << c[5] << " };";
   cout << ss.str() << endl;
+
+  return coeffs.value;
 }
 
 // t ~= a + b*br + c*bc + d*br*bc
-void optimizeAsmblModel(const vector<vector<double>>& samples) {
+Vec4 optimizeAsmblModel(const vector<vector<double>>& samples) {
   BASPACHO_CHECK_EQ(samples[0].size(), 3);
   double brbc_coeff_sum = 0.0;
   for (auto& brbct : samples) {
@@ -175,8 +178,6 @@ void optimizeAsmblModel(const vector<vector<double>>& samples) {
   }
   double brbc_coeff = exp(brbc_coeff_sum / samples.size());
 
-  using Vec4 = Eigen::Vector<double, 4>;
-  using Mat14 = Eigen::Matrix<double, 1, 4>;
   Variable<Vec4> coeffs{0.0, 0.0, 0.0, brbc_coeff};
 
   Optimizer opt;
@@ -185,10 +186,8 @@ void optimizeAsmblModel(const vector<vector<double>>& samples) {
     double s = 1.0 / sqrt(t);  // scaling factor
     opt.addFactor(
         [=](const Vec4& c, Mat14* dc) -> Vec1 {
-          if (dc) {
-            *dc << s, br * s, bc * s, br * bc * s;
-          }
-          return Vec1(s * (c[0] + br * c[1] + bc * c[2] + br * bc * c[3] - t));
+          dc && (*dc = ComputationModel::dAsmblModel(br, bc) * s, true);
+          return Vec1{s * (ComputationModel::asmblModel(c, br, bc) - t)};
         },
         coeffs);
   }
@@ -198,55 +197,95 @@ void optimizeAsmblModel(const vector<vector<double>>& samples) {
   stringstream ss;
   ss.precision(numeric_limits<double>::max_digits10 + 2);
   auto& c = coeffs.value;
-  ss << "asmbl_model = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << " };";
+  ss << "asmblParams = { " << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3] << " };";
   cout << ss.str() << endl;
+
+  return coeffs.value;
 }
 
 int main(int argc, char* argv[]) {
-  std::string model, input;
+  std::string potrf, trsm, syge, asmbl;
   for (int i = 1; i < argc; i++) {
-    if (!strcmp(argv[i], "-m")) {
+    if (!strcmp(argv[i], "-p")) {
       if (i == argc - 1) {
-        cout << "missing arg to -m argument" << endl;
+        cout << "missing arg to -p argument (run with -h)" << endl;
         return 1;
       }
-      model = argv[++i];
-    } else if (!strcmp(argv[i], "-i")) {
+      potrf = argv[++i];
+    } else if (!strcmp(argv[i], "-t")) {
       if (i == argc - 1) {
-        cout << "missing arg to -i argument" << endl;
+        cout << "missing arg to -t argument (run with -h)" << endl;
         return 1;
       }
-      input = argv[++i];
+      trsm = argv[++i];
+    } else if (!strcmp(argv[i], "-g")) {
+      if (i == argc - 1) {
+        cout << "missing arg to -g argument (run with -h)" << endl;
+        return 1;
+      }
+      syge = argv[++i];
+    } else if (!strcmp(argv[i], "-a")) {
+      if (i == argc - 1) {
+        cout << "missing arg to -a argument (run with -h)" << endl;
+        return 1;
+      }
+      asmbl = argv[++i];
     } else if (!strcmp(argv[i], "-h")) {
-      cout << "Usage: -m potrf|trsm|syge|asmbl -i input_file" << endl;
+      cout << "Usage: -p potrf.csv -t trsm.csv -g syge.csv -a asmbl.csv" << endl;
       return 0;
     } else {
       cout << "Unknown arg '" << argv[i] << "' (-h for help)" << endl;
       return 1;
     }
   }
-  if (model.empty() || input.empty()) {
-    cout << "missing model/input arguments (-h for help)" << endl;
+  if (potrf.empty() && trsm.empty() && syge.empty() && asmbl.empty()) {
+    cout << "no csv file given! (-h for help)" << endl;
     return 1;
   }
 
-  auto csvData = loadCsv(input);
-  if (csvData.empty()) {
-    throw runtime_error("Empty csv file!");
-  }
-  cout << "loaded CSV data have " << csvData[0].size() << " entries per line" << endl;
+  ComputationModel model;
 
-  if (model == "potrf") {
-    optimizePotrfModel(csvData);
-  } else if (model == "trsm") {
-    optimizeTrsmModel(csvData);
-  } else if (model == "syge") {
-    optimizeSygeModel(csvData);
-  } else if (model == "asmbl") {
-    optimizeAsmblModel(csvData);
-  } else {
-    cout << "unknown model " << model << endl;
-    return 1;
+  if (!potrf.empty()) {
+    auto csvData = loadCsv(potrf);
+    BASPACHO_CHECK(!csvData.empty());
+    model.potrfParams = optimizePotrfModel(csvData);
+  }
+
+  if (!trsm.empty()) {
+    auto csvData = loadCsv(trsm);
+    BASPACHO_CHECK(!csvData.empty());
+    model.trsmParams = optimizeTrsmModel(csvData);
+  }
+
+  if (!syge.empty()) {
+    auto csvData = loadCsv(syge);
+    BASPACHO_CHECK(!csvData.empty());
+    model.sygeParams = optimizeSygeModel(csvData);
+  }
+
+  if (!asmbl.empty()) {
+    auto csvData = loadCsv(asmbl);
+    BASPACHO_CHECK(!csvData.empty());
+    model.asmblParams = optimizeAsmblModel(csvData);
+  }
+
+  if (!potrf.empty() && !trsm.empty() && !syge.empty() && !asmbl.empty()) {
+    stringstream ss;
+    ss.precision(numeric_limits<double>::max_digits10 + 2);
+    ss << "\n\nCopy & paste computation model code:\n"
+       << "BaSpaCho::ComputationModel myModel {\n"
+       << "  .potrfParams{ " << model.potrfParams[0] << ", " << model.potrfParams[1] << ", "
+       << model.potrfParams[2] << ", " << model.potrfParams[3] << "},\n"
+       << "  .trsmParams{ " << model.trsmParams[0] << ", " << model.trsmParams[1] << ", "
+       << model.trsmParams[2] << ", " << model.trsmParams[3] << ", " << model.trsmParams[4] << ", "
+       << model.trsmParams[5] << "},\n"
+       << "  .sygeParams{ " << model.sygeParams[0] << ", " << model.sygeParams[1] << ", "
+       << model.sygeParams[2] << ", " << model.sygeParams[3] << ", " << model.sygeParams[4] << ", "
+       << model.sygeParams[5] << "},\n"
+       << "  .asmblParams{ " << model.asmblParams[0] << ", " << model.asmblParams[1] << ", "
+       << model.asmblParams[2] << ", " << model.asmblParams[3] << "}\n"
+       << "};";
+    cout << ss.str() << endl;
   }
 
   return 0;

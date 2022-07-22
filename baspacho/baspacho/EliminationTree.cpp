@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <queue>
 #include <tuple>
+#include "baspacho/baspacho/ComputationModel.h"
 #include "baspacho/baspacho/DebugMacros.h"
 #include "baspacho/baspacho/Utils.h"
 
@@ -10,10 +11,14 @@ namespace BaSpaCho {
 
 using namespace std;
 
-EliminationTree::EliminationTree(const vector<int64_t>& paramSize, const SparseStructure& ss)
-    : paramSize(paramSize), ss(ss) {
+EliminationTree::EliminationTree(const vector<int64_t>& paramSize, const SparseStructure& ss,
+                                 const ComputationModel* compMod)
+    : paramSize(paramSize),
+      ss(ss),
+      compMod(compMod ? *compMod : ComputationModel::model_OpenBlas_i7_1185g7) {
   BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
 }
+
 // t ~= a + b*n + c*n^2 + d*n^3
 double potrfModel(double n) {
   double c[] = {3.975137677492635046e-07, 0.0 /*-7.384080107915980689e-08*/,

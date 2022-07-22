@@ -5,7 +5,7 @@
 
 namespace BaSpaCho {
 
-struct ElimTreeProc;
+struct ComputationModel;
 
 // (internal) class encapsulating the computation of an elimination-tree
 // and the heuristics applied on top of the tree structure. In patricular
@@ -18,7 +18,8 @@ struct ElimTreeProc;
 //   to some heuristics depending on the zero-fill of the resulting nodes and the
 //   expected runtimes of the resulting dense operations
 struct EliminationTree {
-  EliminationTree(const std::vector<int64_t>& paramSize, const SparseStructure& ss);
+  EliminationTree(const std::vector<int64_t>& paramSize, const SparseStructure& ss,
+                  const ComputationModel* compMod = nullptr);
 
   // build the tree for processing
   void buildTree();
@@ -47,6 +48,7 @@ struct EliminationTree {
 
   std::vector<int64_t> paramSize;
   const SparseStructure& ss;  // input
+  const ComputationModel& compMod;
 
   // generated data, buildTree
   std::vector<int64_t> parent;

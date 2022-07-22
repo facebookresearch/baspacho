@@ -1,6 +1,7 @@
 
 set(BaSpaCho_sources
     CoalescedBlockMatrix.cpp
+    ComputationModel.cpp
     EliminationTree.cpp
     MatOpsBlas.cpp
     MatOpsRef.cpp
