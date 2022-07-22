@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Eigen/Geometry>
 #include "baspacho/baspacho/SparseStructure.h"
 
 namespace BaSpaCho {
@@ -51,6 +52,19 @@ struct EliminationTree {
   std::vector<int64_t> parent;
   std::vector<int64_t> nodeSize;
   std::vector<int64_t> nodeRows;
+  std::vector<int64_t> nodeRowBlocks;
+  std::vector<std::vector<int64_t>> nodeColEls;
+  std::vector<std::vector<int64_t>> nodeColDataEls;
+  struct OpCost {
+    int colIdx;
+    int rBlocks;
+    int rows;
+    int rBlocksDown;
+    int rowsDown;
+  };
+  std::vector<std::vector<OpCost>> nodeRowDataEls;
+  std::vector<Eigen::Vector2d> sygeCosts;
+  std::vector<Eigen::Vector2d> asmblCosts;
 
   // generated data, processTree
   std::vector<int64_t> sparseElimRanges;
