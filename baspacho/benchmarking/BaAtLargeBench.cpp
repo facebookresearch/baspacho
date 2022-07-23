@@ -138,8 +138,6 @@ void testSolvers(Data& data) {
     auto solver = createSolver({.backend = BackendCuda}, paramSize, origSs, {0, numPts});
     double analysisTime = tdelta(hrc::now() - startAnalysis).count();
 
-    cout << "sparse elim ranges: " << printVec(solver->elimLumpRanges) << endl;
-
     // generate mock data, make positive def
     vector<double> matData = randomData(solver->dataSize(), -1.0, 1.0, 37);
     solver->skel().damp(matData, double(0), double(solver->order() * 1.2));
