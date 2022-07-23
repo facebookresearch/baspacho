@@ -192,7 +192,8 @@ void testBatchedSparseElim_Many(const std::function<OpsPtr()>& genOps) {
         datasGpu[q].load(datas[q]);
         datasPtr[q] = datasGpu[q].ptr;
       }
-      NumericCtxPtr<vector<T*>> numCtx = solver.symCtx->createNumericCtx<vector<T*>>(0, &datasPtr);
+      NumericCtxPtr<vector<T*>> numCtx =
+          solver.internalSymbolicContext()->createNumericCtx<vector<T*>>(0, &datasPtr);
       numCtx->doElimination(solver.internalGetElimCtx(0), &datasPtr, 0, largestIndep);
 
       for (int q = 0; q < batchSize; q++) {
