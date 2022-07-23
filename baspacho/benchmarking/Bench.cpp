@@ -154,7 +154,6 @@ BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings
   }
 #endif
 
-  double globFactorTime = 0.0;
   auto startAnalysis = hrc::now();
   SolverPtr solver = createSolver(settings, prob.paramSize, prob.sparseStruct);
 
@@ -195,12 +194,8 @@ BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings
 #endif  // BASPACHO_USE_CUBLAS
   {
     auto startFactor = hrc::now();
-    globFactorTime = 0;
     solver->factor(data.data(), verbose);
     factorTime = tdelta(hrc::now() - startFactor).count();
-    if (collectStats) {
-      cout << "\n" << globFactorTime << "s vs " << factorTime << "s" << endl;
-    }
 
     for (int64_t nRHS : nRHSs) {
       vector<double> vecData = randomData(nRHS * solver->order(), -1.0, 1.0, 38);
