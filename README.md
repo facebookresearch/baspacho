@@ -51,7 +51,7 @@ Compiling and testing:
 ```
 cmake --build build -- -j16 && ctest --test-dir build
 ```
-Benchmarking (using CHOLMOD as baseline):
+Benchmarking all configurations (using CHOLMOD as baseline):
 ```
 build/baspacho/benchmarking/bench -B 1_CHOLMOD
 ```
@@ -71,7 +71,6 @@ May have to add `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` to allow build
 to find the cuda compiler.
 
 ### Blas
-
 The library used is specified in the CMake variable BLA_VENDOR,
 a few possibilities are:
 * ATLAS
@@ -83,10 +82,63 @@ For the full list check CMake docs at:
 https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors
 
 ### Reordering algorithm Approximate Minimum Degree (AMD)
-
 BaSpaCho can use either the implementation in Eigen of AMD (by default), or the version in library
 AMD as part of SuiteSparse. Add `-DBASPACHO_USE_SUITESPARSE_AMD=1` to the build step to use the
 implementation in SuiteSparse instead of Eigen.
+
+## Benchmarking and fine-tuning
+BaSpaCho uses models of the timings of BLAS operations in order to decide on the best node merges
+selected by the supernodal algorithm. The trade-offs might change dramatically depending on the
+architecture, the number of cores, the BLAS implementation used and CPU vs GPU. Timings required
+to fit a model can be collected with the `bench` tool when provided the `-Z` command line argument.
+Here is a description of the benchmarking tools provided.
+
+### `bench`
+The tool `build/baspacho/benchmarking/bench` can be used to compare the speed of different configurations
+on a varied set of synthetic problems. For instance if CHOLMOD is installed you can use it a reference
+sparse solver to compare to, and the following compares the most time-consuming operation `factor` using
+CHOLMOD as baseline:
+```
+build/baspacho/benchmarking/bench -B 1_CHOLMOD
+```
+(other operations are `analysis` and `solve-X` where X can be any number of right-hand sides).
+Running  with `-h` gives a view of all operations, solvers and problems available
+(and arguments accepting regular expressions in order to test a subselection of solvers/problems).
+When running default `factor` operation with `-Z` statistics are saved to files of the form
+`<config>_<op>.csv` where the `<config>` looks like `stats_cpu_f8` and discriminates the configuration,
+while `<op>` is one of the underlying blas-like operations used in factorization (ie one of `potrf`, `trsm`,
+`syge`, `asmbl`, where `syge` stands for `syrk/gemm` for people familiar with BLAS).
+The operations generated with a specific configuration (eg `cpu_f64`) can be processed as
+```
+build/baspacho/examples/opt_comp_model -p stats_cpu_f64_potrf.csv -a stats_cpu_f64_asmbl.csv 
+                                       -t stats_cpu_f64_trsm.csv -g stats_cpu_f64_syge.csv
+```
+on order to fit a computation model that can be provided as a setting to `createSolver` in order
+to fine-tune for your architecture.
+
+### `BAL_bench`
+It's possible to benchmark on a bundle-adjustment problem from
+[Bundle Adjustment in the Large](https://grail.cs.washington.edu/projects/bal/) as
+```
+build/baspacho/benchmarking/BAL_bench ~/BAL/problem-871-527480-pre.txt
+```
+ie. the solver is tested on a linear problem which is identical to the 
+Again, if installed, CHOLMOD is tested as a baseline, but only on the 'reduced'
+camera-camera problem. BaSpaCho is tested on both the point elimination and the
+reduced problem.
+
+
+## Examples
+A few examples are provided to illustrate what the library is capable of.
+
+* `Optimizer.h` provides a fully featured Levenberg-Marquardt optimizer, with support for direct solver
+and flavors of mixed direct/iterative solvers. The class is used in
+  - `OptimizeSimple.cpp`, solving a simple problem of points connected with springs
+  - `OptimizeBaAtLarge.cpp`, solving a bundle adjustment problem from [Bundle Adjustment in the Large](https://grail.cs.washington.edu/projects/bal/)
+  - `OptimizeCompModel.cpp`, where a computation model params are fit to timings of BLAS operations.
+* `PCG_Sample.cpp` contains a demonstration of how it's possible to perform a partial elimination
+and complete the solution of a linear system iteratively using PCG.
+
 
 ## Todo
 - [ ] add continuous integration for testing
@@ -100,26 +152,27 @@ implementation in SuiteSparse instead of Eigen.
 - [X] implement specialized solve for the case of "sparse elimination ranges" where the current
       per-supernode solve would be quite slow
 - [X] Benchmark results (bench + BAL comparing sparse elimination with optimizers)
-- [ ] small optimizer demo on BAL data
+- [X] Fully featured optimizer (direct and iterative solvers), with demo on BAL data
 
 ### Longer term todo:
-- [ ] handle singularity reporting size of non-SPD minor, possibly discard non-definite sparse-elim
-      diagonal blocks 
-- [ ] better heuristics in Node merge, test more configurations
-- [ ] optimize analysis and solve steps
+- [X] better heuristics in Node merge, test more configurations
 - [X] simple (non-coalesced) symmetric block matrix with mat-vec op, and iterative solver,
       possibly with mixed-precision preconditioner (fast "rough" factor as float, iterate
       on a double vector for improved precision)
+- [ ] handle singularity reporting size of non-SPD minor, possibly discard non-definite sparse-elim
+      diagonal blocks 
+- [ ] optimize analysis and solve steps
 - [ ] investigate possible support of update/downdate ops (note that such support in CHOLMOD
       is only for simplicial decomposition, or decompositions are automatically converted to
       simplicial)
 
+
 ## Caveats
 * Only supernodal Cholesky is implemented. We focused on problems having at least a certain degree of
 interconnectedness, which will benefit of Blas libraries and parallelism. If working with a problem where
-simplicial would have better performance (eg banded matrix) just use Cholmod or Eigen. Also, because of
-this there is no support for update/downdate operations of factors. Notice that given the strongly sequential
-nature of simplicial decomposition the GPU will not be a good fit either.
+simplicial would have better performance (eg banded matrix) just use Cholmod or Eigen. Also, there is no
+support for update/downdate operations of factors. Notice that given the strongly sequential nature of
+simplicial decomposition the GPU will not be a good fit either.
 * Only reordering method currently supported is Approximate Minimum Degree (AMD), this will probably be
 expanded and made more customizable in the future but this is the current status of things.
 * The block-structured type of matrices is builtin in the library, and while this presents advantages in

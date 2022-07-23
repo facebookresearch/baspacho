@@ -58,35 +58,58 @@ void bangGpu() {
 }
 #endif
 
-unordered_map<int, vector<tuple<int, double>>> potrfStats;
-unordered_map<int, vector<tuple<int, int, double>>> trsmStats;
-unordered_map<int, vector<tuple<int, int, int, double>>> sygeStats;
-unordered_map<int, vector<tuple<int, int, double>>> asmblStats;
+unordered_map<string, vector<tuple<int, double>>> potrfStats;
+unordered_map<string, vector<tuple<int, int, double>>> trsmStats;
+unordered_map<string, vector<tuple<int, int, int, double>>> sygeStats;
+unordered_map<string, vector<tuple<int, int, double>>> asmblStats;
+
+void registerCallbacks(Solver& solver, const string& config) {
+  vector<tuple<int, double>>& currPotrfStats = potrfStats[config];
+  vector<tuple<int, int, double>>& currTrsmStats = trsmStats[config];
+  vector<tuple<int, int, int, double>>& currSygeStats = sygeStats[config];
+  vector<tuple<int, int, double>>& currAsmblStats = asmblStats[config];
+
+  solver.internalSymbolicContext().potrfStat.callBack = [&](double time, int dataSize, int n) {
+    currPotrfStats.emplace_back(n, time);
+  };
+  solver.internalSymbolicContext().trsmStat.callBack = [&](double time, int dataSize, int n,
+                                                           int k) {
+    currTrsmStats.emplace_back(n, k, time);  //
+  };
+  solver.internalSymbolicContext().sygeStat.callBack = [&](double time, int dataSize, int m, int n,
+                                                           int k) {
+    currSygeStats.emplace_back(m, n, k, time);
+  };
+  solver.internalSymbolicContext().asmblStat.callBack = [&](double time, int dataSize, int br,
+                                                            int bc) {
+    currAsmblStats.emplace_back(br, bc, time);  //
+  };
+}
 
 void saveAllStats() {
-  for (auto [i, stats] : potrfStats) {
-    ofstream out("stats_potrf_" + to_string(i) + ".csv");
+  for (auto [config, stats] : potrfStats) {
+    ofstream out("stats_" + config + "_potrf.csv");
     out.precision(numeric_limits<double>::max_digits10 + 2);
     for (auto [n, t] : stats) {
       out << n << "\t" << t << "\n";
     }
   }
-  for (auto [i, stats] : trsmStats) {
-    ofstream out("stats_trsm_" + to_string(i) + ".csv");
+  for (auto [config, stats] : trsmStats) {
+    ofstream out("stats_" + config + "_trsm.csv");
     out.precision(numeric_limits<double>::max_digits10 + 2);
     for (auto [n, k, t] : stats) {
       out << n << "\t" << k << "\t" << t << "\n";
     }
   }
-  for (auto [i, stats] : sygeStats) {
-    ofstream out("stats_syge_" + to_string(i) + ".csv");
+  for (auto [config, stats] : sygeStats) {
+    ofstream out("stats_" + config + "_syge.csv");
     out.precision(numeric_limits<double>::max_digits10 + 2);
     for (auto [m, n, k, t] : stats) {
       out << m << "\t" << n << "\t" << k << "\t" << t << "\n";
     }
   }
-  for (auto [i, stats] : asmblStats) {
-    ofstream out("stats_asmbl_" + to_string(i) + ".csv");
+  for (auto [config, stats] : asmblStats) {
+    ofstream out("stats_" + config + "_asmbl.csv");
     out.precision(numeric_limits<double>::max_digits10 + 2);
     for (auto [r, c, t] : stats) {
       out << r << "\t" << c << "\t" << t << "\n";
@@ -137,31 +160,8 @@ BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings
 
   // collect stats
   if (collectStats) {
-    solver->internalSymbolicContext().potrfStat.callBack = [&](double time, int dataSize, int n) {
-      // cout << "POTRF: d=" << dataSize << ", n=" << n << ", t=" << time << endl;
-      globFactorTime += potrfModel(n);
-      potrfStats[dataSize].emplace_back(n, time);
-    };
-    solver->internalSymbolicContext().trsmStat.callBack = [&](double time, int dataSize, int n,
-                                                              int k) {
-      // cout << "TRSM: d=" << dataSize << ", n=" << n << ", k=" << k << ", t=" << time << endl;
-      globFactorTime += trsmModel(n, k);
-      trsmStats[dataSize].emplace_back(n, k, time);
-    };
-    solver->internalSymbolicContext().sygeStat.callBack = [&](double time, int dataSize, int m,
-                                                              int n, int k) {
-      // cout << "SYGE: d=" << dataSize << ", m=" << m << ", n=" << n << ", k=" << k << ", t=" <<
-      // time << endl;
-      globFactorTime += sygeModel(m, n, k);
-      sygeStats[dataSize].emplace_back(m, n, k, time);
-    };
-    solver->internalSymbolicContext().asmblStat.callBack = [&](double time, int dataSize, int br,
-                                                               int bc) {
-      // cout << "ASMBL: d=" << dataSize << ", br=" << br << ", bc=" << bc << ", t=" << time <<
-      // endl;
-      globFactorTime += asmblModel(br, bc);
-      asmblStats[dataSize].emplace_back(br, bc, time);
-    };
+    registerCallbacks(*solver, string(settings.backend == BackendCuda ? "cuda" : "cpu") + "_f" +
+                                   to_string(8 * sizeof(double)));
   }
 
   double analysisTime = tdelta(hrc::now() - startAnalysis).count();
@@ -236,6 +236,12 @@ BenchResults benchmarkSolverBatched(const SparseProblem& prob, const Settings& s
   auto startAnalysis = hrc::now();
   SolverPtr solver = createSolver(settings, prob.paramSize, prob.sparseStruct);
   double analysisTime = tdelta(hrc::now() - startAnalysis).count();
+
+  // collect stats
+  if (collectStats) {
+    registerCallbacks(*solver, string(settings.backend == BackendCuda ? "cuda" : "cpu") + "_batch" +
+                                   to_string(batchSize) + "_f" + to_string(8 * sizeof(double)));
+  }
 
   // generate mock data, make positive def
   int order = solver->order();
@@ -386,18 +392,10 @@ map<string, function<BenchResults(const SparseProblem&, const vector<int64_t>& n
            return retv;
          }},
 #endif  // BASPACHO_HAVE_CHOLMOD
-        {"2a_BaSpaCho_BLAS_numthreads=16",
+        {"2_BaSpaCho_BLAS_numthreads=16",
          [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose,
             bool collectStats) -> BenchResults {
-           return benchmarkSolver(prob, {.numThreads = 8}, nRHSs, verbose, collectStats);
-         }},  //
-        {"2b_BaSpaCho_BLAS_numthreads=16",
-         [](const SparseProblem& prob, const vector<int64_t>& nRHSs, bool verbose,
-            bool collectStats) -> BenchResults {
-           return benchmarkSolver(prob,
-                                  {.findSparseEliminationRanges = false,  //
-                                   .numThreads = 8},
-                                  nRHSs, verbose, collectStats);
+           return benchmarkSolver(prob, {.numThreads = 16}, nRHSs, verbose, collectStats);
          }},  //
 #ifdef BASPACHO_USE_CUBLAS
         {"3_BaSpaCho_CUDA",
