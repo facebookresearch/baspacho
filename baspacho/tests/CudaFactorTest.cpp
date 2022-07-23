@@ -151,7 +151,7 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
     int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
 
-    NumericCtxPtr<T> numCtx = solver.internalSymbolicContext()->createNumericCtx<T>(0, nullptr);
+    NumericCtxPtr<T> numCtx = solver.internalSymbolicContext().createNumericCtx<T>(0, nullptr);
 
     // call doElimination with data on device
     {
