@@ -62,6 +62,8 @@ struct EliminationTree {
     int64_t rows;
     int64_t rBlocksDown;
     int64_t rowsDown;
+    NodeStats(int64_t c, int64_t rbs, int64_t rs, int64_t rbd, int64_t rd)
+        : colIdx(c), rBlocks(rbs), rows(rs), rBlocksDown(rbd), rowsDown(rd) {}
   };
   std::vector<std::vector<NodeStats>> perRowNodeStats;
   std::vector<NodeStats> tmpRowStats;

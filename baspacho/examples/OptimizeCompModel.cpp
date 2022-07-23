@@ -274,15 +274,15 @@ int main(int argc, char* argv[]) {
     ss.precision(numeric_limits<double>::max_digits10 + 2);
     ss << "\n\nCopy & paste computation model code:\n"
        << "BaSpaCho::ComputationModel myModel {\n"
-       << "  .potrfParams{ " << model.potrfParams[0] << ", " << model.potrfParams[1] << ", "
+       << "  { " << model.potrfParams[0] << ", " << model.potrfParams[1] << ", "
        << model.potrfParams[2] << ", " << model.potrfParams[3] << "},\n"
-       << "  .trsmParams{ " << model.trsmParams[0] << ", " << model.trsmParams[1] << ", "
+       << "  { " << model.trsmParams[0] << ", " << model.trsmParams[1] << ", "
        << model.trsmParams[2] << ", " << model.trsmParams[3] << ", " << model.trsmParams[4] << ", "
        << model.trsmParams[5] << "},\n"
-       << "  .sygeParams{ " << model.sygeParams[0] << ", " << model.sygeParams[1] << ", "
+       << "  { " << model.sygeParams[0] << ", " << model.sygeParams[1] << ", "
        << model.sygeParams[2] << ", " << model.sygeParams[3] << ", " << model.sygeParams[4] << ", "
        << model.sygeParams[5] << "},\n"
-       << "  .asmblParams{ " << model.asmblParams[0] << ", " << model.asmblParams[1] << ", "
+       << "  { " << model.asmblParams[0] << ", " << model.asmblParams[1] << ", "
        << model.asmblParams[2] << ", " << model.asmblParams[3] << "}\n"
        << "};";
     cout << ss.str() << endl;

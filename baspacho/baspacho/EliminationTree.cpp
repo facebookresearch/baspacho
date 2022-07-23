@@ -64,7 +64,7 @@ void EliminationTree::buildTree() {
   sygeCosts.resize(ord);
   asmblCosts.resize(ord);
   perRowNodeStats.resize(ord);
-  for (int64_t col = 0; col < perColNodes.size(); col++) {
+  for (int64_t col = 0; col < (int64_t)perColNodes.size(); col++) {
     auto& c = perColNodes[col];
     c.push_back(col);
     sort(c.begin(), c.end());
@@ -78,11 +78,7 @@ void EliminationTree::buildTree() {
       sygeC += compMod.sygeLinEst(skippedRows + paramSize[row], paramSize[row]);
       asmblC += compMod.asmblLinEst(skippedBlocks + 1);
 
-      perRowNodeStats[row].push_back({.colIdx = col,
-                                      .rBlocks = 1,
-                                      .rows = paramSize[row],
-                                      .rBlocksDown = skippedBlocks,
-                                      .rowsDown = skippedRows});
+      perRowNodeStats[row].emplace_back(col, 1, paramSize[row], skippedBlocks, skippedRows);
 
       skippedRows += paramSize[row];
       skippedBlocks++;
@@ -183,14 +179,10 @@ void EliminationTree::computeMerges() {
   mergeWith.assign(ord, -1);
   numMerges = 0;
 
-  auto pickUpScore0 = [&](int64_t k, int64_t p) -> double {
+  // score used to select which child/parent pair we will try to merge first
+  auto pickUpScore = [&](int64_t k, int64_t p) -> double {
     return ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]);
   };
-  auto pickUpScore0b = [&](int64_t k, int64_t p) -> double {
-    return ((double)nodeRows[k]) / (nodeRows[p] + nodeSize[p]) *
-           (1.0 + log2((nodeRows[p] + nodeSize[p]) * nodeRows[k]) * 0.3);
-  };
-  auto pickUpScore = pickUpScore0;
 
   priority_queue<tuple<double, int64_t, int64_t>> mergeCandidates;
   for (int64_t k = ord - 1; k >= 0; k--) {
@@ -272,11 +264,9 @@ void EliminationTree::computeMerges() {
                                       (kRD[ik].rows + pRD[ip].rows));
           asmblC += compMod.asmblLinEst(pRD[ip].rBlocksDown + (kRD[ik].rBlocks + pRD[ip].rBlocks));
 
-          tmpRowStats.push_back({.colIdx = c,
-                                 .rBlocks = kRD[ik].rBlocks + pRD[ip].rBlocks,
-                                 .rows = kRD[ik].rows + pRD[ip].rows,
-                                 .rBlocksDown = pRD[ip].rBlocksDown,
-                                 .rowsDown = pRD[ip].rowsDown});
+          tmpRowStats.emplace_back(c, kRD[ik].rBlocks + pRD[ip].rBlocks,
+                                   kRD[ik].rows + pRD[ip].rows, pRD[ip].rBlocksDown,
+                                   pRD[ip].rowsDown);
           ik++;
           ip++;
         }
@@ -287,11 +277,7 @@ void EliminationTree::computeMerges() {
       asmblC -= compMod.asmblLinEst(nodeRowBlocks[p] + prevNumMergedNodes);
       sygeC += compMod.sygeLinEst(nodeRows[p] + nodeSize[p], nodeSize[p]);
       asmblC += compMod.asmblLinEst(nodeRowBlocks[p] + numMergedNodes[p]);
-      tmpRowStats.push_back({.colIdx = p,
-                             .rBlocks = numMergedNodes[p],
-                             .rows = nodeSize[p],
-                             .rBlocksDown = nodeRowBlocks[p],
-                             .rowsDown = nodeRows[p]});
+      tmpRowStats.emplace_back(p, numMergedNodes[p], nodeSize[p], nodeRowBlocks[p], nodeRows[p]);
       swap(perRowNodeStats[p], tmpRowStats);
       tmpRowStats.clear();
     }  // willmerge

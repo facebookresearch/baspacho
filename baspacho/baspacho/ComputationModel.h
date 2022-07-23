@@ -5,6 +5,17 @@
 namespace BaSpaCho {
 
 struct ComputationModel {
+  ComputationModel() {}
+
+  ComputationModel(const Eigen::Vector<double, 4>& potrfParams_,
+                   const Eigen::Vector<double, 6>& trsmParams_,
+                   const Eigen::Vector<double, 6>& sygeParams_,
+                   const Eigen::Vector<double, 4>& asmblParams_)
+      : potrfParams(potrfParams_),
+        trsmParams(trsmParams_),
+        sygeParams(sygeParams_),
+        asmblParams(asmblParams_) {}
+
   double potrfEst(double n) const { return potrfModel(potrfParams, n); }
 
   double trsmEst(double n, double k) const { return trsmModel(trsmParams, n, k); }
