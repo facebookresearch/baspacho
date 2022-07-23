@@ -264,7 +264,7 @@ class FactorStore : public FactorStoreBase {
       dispenso::TaskSet taskSet(*threadPool);
       dispenso::parallel_for(
           taskSet, perThreadCost, []() -> double { return 0.0; },
-          dispenso::makeChunkedRange(0L, boundFactors.size(), 5L),
+          dispenso::makeChunkedRange(0L, boundFactors.size(), 32L),
           [this](double& threadCost, int64_t iBegin, int64_t iEnd) {
             for (int64_t i = iBegin; i < iEnd; i++) {
               threadCost += computeSingleCost(i);
@@ -288,7 +288,7 @@ class FactorStore : public FactorStoreBase {
       dispenso::TaskSet taskSet(*threadPool);
       dispenso::parallel_for(
           taskSet, perThreadCost, []() -> double { return 0.0; },
-          dispenso::makeChunkedRange(0L, boundFactors.size(), 5L),
+          dispenso::makeChunkedRange(0L, boundFactors.size(), 32L),
           [gradData, &acc, hessData, this](double& threadCost, int64_t iBegin, int64_t iEnd) {
             for (int64_t i = iBegin; i < iEnd; i++) {
               threadCost += computeSingleGradHess<LockedSharedOps>(i, gradData, acc, hessData);
@@ -343,11 +343,13 @@ class FactorStore : public FactorStoreBase {
 
 class Optimizer {
  public:
+  using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+  using hrc = std::chrono::high_resolution_clock;
+
   TypedStore<FactorStoreBase> factorStores;
   TypedStore<VariableStoreBase> variableStores;
   std::vector<int64_t> paramSizes;
   std::vector<int64_t> elimRanges;
-  mutable dispenso::ThreadPool threadPool{16};
   TrivialLoss defaultLoss;
 
   template <typename Factor, typename SoftLoss, typename... Variables>
@@ -384,18 +386,18 @@ class Optimizer {
   }
 
   double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
-                         double* hessData) {
+                         double* hessData, dispenso::ThreadPool* threadPool = nullptr) {
     double retv = 0.0;
     for (auto& [ti, fStore] : factorStores.stores) {
-      retv += fStore->computeGradHess(gradData, acc, hessData, &threadPool);
+      retv += fStore->computeGradHess(gradData, acc, hessData, threadPool);
     }
     return retv;
   }
 
-  double computeCost() {
+  double computeCost(dispenso::ThreadPool* threadPool = nullptr) {
     double retv = 0.0;
     for (auto& [ti, fStore] : factorStores.stores) {
-      retv += fStore->computeCost(&threadPool);
+      retv += fStore->computeCost(threadPool);
     }
     return retv;
   }
@@ -433,11 +435,37 @@ class Optimizer {
     for (int64_t i = 0; i < nVars; i++) {
       auto diag = acc.diagBlock(hess.data(), i).diagonal();
       diag *= (1.0 + lambda);
+      diag.array() += lambda;
+    }
+  }
+
+  enum SolverType {
+    Solver_Direct,
+    Solver_PCG_Trivial,
+    Solver_PCG_Jacobi,
+    Solver_PCG_GaussSeidel,
+    Solver_PCG_LowerPrecSolve,
+  };
+
+  static std::string solverToString(SolverType solverType) {
+    switch (solverType) {
+      case Solver_Direct:
+        return "direct";
+      case Solver_PCG_Trivial:
+        return "trivial";
+      case Solver_PCG_Jacobi:
+        return "jacobi";
+      case Solver_PCG_GaussSeidel:
+        return "gauss-seidel";
+      case Solver_PCG_LowerPrecSolve:
+        return "lower-prec-solve";
+      default:
+        return "<unknown>";
     }
   }
 
   // creates a solver
-  BaSpaCho::SolverPtr initSolver() {
+  BaSpaCho::SolverPtr initSolver(int numThreads, bool fullElim = true) {
     // collect variable sizes and (lower) off-diagonal blocks that need to be set
     std::unordered_set<std::pair<int64_t, int64_t>, pair_hash> blockSet;
     for (auto& [ti, fStore] : factorStores.stores) {
@@ -464,130 +492,201 @@ class Optimizer {
     }
 
     // create sparse linear solver
-    return createSolver({}, paramSizes, BaSpaCho::SparseStructure(std::move(ptrs), std::move(inds)),
-                        elimRanges);
+    return createSolver(
+        {.numThreads = numThreads,
+         .addFillPolicy = (fullElim ? BaSpaCho::AddFillComplete : BaSpaCho::AddFillForGivenElims)},
+        paramSizes, BaSpaCho::SparseStructure(std::move(ptrs), std::move(inds)), elimRanges);
   }
 
-  // creates a preconditioner for solving the
-  std::unique_ptr<Preconditioner<double>> initPreconditioner(const BaSpaCho::Solver& solver,
-                                                             int paramStart,
-                                                             const std::string& type) {
-    if (paramStart == solver.skel().numSpans()) {
-      return std::unique_ptr<Preconditioner<double>>();
-    } else if (type == "none") {
-      return std::make_unique<IdentityPrecond<double>>(solver, paramStart);
-    } else if (type == "jacobi") {
-      return std::make_unique<BlockJacobiPrecond<double>>(solver, paramStart);
-    } else if (type == "jacobi") {
-      return std::make_unique<BlockGaussSeidelPrecond<double>>(solver, paramStart);
-    } else if (type == "lower-prec-solve") {
-      return std::make_unique<LowerPrecSolvePrecond<double>>(solver, paramStart);
-    } else {
-      throw std::runtime_error("Unknown preconditioner '" + type + "'");
-    }
-  }
+  // creates a "solve" function that will either
+  // 1. invoke the direct solver
+  // 2. apply partial elimination, run PCG, backtrack to a full solution
+  std::function<std::string(Eigen::VectorXd&)> solveFunction(BaSpaCho::Solver& solver,
+                                                             Eigen::VectorXd& hess,
+                                                             SolverType solverType,
+                                                             int iterativeStart) {
+    if (solverType == Solver_Direct) {
+      return [&](Eigen::VectorXd& vec) -> std::string {
+        TimePoint start = hrc::now();
 
-  std::function<void(Eigen::VectorXd&)> solveFunction(BaSpaCho::Solver& solver,
-                                                      Eigen::VectorXd& hess, int iterativeStart,
-                                                      const std::string& precondType) {
-    if (iterativeStart == solver.skel().numSpans()) {
-      return [&](Eigen::VectorXd& vec) -> void {
         solver.factor(hess.data());
         solver.solve(hess.data(), vec.data(), solver.order(), 1);
+        TimePoint end = hrc::now();
+
+        return "direct solver, t=" + timeString(end - start);
       };
     } else {
       std::shared_ptr<Preconditioner<double>> precond;
-      if (precondType == "none") {
+      if (solverType == Solver_PCG_Trivial) {
         precond = std::make_shared<IdentityPrecond<double>>(solver, iterativeStart);
-      } else if (precondType == "jacobi") {
+      } else if (solverType == Solver_PCG_Jacobi) {
         precond = std::make_shared<BlockJacobiPrecond<double>>(solver, iterativeStart);
-      } else if (precondType == "gauss-seidel") {
+      } else if (solverType == Solver_PCG_GaussSeidel) {
         precond = std::make_shared<BlockGaussSeidelPrecond<double>>(solver, iterativeStart);
-      } else if (precondType == "lower-prec-solve") {
+      } else if (solverType == Solver_PCG_LowerPrecSolve) {
         precond = std::make_shared<LowerPrecSolvePrecond<double>>(solver, iterativeStart);
       } else {
-        throw std::runtime_error("Unknown preconditioner '" + precondType + "'");
+        throw std::runtime_error("Unknown preconditioner " + std::to_string((int)solverType));
       }
 
       int64_t order = solver.order();
       int64_t secStart = solver.paramVecDataStart(iterativeStart);
       int64_t secSize = order - secStart;
+      struct PCGStats {
+        void reset() {
+          nPrecond = nMatVec = 0;
+          totPrecondTime = totMatVecTime = 0.0;
+        }
+        int nPrecond = 0;
+        double totPrecondTime = 0.0;
+        int nMatVec = 0;
+        double totMatVecTime = 0.0;
+      };
+      auto pcgStats = std::make_shared<PCGStats>();
       auto pcg = std::make_shared<PCG>(
-          [precond = precond](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
+          [=](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
+            TimePoint start = hrc::now();
             u.resize(v.size());
             (*precond)(u.data(), v.data());
+            pcgStats->nPrecond++;
+            pcgStats->totPrecondTime += std::chrono::duration<double>(hrc::now() - start).count();
           },
-          [&, order, secStart](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
+          [=, &solver, &hess](Eigen::VectorXd& u, const Eigen::VectorXd& v) {
+            TimePoint start = hrc::now();
             u.resize(v.size());
             u.setZero();
             solver.addMvFrom(hess.data(), iterativeStart, v.data() - secStart, order,
                              u.data() - secStart, order, 1);
+            pcgStats->nMatVec++;
+            pcgStats->totMatVecTime += std::chrono::duration<double>(hrc::now() - start).count();
           },
-          1e-10, 40, true);
+          1e-10, 40, false);
 
-      return [&, pcg = pcg, order, secStart, secSize](Eigen::VectorXd& vec) -> void {
+      return [=, &solver, &hess](Eigen::VectorXd& vec) -> std::string {
+        TimePoint start = hrc::now();
+
         solver.factorUpTo(hess.data(), iterativeStart);
         solver.solveLUpTo(hess.data(), iterativeStart, vec.data(), order, 1);
+        TimePoint end_elim = hrc::now();
+
+        precond->init(hess.data());
+        pcgStats->reset();
+        TimePoint end_precond = hrc::now();
 
         Eigen::VectorXd tmp;
-        pcg->solve(tmp, vec.segment(secStart, secSize));
+        auto [its, res] = pcg->solve(tmp, vec.segment(secStart, secSize));
         vec.segment(secStart, secSize) = tmp;
+        TimePoint end_res_solve = hrc::now();
 
         solver.solveLtUpTo(hess.data(), iterativeStart, vec.data(), order, 1);
+        TimePoint end_backtrack = hrc::now();
+
+        std::stringstream ss;
+        ss << "semi-precond(" << solverToString(solverType)
+           << "), elim: " << timeString(end_elim - start)
+           << ", pcnd: " << timeString(end_precond - end_elim)       //
+           << ", iter: " << timeString(end_res_solve - end_precond)  //
+           << ", bktr: " << timeString(end_backtrack - end_res_solve)
+           << "\n        (precond: " << pcgStats->nPrecond << "x"
+           << microsecondsString(pcgStats->totPrecondTime * 1e6 / pcgStats->nPrecond)
+           << ", matvec: " << pcgStats->nMatVec << "x"
+           << microsecondsString(pcgStats->totMatVecTime * 1e6 / pcgStats->nMatVec)
+           << ", iters: " << its << ", residual: " << res << ")";
+        return ss.str();
       };
     }
   }
 
-  void optimize() {
+  // settings for optimize function
+  struct Settings {
+    int maxNumIterations = 50;
+    unsigned int numThreads = 8;
+    SolverType solverType = Solver_Direct;
+  };
+
+  void optimize() { return optimize(Settings()); }
+
+  void optimize(const Settings& settings) {
     // create sparse linear solver
-    BaSpaCho::SolverPtr solver = initSolver();
+    BaSpaCho::SolverPtr solver = initSolver(
+        settings.numThreads,
+        (settings.solverType == Solver_Direct || settings.solverType == Solver_PCG_LowerPrecSolve));
     auto accessor = solver->accessor();
 
     // linear system data
     std::vector<double> variablesBackup(variableBackupSize());
     Eigen::VectorXd grad(solver->order());
-    Eigen::VectorXd hess(solver->dataSize());
+    Eigen::VectorXd hess(solver->dataSize()), hessBackup;
     Eigen::VectorXd step(solver->order());
-    auto solveFunc = solveFunction(*solver, hess, solver->skel().numSpans(), "jacobi");
+    auto solveFunc = solveFunction(*solver, hess, settings.solverType,
+                                   elimRanges.empty() ? 0 : elimRanges.back());
     double damping = 1e-5;
 
     const double costReductionForImprovement = 0.999;
     const int stopIfNoImprovementFor = 3;
     const int distanceFromTroubledIteration = 3;
-    const int maxIts = 50;
     int iterationNum = 1;
     int lastImprovementIteration = 0;  // last iteration we had a significant improvement
     int lastTroubledIteration = 0;
+    double initialCost = 0.0, finalCost;
+
+    dispenso::ThreadPool threadPool{settings.numThreads > 1 ? settings.numThreads : 0};
 
     // iteration loop
     while (true) {
+      TimePoint start_it = hrc::now();
+
       grad.setZero();
       hess.setZero();
-      double prevCost = computeGradHess(grad.data(), accessor, hess.data());
-      addDamping(hess, accessor, solver->paramPermutation().size(), damping);
+      double prevCost = computeGradHess(grad.data(), accessor, hess.data(),
+                                        settings.numThreads > 1 ? &threadPool : nullptr);
+      TimePoint end_costs = hrc::now();
 
-      step = grad;
-      solveFunc(step);
+      finalCost = prevCost;
+      if (iterationNum == 1) {
+        initialCost = prevCost;
+      }
 
-      // cost reduction that would occur perfectly quadratic
-      double modelCostReduction = step.dot(grad) * 0.5;
+      double modelCostReduction;
+      std::string solverReport;
+      int attempts = 1;
+      do {
+        hessBackup = hess;
+        addDamping(hess, accessor, solver->paramPermutation().size(), damping);
+
+        step = grad;
+        solverReport = solveFunc(step);
+
+        // cost reduction that would occur perfectly quadratic
+        modelCostReduction = step.dot(grad) * 0.5;
+
+        if (modelCostReduction < 0) {
+          std::cout << " ?:# quadratic model failing, retrying..." << std::endl;
+          hess = hessBackup;
+          damping *= 2.0;
+        }
+      } while (0);
+
       step *= -1.0;
       double gradNorm = grad.norm();
       double stepNorm = step.norm();
+      if (modelCostReduction < 1e-10) {
+        std::cout << " ^.^ converged, cost: " << finalCost
+                  << ",  model cost reduction: " << modelCostReduction << std::endl;
+        break;
+      }
 
       backupVariables(variablesBackup);
       applyStep(step, accessor);
-      double newCost = computeCost();
+      double newCost = computeCost(settings.numThreads > 1 ? &threadPool : nullptr);
       double relativeCostReduction = (prevCost - newCost) / modelCostReduction;
 
       const char* smiley;
       bool wasSignificantImprovement = newCost < costReductionForImprovement * prevCost;
-      double currentCost = 0.0;
       if (newCost > prevCost) {
         smiley = ":'(";
         damping *= 3;
         restoreVariables(variablesBackup);
-        currentCost = prevCost;
         if (damping > 1e8) {
           std::cout << "damping out of range, quadratic model failing?!" << std::endl;
           break;
@@ -595,22 +694,24 @@ class Optimizer {
         lastTroubledIteration = iterationNum;
       } else {
         if (prevCost - newCost > 0.3 * modelCostReduction) {
-          smiley = wasSignificantImprovement ? ";-)" : ":-/";
+          smiley = wasSignificantImprovement ? ";-)" : ":-|";
           damping *= 0.7;
         } else {
-          smiley = ":-*";
+          smiley = ":-/";
           damping *= 1.5;
         }
-        currentCost = newCost;
+        finalCost = newCost;
       }
 
+      TimePoint end = hrc::now();
+
       std::cout << " " << smiley << " cost: " << prevCost << " -> " << newCost << " ("
-                << percentageString(newCost / prevCost - 1.0, 2) << ")\n"  //
-                << "     n." << iterationNum << "; PCG its="
-                << "TBD"
-                << ", relRes="
-                << "TBD"
-                << "; lmbd: " << damping << ", relRed: " << percentageString(relativeCostReduction)
+                << percentageString(newCost / prevCost - 1.0, 2)
+                << "), t: " << timeString(end - start_it) << "\n"  //
+                << "     n." << iterationNum << "; g/H: " << timeString(end_costs - start_it)
+                << ", " << solverReport << "\n"
+                << "     lmbd: " << damping
+                << ", relRed: " << percentageString(relativeCostReduction)
                 << ", |G|: " << gradNorm  //
                 << ", |S|: " << stepNorm << std::endl;
       iterationNum++;
@@ -619,73 +720,14 @@ class Optimizer {
       }
       if (iterationNum >= lastImprovementIteration + stopIfNoImprovementFor &&
           iterationNum >= lastTroubledIteration + distanceFromTroubledIteration) {
-        std::cout << " >.< converged! (no improvement for " << stopIfNoImprovementFor
+        std::cout << " >_< converged! (no significant improvement for " << stopIfNoImprovementFor
                   << " iterations)" << std::endl;
         break;
-      } else if (iterationNum >= maxIts) {
-        std::cout << " X-| iteration limit reached! (" << maxIts << " iterations)" << std::endl;
+      } else if (iterationNum >= settings.maxNumIterations) {
+        std::cout << " X-| iteration limit reached! (" << settings.maxNumIterations
+                  << " iterations)" << std::endl;
         break;
       }
     }
   }
-
-#if 0
-  void optimize_old() {
-    // create sparse linear solver
-    BaSpaCho::SolverPtr solver = initSolver();
-    auto accessor = solver->accessor();
-
-    // linear system data
-    std::vector<double> variablesBackup(variableBackupSize());
-    Eigen::VectorXd grad(solver->order());
-    Eigen::VectorXd hess(solver->dataSize());
-    Eigen::VectorXd step(solver->order());
-    auto solveFunc = solveFunction(*solver, hess, solver->skel().numSpans(), "jacobi");
-
-    // iteration loop
-    while (true) {
-      grad.setZero();
-      hess.setZero();
-      double currentCost = computeGradHess(grad.data(), accessor, hess.data());
-      addDamping(hess, accessor, solver->paramPermutation().size(), 1e-4);
-
-      std::cout << "grad:" << grad.transpose() << std::endl;
-      std::vector<double> hessCp(hess.data(), hess.data() + hess.size());
-      Eigen::MatrixXd H = solver->skel().densify(hessCp);
-      H.triangularView<Eigen::Upper>() = H.triangularView<Eigen::Lower>().transpose();
-      std::cout << "hess:\n" << H << std::endl;
-      std::cout << "perm:\n"
-                << BaSpaCho::testing::printVec(solver->paramPermutation()) << std::endl;
-
-      solver->factor(hess.data());
-
-      step = grad;
-      solver->solve(hess.data(), step.data(), step.size(), 1);
-
-      std::cout << "step:" << step.transpose() << std::endl;
-      std::cout << "H*step:\n" << (H * step).transpose() << std::endl;
-
-      // cost reduction that would occur perfectly quadratic
-      double modelCostReduction = step.dot(grad) * 0.5;
-      step *= -1.0;
-
-      backupVariables(variablesBackup);
-      applyStep(step, accessor);
-
-      std::cout << "prev vars: " << BaSpaCho::testing::printVec(variablesBackup) << std::endl;
-
-      {
-        std::vector<double> vdata(variableBackupSize());
-        backupVariables(vdata);
-        std::cout << "new vars: " << BaSpaCho::testing::printVec(vdata) << std::endl;
-      }
-      // restoreVariables(variablesBackup);
-
-      double newCost = computeCost();
-      std::cout << "Cost: " << currentCost << " -> " << newCost << std::endl;
-
-      break;
-    }
-  }
-#endif
 };

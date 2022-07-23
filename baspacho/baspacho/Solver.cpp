@@ -15,11 +15,11 @@ using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
 Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_, std::vector<int64_t>&& elimLumpRanges_,
-               std::vector<int64_t>&& permutation_, int64_t canFactorUpTo, OpsPtr&& ops_)
+               std::vector<int64_t>&& permutation_, int64_t canFactorUpTo_, OpsPtr&& ops_)
     : factorSkel(std::move(factorSkel_)),
       elimLumpRanges(std::move(elimLumpRanges_)),
       permutation(std::move(permutation_)),
-      canFactorUpTo(canFactorUpTo),
+      canFactorUpTo(canFactorUpTo_),
       ops(std::move(ops_)) {
   if (canFactorUpTo < 0) {
     canFactorUpTo = factorSkel.order();
@@ -160,6 +160,7 @@ void Solver::internalFactorRange(T* data, int64_t startParamIndex, int64_t endPa
   BASPACHO_CHECK_LT(endParamIndex, (int64_t)factorSkel.spanOffsetInLump.size());
   BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[startParamIndex], 0);
   BASPACHO_CHECK_EQ(factorSkel.spanOffsetInLump[endParamIndex], 0);
+  BASPACHO_CHECK_LE(endParamIndex, canFactorUpTo);
   int64_t startLump = factorSkel.spanToLump[startParamIndex];
   int64_t upToLump = factorSkel.spanToLump[endParamIndex];
 

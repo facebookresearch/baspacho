@@ -3,7 +3,7 @@
 #include <Eigen/Core>
 #include <functional>
 
-// Preconditioned conjugate gradient
+// Simple implementation of preconditioned conjugate gradient
 class PCG {
  public:
   using TransFunc = std::function<void(Eigen::VectorXd&, const Eigen::VectorXd&)>;

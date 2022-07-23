@@ -2,7 +2,9 @@
 
 #include <cxxabi.h>
 #include <chrono>
+#include <sstream>
 #include <string>
+#include <vector>
 
 // template introspection util - returns a prettified type name
 template <typename T>
@@ -27,4 +29,17 @@ template <typename Rep, typename Period>
 std::string timeString(const std::chrono::duration<Rep, Period>& duration, int precision = 2) {
   return microsecondsString(std::chrono::duration_cast<std::chrono::microseconds>(duration).count(),
                             precision);
+}
+
+template <typename T>
+std::string printVec(const std::vector<T>& ints) {
+  std::stringstream ss;
+  ss << "[";
+  bool first = true;
+  for (auto c : ints) {
+    ss << (first ? "" : ", ") << c;
+    first = false;
+  }
+  ss << "]";
+  return ss.str();
 }
