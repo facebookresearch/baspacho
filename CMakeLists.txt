@@ -1,0 +1,204 @@
+#
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+
+cmake_minimum_required(VERSION 3.20)
+
+# set the project name
+project(BaSpaCho CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(BASPACHO_CXX_FLAGS -Wall -Wextra -pedantic -Werror)
+
+message("* Build type: " ${CMAKE_BUILD_TYPE})
+
+# CUDA
+set(BASPACHO_USE_CUBLAS ON CACHE BOOL "If on, CUDA support is enabled")
+set(BASPACHO_CUDA_ARCHS "detect" CACHE STRING "List of cuda architecture (eg '60;62;75'), or 'detect'")
+if(BASPACHO_USE_CUBLAS)
+  message("==============================[ CUDA ]==================================")
+  enable_language(CUDA)
+  include(CheckLanguage)
+  check_language(CUDA)
+  find_package(CUDAToolkit REQUIRED)
+
+  if(BASPACHO_CUDA_ARCHS STREQUAL "detect")
+    message("* Detecting CUDA architecture...")
+    set(CUDA_DETECT_BIN "${CMAKE_BINARY_DIR}/detect_cuda")
+    set(CUDA_DETECT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/cmake/detect_cuda.cu")
+    execute_process(COMMAND "${CMAKE_CUDA_COMPILER}" -lcuda "${CUDA_DETECT_SRC}" -o "${CUDA_DETECT_BIN}")
+    execute_process(COMMAND "${CUDA_DETECT_BIN}"
+                    RESULT_VARIABLE CUDA_RETURN_CODE
+                    OUTPUT_VARIABLE RESULT)
+
+    if(${CUDA_RETURN_CODE} EQUAL 0)
+      message("* CUDA architecture: ${RESULT} (autodetect)")								
+      set(BASPACHO_CUDA_ARCHITECTURES "${RESULT}")
+    else()
+      message(FATAL_ERROR "CUDA architecture detection failed: ${RESULT}")
+    endif()
+  else()
+    # https://cmake.org/cmake/help/git-stage/prop_tgt/CUDA_ARCHITECTURES.html
+    message("* CUDA architectures set to: ${BASPACHO_CUDA_ARCHS}")
+    set(BASPACHO_CUDA_ARCHITECTURES "${BASPACHO_CUDA_ARCHS}")
+  endif()
+
+  list(APPEND CUDA_NVCC_FLAGS
+       -Xcompiler -Wall,-Wextra,-Werror,-Wno-unknown-pragmas
+       --expt-relaxed-constexpr)
+  message("* CUDA Includes : " ${CUDAToolkit_INCLUDE_DIRS})
+  message("* CUDA Libraries: " ${CUDAToolkit_LIBRARY_DIR})
+  include_directories(${CUDAToolkit_INCLUDE_DIRS})
+  add_compile_definitions(BASPACHO_USE_CUBLAS)
+endif()
+
+# BLAS. a few possibilities are:
+# * ATLAS
+# * OpenBLAS
+# * Intel10_64{i}lp{_seq}
+#   (if 'i' indices are 64bits, if '_seq' sequential ie single thread)
+message("==============================[ BLAS ]==================================")
+set(BLA_VENDOR OpenBLAS CACHE STRING
+    "BLAS Library to be searched, possibilities are: ATLAS, OpenBLAS, Intel10_64ilp_seq, etc")
+message("* BLA_VENDOR = " ${BLA_VENDOR})
+find_package(BLAS REQUIRED)
+message("* BLAS linkerFlags = " ${BLAS_LINKER_FLAGS})
+message("* BLAS Libraries = " ${BLAS_LIBRARIES})
+if(BLA_VENDOR MATCHES "Intel10_*")
+  message("* BLAS appears to be MKL, MKL_ROOT should be set")
+  message("* Adding includes: " $ENV{MKLROOT}/include)
+  include_directories($ENV{MKLROOT}/include) # if MKL
+  add_compile_definitions(BASPACHO_USE_MKL)
+endif()
+
+# amd, if using amd from SuiteSparse
+message("===============[ minimum degree reordering algorithm ]==================")
+set(BASPACHO_USE_SUITESPARSE_AMD OFF CACHE BOOL "If on, will use AMD algorithm in SuiteSparse (must be installed)")
+if(BASPACHO_USE_SUITESPARSE_AMD)
+  set(HAVE_SUITESPARSE_AMD 1)
+  find_path(SUITESPARSE_AMD_INCLUDE_DIR NAMES amd.h
+            PATHS $ENV{AMDDIR} ${INCLUDE_INSTALL_DIR}
+            PATH_SUFFIXES suitesparse ufsparse
+            REQUIRED)
+  find_library(SUITESPARSE_AMD_LIBRARIES amd
+              PATHS $ENV{AMDDIR} ${LIB_INSTALL_DIR}
+              REQUIRED)
+  include_directories(${SUITESPARSE_AMD_INCLUDE_DIR})
+  message("* Using Approximate Minimum Degree (AMD) algorithm from SuiteSparse")
+  message("* Amd Source = " ${SUITESPARSE_AMD_INCLUDE_DIR})
+  message("* Amd Libraries = " ${SUITESPARSE_AMD_LIBRARIES})
+  add_compile_definitions(BASPACHO_USE_SUITESPARSE_AMD)
+else()
+  set(HAVE_SUITESPARSE_AMD 0)
+  message("* Using Approximate Minimum Degree (AMD) algorithm from Eigen")
+endif()
+
+
+# cholmod (for benchmarking comparison)
+message("============================[ CHOLMOD ]=================================")
+find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
+          PATHS ${INCLUDE_INSTALL_DIR}
+          PATH_SUFFIXES suitesparse ufsparse)
+find_library(CHOLMOD_LIBRARIES cholmod
+             PATHS ${LIB_INSTALL_DIR})
+if((CHOLMOD_INCLUDE_DIR STREQUAL "CHOLMOD_INCLUDE_DIR-NOTFOUND")
+  OR (CHOLMOD_LIBRARIES STREQUAL "CHOLMOD_LIBRARIES-NOTFOUND"))
+  set(HAVE_CHOLMOD 0)
+  message("* Cholmod not found! Benchmarking tools will not support it")
+else()
+  set(HAVE_CHOLMOD 1)
+  message("* Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
+  message("* Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
+  add_compile_definitions(BASPACHO_HAVE_CHOLMOD)
+  include_directories(${CHOLMOD_INCLUDE_DIR})
+endif()
+
+
+# use fetchcontent to download dependencies
+include(FetchContent)
+cmake_policy(SET CMP0077 NEW)
+
+# dispenso for multithreading
+# currently in facebookincubator, soon to be opensourced
+message("============================[ dispenso ]================================")
+FetchContent_Declare(
+  dispenso
+  GIT_REPOSITORY git@github.com:facebookincubator/dispenso.git
+  GIT_TAG 22ff47d07c32303a5059bfec26304a68dff01e65
+	)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+FetchContent_MakeAvailable(dispenso)
+unset(CMAKE_POSITION_INDEPENDENT_CODE)
+include_directories(${dispenso_SOURCE_DIR} ${dispenso_SOURCE_DIR}/dispenso/third-party/moodycamel)
+message("* Dispenso Source = " ${dispenso_SOURCE_DIR})
+message("* Dispenso Library Dir = " ${dispenso_BINARY_DIR})
+
+
+# gtest
+message("=============================[ GTest ]==================================")
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
+	)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+message("* GTest Source = " ${gtest_SOURCE_DIR})
+message("* GTest Library Dir = " ${gtest_BINARY_DIR})
+message("* GMock Source = " ${gmock_SOURCE_DIR})
+message("* GMock Library Dir = " ${gmock_BINARY_DIR})
+include(GoogleTest)
+
+
+# eigen
+message("=============================[ Eigen ]==================================")
+FetchContent_Declare(
+  eigen
+  URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip
+	)
+if(NOT eigen_POPULATED)
+  FetchContent_Populate(eigen)
+endif()
+message("* Eigen Source = " ${eigen_SOURCE_DIR})
+message("* Eigen Library Dir = " ${eigen_BINARY_DIR})
+include_directories(${eigen_SOURCE_DIR})
+
+
+# sophus (for testing on BA problem)
+message("=============================[ Sophus ]=================================")
+FetchContent_Declare(
+  sophus
+  GIT_REPOSITORY git@github.com:strasdat/Sophus.git # https://github.com/
+  GIT_TAG 49a7e1286910019f74fb4f0bb3e213c909f8e1b7
+)
+if(NOT sophus_POPULATED)
+  FetchContent_Populate(sophus)
+endif()
+message("* Sophus Source = " ${sophus_SOURCE_DIR})
+message("* Sophus Library Dir = " ${sophus_BINARY_DIR})
+include_directories(${sophus_SOURCE_DIR})
+add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
+
+
+# add root to include path
+include_directories("${PROJECT_SOURCE_DIR}")
+
+
+# unit tests
+enable_testing()
+
+function(add_baspacho_test TARGET)
+  add_executable(
+    "${TARGET}"
+    "${ARGN}"
+  )
+  target_link_libraries(
+    "${TARGET}" BaSpaCho testing gtest_main gmock
+  )
+  gtest_discover_tests("${TARGET}")
+endfunction()
+
+
+# add subfolders
+add_subdirectory(baspacho)
