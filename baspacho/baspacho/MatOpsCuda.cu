@@ -13,7 +13,6 @@
 #include "baspacho/baspacho/CudaAtomic.cuh"
 #include "baspacho/baspacho/CudaDefs.h"
 #include "baspacho/baspacho/DebugMacros.h"
-#include "baspacho/baspacho/MatOpsCpuBase.h"
 #include "baspacho/baspacho/MathUtils.h"
 #include "baspacho/baspacho/Utils.h"
 
@@ -44,9 +43,9 @@ struct CudaSymElimCtx : SymElimCtx {
   DevMirror<int64_t> makeBlockPairEnumStraight;
 };
 
-struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
+struct CudaSymbolicCtx : SymbolicCtx {
   CudaSymbolicCtx(const CoalescedBlockMatrixSkel& skel, const std::vector<int64_t>& permutation)
-      : CpuBaseSymbolicCtx(skel) {
+      : skel(skel) {
     // TODO: support custom stream in the future
     cublasCHECK(cublasCreate(&cublasH));
     // cublasCHECK(cublasSetStream(cublasH, stream));
@@ -108,6 +107,8 @@ struct CudaSymbolicCtx : CpuBaseSymbolicCtx {
                                                   int batchSize) override;
 
   virtual SolveCtxBase* createSolveCtxForType(type_index tIdx, int nRHS, int batchSize) override;
+
+  const CoalescedBlockMatrixSkel& skel;
 
   cublasHandle_t cublasH = nullptr;
   cusolverDnHandle_t cusolverDnH = nullptr;
