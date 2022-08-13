@@ -13,6 +13,7 @@
 #include "baspacho/baspacho/CudaAtomic.cuh"
 #include "baspacho/baspacho/CudaDefs.h"
 #include "baspacho/baspacho/DebugMacros.h"
+#include "baspacho/baspacho/MatOps.h"
 #include "baspacho/baspacho/MathUtils.h"
 #include "baspacho/baspacho/Utils.h"
 
