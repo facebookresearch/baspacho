@@ -597,20 +597,15 @@ template <typename T>
 struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
   CudaNumericCtx(const CudaSymbolicCtx& sym, int64_t bufSize, int64_t numSpans, int batchSize)
       : spanToChainOffset(numSpans), devTempBufs(batchSize, nullptr), sym(sym) {
+    devAllJoinedTempBufs.resizeToAtLeast(bufSize * batchSize);
     for (int i = 0; i < batchSize; i++) {
-      cuCHECK(cudaMalloc((void**)&devTempBufs[i], bufSize * sizeof(T)));
+      devTempBufs[i] = devAllJoinedTempBufs.ptr + bufSize * i;
     }
     devTempBufsDev.load(devTempBufs);
     devSpanToChainOffset.resizeToAtLeast(spanToChainOffset.size());
   }
 
-  virtual ~CudaNumericCtx() override {
-    for (size_t i = 0; i < devTempBufs.size(); i++) {
-      if (devTempBufs[i]) {
-        cuCHECK(cudaFree(devTempBufs[i]));
-      }
-    }
-  }
+  virtual ~CudaNumericCtx() override {}
 
   virtual void pseudoFactorSpans(vector<T*>* data, int64_t spanBegin, int64_t spanEnd) override {
     UNUSED(data, spanBegin, spanEnd);
@@ -710,8 +705,9 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         Batched{.batchSize = (int)data->size(), .batchIndex = 0});
   }
 
+  DevMirror<T> devAllJoinedTempBufs;
   vector<T*> devTempBufs;
-  DevMirror<T*> devTempBufsDev;
+  DevPtrMirror<T> devTempBufsDev;
   DevMirror<int> devPotrfSingIndex;
   DevPtrMirror<T> devPtrsA, devPtrsB;
   DevMirror<int64_t> devSpanToChainOffset;
