@@ -1006,13 +1006,9 @@ __global__ void sparseElim_subDiagMultT(const int64_t* lumpStarts, const int64_t
 template <typename T>
 struct CudaSolveCtx : SolveCtx<T> {
   CudaSolveCtx(const CudaSymbolicCtx& sym, int64_t nRHS) : sym(sym), nRHS(nRHS) {
-    cuCHECK(cudaMalloc((void**)&devSolveBuf, sym.skel.order() * nRHS * sizeof(T)));
+    devSolveBuf.resizeToAtLeast(sym.skel.order() * nRHS);
   }
-  virtual ~CudaSolveCtx() override {
-    if (devSolveBuf) {
-      cuCHECK(cudaFree(devSolveBuf));
-    }
-  }
+  virtual ~CudaSolveCtx() override {}
 
   virtual void sparseElimSolveL(const SymElimCtx& /*elimData*/, const T* data, int64_t lumpsBegin,
                                 int64_t lumpsEnd, T* C, int64_t ldc) override {
@@ -1064,7 +1060,7 @@ struct CudaSolveCtx : SolveCtx<T> {
     int numGroups = (numColItems + wgs - 1) / wgs;
     assembleVec_kernel<T><<<numGroups, wgs>>>(
         sym.devChainRowsTillEnd.ptr + chainColPtr, sym.devChainRowSpan.ptr + chainColPtr,
-        sym.devSpanStart.ptr, devSolveBuf, numColItems, C, ldc, nRHS, Plain{});
+        sym.devSpanStart.ptr, devSolveBuf.ptr, numColItems, C, ldc, nRHS, Plain{});
   }
 
   virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C, int64_t offC,
@@ -1080,12 +1076,12 @@ struct CudaSolveCtx : SolveCtx<T> {
     int numGroups = (numColItems + wgs - 1) / wgs;
     assembleVecT_kernel<T><<<numGroups, wgs>>>(
         sym.devChainRowsTillEnd.ptr + chainColPtr, sym.devChainRowSpan.ptr + chainColPtr,
-        sym.devSpanStart.ptr, C, ldc, nRHS, devSolveBuf, numColItems, Plain{});
+        sym.devSpanStart.ptr, C, ldc, nRHS, devSolveBuf.ptr, numColItems, Plain{});
   }
 
   const CudaSymbolicCtx& sym;
   int64_t nRHS;
-  T* devSolveBuf;
+  DevMirror<T> devSolveBuf;
 };
 
 template <>
@@ -1130,7 +1126,7 @@ void CudaSolveCtx<double>::gemv(const double* data, int64_t offM, int64_t nRows,
   auto timer = sym.solveGemvStat.instance();
   double beta(0.0);
   cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, nRHS, nRows, nCols, &alpha,
-                          A + offA, lda, data + offM, nCols, &beta, devSolveBuf, nRHS));
+                          A + offA, lda, data + offM, nCols, &beta, devSolveBuf.ptr, nRHS));
 }
 
 template <>
@@ -1139,7 +1135,7 @@ void CudaSolveCtx<float>::gemv(const float* data, int64_t offM, int64_t nRows, i
   auto timer = sym.solveGemvStat.instance();
   float beta(0.0);
   cublasCHECK(cublasSgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, nRHS, nRows, nCols, &alpha,
-                          A + offA, lda, data + offM, nCols, &beta, devSolveBuf, nRHS));
+                          A + offA, lda, data + offM, nCols, &beta, devSolveBuf.ptr, nRHS));
 }
 
 template <>
@@ -1166,7 +1162,7 @@ void CudaSolveCtx<double>::gemvT(const double* data, int64_t offM, int64_t nRows
   auto timer = sym.solveGemvTStat.instance();
   double beta(1.0);
   cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_N, CUBLAS_OP_C, nCols, nRHS, nRows, &alpha,
-                          data + offM, nCols, devSolveBuf, nRHS, &beta, A + offA, lda));
+                          data + offM, nCols, devSolveBuf.ptr, nRHS, &beta, A + offA, lda));
 }
 
 template <>
@@ -1175,7 +1171,7 @@ void CudaSolveCtx<float>::gemvT(const float* data, int64_t offM, int64_t nRows, 
   auto timer = sym.solveGemvTStat.instance();
   float beta(1.0);
   cublasCHECK(cublasSgemm(sym.cublasH, CUBLAS_OP_N, CUBLAS_OP_C, nCols, nRHS, nRows, &alpha,
-                          data + offM, nCols, devSolveBuf, nRHS, &beta, A + offA, lda));
+                          data + offM, nCols, devSolveBuf.ptr, nRHS, &beta, A + offA, lda));
 }
 
 // solve context, batched version
@@ -1183,26 +1179,22 @@ template <typename T>
 struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
   CudaSolveCtx(const CudaSymbolicCtx& sym, int64_t nRHS, int batchSize)
       : sym(sym), nRHS(nRHS), devSolveBufs(batchSize, nullptr) {
+    int64_t solveBufSize = sym.skel.order() * nRHS;
+    devAllJoinedSolveBufs.resizeToAtLeast(batchSize * solveBufSize);
     for (int i = 0; i < batchSize; i++) {
-      cuCHECK(cudaMalloc((void**)&devSolveBufs[i], sym.skel.order() * nRHS * sizeof(T)));
+      devSolveBufs[i] = devAllJoinedSolveBufs.ptr + i * solveBufSize;
     }
     devSolveBufsDev.load(devSolveBufs);
   }
-  virtual ~CudaSolveCtx() override {
-    for (size_t i = 0; i < devSolveBufs.size(); i++) {
-      if (devSolveBufs[i]) {
-        cuCHECK(cudaFree(devSolveBufs[i]));
-      }
-    }
-  }
+  virtual ~CudaSolveCtx() override {}
 
   virtual void sparseElimSolveL(const SymElimCtx& /*elimData*/, const vector<T*>* data,
                                 int64_t lumpsBegin, int64_t lumpsEnd, vector<T*>* C,
                                 int64_t ldc) override {
     auto timer = sym.solveSparseLStat.instance();
 
-    DevPtrMirror<T> datas(*data, 0);
-    DevPtrMirror<T> Cs(*C, 0);
+    devPtrsX.load(*data, 0);
+    devPtrsY.load(*C, 0);
 
     int batchWgs = 32;
     while (batchWgs / 2 >= (int)C->size()) {
@@ -1214,15 +1206,16 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
     dim3 gridDim(numGroups, batchGroups);
     dim3 blockDim(wgs, batchWgs);
 
-    sparseElim_diagSolveL<T*><<<gridDim, blockDim>>>(
-        sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr, ldc,
-        nRHS, lumpsBegin, lumpsEnd, Batched{.batchSize = (int)C->size(), .batchIndex = 0});
+    sparseElim_diagSolveL<T*>
+        <<<gridDim, blockDim>>>(sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+                                devPtrsX.ptr, devPtrsY.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
+                                Batched{.batchSize = (int)C->size(), .batchIndex = 0});
     // cuCHECK(cudaDeviceSynchronize());
 
     // TODO: consider "straightening" inner loop
     sparseElim_subDiagMult<T*><<<gridDim, blockDim>>>(
         sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr, sym.devChainRowSpan.ptr,
-        sym.devChainData.ptr, datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
+        sym.devChainData.ptr, devPtrsX.ptr, devPtrsY.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
   }
 
@@ -1231,8 +1224,8 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
                                  int64_t ldc) override {
     auto timer = sym.solveSparseLtStat.instance();
 
-    DevPtrMirror<T> datas(*data, 0);
-    DevPtrMirror<T> Cs(*C, 0);
+    devPtrsX.load(*data, 0);
+    devPtrsY.load(*C, 0);
 
     int batchWgs = 32;
     while (batchWgs / 2 >= (int)C->size()) {
@@ -1247,13 +1240,14 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
     // TODO: consider "straightening" inner loop
     sparseElim_subDiagMultT<T*><<<gridDim, blockDim>>>(
         sym.devLumpStart.ptr, sym.devSpanStart.ptr, sym.devChainColPtr.ptr, sym.devChainRowSpan.ptr,
-        sym.devChainData.ptr, datas.ptr, Cs.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
+        sym.devChainData.ptr, devPtrsX.ptr, devPtrsY.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
     // cuCHECK(cudaDeviceSynchronize());
 
-    sparseElim_diagSolveLt<T*><<<gridDim, blockDim>>>(
-        sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr, datas.ptr, Cs.ptr, ldc,
-        nRHS, lumpsBegin, lumpsEnd, Batched{.batchSize = (int)C->size(), .batchIndex = 0});
+    sparseElim_diagSolveLt<T*>
+        <<<gridDim, blockDim>>>(sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr,
+                                devPtrsX.ptr, devPtrsY.ptr, ldc, nRHS, lumpsBegin, lumpsEnd,
+                                Batched{.batchSize = (int)C->size(), .batchIndex = 0});
   }
 
   virtual void symm(const vector<T*>* data, int64_t offset, int64_t n, const vector<T*>* C,
@@ -1268,7 +1262,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
   virtual void assembleVec(int64_t chainColPtr, int64_t numColItems, vector<T*>* C,
                            int64_t ldc) override {
     auto timer = sym.solveAssVStat.instance();
-    DevPtrMirror<T> Cs(*C, 0);
+    devPtrsX.load(*C, 0);
     int batchWgs = 32;
     while (batchWgs / 2 >= (int)C->size()) {
       batchWgs /= 2;
@@ -1280,7 +1274,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
     dim3 blockDim(wgs, batchWgs);
     assembleVec_kernel<T*><<<gridDim, blockDim>>>(
         sym.devChainRowsTillEnd.ptr + chainColPtr, sym.devChainRowSpan.ptr + chainColPtr,
-        sym.devSpanStart.ptr, devSolveBufsDev.ptr, numColItems, Cs.ptr, ldc, nRHS,
+        sym.devSpanStart.ptr, devSolveBufsDev.ptr, numColItems, devPtrsX.ptr, ldc, nRHS,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
   }
 
@@ -1293,7 +1287,7 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
   virtual void assembleVecT(const vector<T*>* C, int64_t ldc, int64_t chainColPtr,
                             int64_t numColItems) override {
     auto timer = sym.solveAssVTStat.instance();
-    DevPtrMirror<T> Cs(*C, 0);
+    devPtrsX.load(*C, 0);
     int batchWgs = 32;
     while (batchWgs / 2 >= (int)C->size()) {
       batchWgs /= 2;
@@ -1305,14 +1299,16 @@ struct CudaSolveCtx<vector<T*>> : SolveCtx<vector<T*>> {
     dim3 blockDim(wgs, batchWgs);
     assembleVecT_kernel<T*><<<gridDim, blockDim>>>(
         sym.devChainRowsTillEnd.ptr + chainColPtr, sym.devChainRowSpan.ptr + chainColPtr,
-        sym.devSpanStart.ptr, Cs.ptr, ldc, nRHS, devSolveBufsDev.ptr, numColItems,
+        sym.devSpanStart.ptr, devPtrsX.ptr, ldc, nRHS, devSolveBufsDev.ptr, numColItems,
         Batched{.batchSize = (int)C->size(), .batchIndex = 0});
   }
 
   const CudaSymbolicCtx& sym;
   int64_t nRHS;
+  DevMirror<T> devAllJoinedSolveBufs;
   vector<T*> devSolveBufs;
-  DevMirror<T*> devSolveBufsDev;
+  DevPtrMirror<T> devSolveBufsDev;
+  DevPtrMirror<T> devPtrsX, devPtrsY;
 };
 
 template <>
@@ -1337,24 +1333,24 @@ template <>
 void CudaSolveCtx<vector<double*>>::solveL(const vector<double*>* data, int64_t offM, int64_t n,
                                            vector<double*>* C, int64_t offC, int64_t ldc) {
   auto timer = sym.solveLStat.instance();
-  DevPtrMirror<double> Ms(*data, offM);
-  DevPtrMirror<double> Cs(*C, offC);
+  devPtrsX.load(*data, offM);
+  devPtrsY.load(*C, offC);
   double alpha(1.0);
   cublasCHECK(cublasDtrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
-                                 CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha, Ms.ptr, n, Cs.ptr, ldc,
-                                 data->size()));
+                                 CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha, devPtrsX.ptr, n,
+                                 devPtrsY.ptr, ldc, data->size()));
 }
 
 template <>
 void CudaSolveCtx<vector<float*>>::solveL(const vector<float*>* data, int64_t offM, int64_t n,
                                           vector<float*>* C, int64_t offC, int64_t ldc) {
   auto timer = sym.solveLStat.instance();
-  DevPtrMirror<float> Ms(*data, offM);
-  DevPtrMirror<float> Cs(*C, offC);
+  devPtrsX.load(*data, offM);
+  devPtrsY.load(*C, offC);
   float alpha(1.0);
   cublasCHECK(cublasStrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
-                                 CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha, Ms.ptr, n, Cs.ptr, ldc,
-                                 data->size()));
+                                 CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha, devPtrsX.ptr, n,
+                                 devPtrsY.ptr, ldc, data->size()));
 }
 
 template <>
@@ -1362,12 +1358,12 @@ void CudaSolveCtx<vector<double*>>::gemv(const vector<double*>* data, int64_t of
                                          int64_t nCols, const vector<double*>* A, int64_t offA,
                                          int64_t lda, double alpha) {
   auto timer = sym.solveGemvStat.instance();
-  DevPtrMirror<double> Ms(*data, offM);
-  DevPtrMirror<double> As(*A, offA);
+  devPtrsX.load(*data, offM);
+  devPtrsY.load(*A, offA);
   double beta(0.0);
   cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, nRHS, nRows, nCols, &alpha,
-                                 As.ptr, lda, Ms.ptr, nCols, &beta, devSolveBufsDev.ptr, nRHS,
-                                 data->size()));
+                                 devPtrsY.ptr, lda, devPtrsX.ptr, nCols, &beta, devSolveBufsDev.ptr,
+                                 nRHS, data->size()));
 }
 
 template <>
@@ -1375,36 +1371,36 @@ void CudaSolveCtx<vector<float*>>::gemv(const vector<float*>* data, int64_t offM
                                         int64_t nCols, const vector<float*>* A, int64_t offA,
                                         int64_t lda, float alpha) {
   auto timer = sym.solveGemvStat.instance();
-  DevPtrMirror<float> Ms(*data, offM);
-  DevPtrMirror<float> As(*A, offA);
+  devPtrsX.load(*data, offM);
+  devPtrsY.load(*A, offA);
   float beta(0.0);
   cublasCHECK(cublasSgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, nRHS, nRows, nCols, &alpha,
-                                 As.ptr, lda, Ms.ptr, nCols, &beta, devSolveBufsDev.ptr, nRHS,
-                                 data->size()));
+                                 devPtrsY.ptr, lda, devPtrsX.ptr, nCols, &beta, devSolveBufsDev.ptr,
+                                 nRHS, data->size()));
 }
 
 template <>
 void CudaSolveCtx<vector<double*>>::solveLt(const vector<double*>* data, int64_t offM, int64_t n,
                                             vector<double*>* C, int64_t offC, int64_t ldc) {
   auto timer = sym.solveLtStat.instance();
-  DevPtrMirror<double> Ms(*data, offM);
-  DevPtrMirror<double> Cs(*C, offC);
+  devPtrsX.load(*data, offM);
+  devPtrsY.load(*C, offC);
   double alpha(1.0);
   cublasCHECK(cublasDtrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N,
-                                 CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha, Ms.ptr, n, Cs.ptr, ldc,
-                                 data->size()));
+                                 CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha, devPtrsX.ptr, n,
+                                 devPtrsY.ptr, ldc, data->size()));
 }
 
 template <>
 void CudaSolveCtx<vector<float*>>::solveLt(const vector<float*>* data, int64_t offM, int64_t n,
                                            vector<float*>* C, int64_t offC, int64_t ldc) {
   auto timer = sym.solveLtStat.instance();
-  DevPtrMirror<float> Ms(*data, offM);
-  DevPtrMirror<float> Cs(*C, offC);
+  devPtrsX.load(*data, offM);
+  devPtrsY.load(*C, offC);
   float alpha(1.0);
   cublasCHECK(cublasStrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N,
-                                 CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha, Ms.ptr, n, Cs.ptr, ldc,
-                                 data->size()));
+                                 CUBLAS_DIAG_NON_UNIT, n, nRHS, &alpha, devPtrsX.ptr, n,
+                                 devPtrsY.ptr, ldc, data->size()));
 }
 
 template <>
@@ -1412,12 +1408,12 @@ void CudaSolveCtx<vector<double*>>::gemvT(const vector<double*>* data, int64_t o
                                           int64_t nCols, vector<double*>* A, int64_t offA,
                                           int64_t lda, double alpha) {
   auto timer = sym.solveGemvTStat.instance();
-  DevPtrMirror<double> Ms(*data, offM);
-  DevPtrMirror<double> As(*A, offA);
+  devPtrsX.load(*data, offM);
+  devPtrsY.load(*A, offA);
   double beta(1.0);
   cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_N, CUBLAS_OP_C, nCols, nRHS, nRows, &alpha,
-                                 Ms.ptr, nCols, devSolveBufsDev.ptr, nRHS, &beta, As.ptr, lda,
-                                 data->size()));
+                                 devPtrsX.ptr, nCols, devSolveBufsDev.ptr, nRHS, &beta,
+                                 devPtrsY.ptr, lda, data->size()));
 }
 
 template <>
@@ -1425,12 +1421,12 @@ void CudaSolveCtx<vector<float*>>::gemvT(const vector<float*>* data, int64_t off
                                          int64_t nCols, vector<float*>* A, int64_t offA,
                                          int64_t lda, float alpha) {
   auto timer = sym.solveGemvTStat.instance();
-  DevPtrMirror<float> Ms(*data, offM);
-  DevPtrMirror<float> As(*A, offA);
+  devPtrsX.load(*data, offM);
+  devPtrsY.load(*A, offA);
   float beta(1.0);
   cublasCHECK(cublasSgemmBatched(sym.cublasH, CUBLAS_OP_N, CUBLAS_OP_C, nCols, nRHS, nRows, &alpha,
-                                 Ms.ptr, nCols, devSolveBufsDev.ptr, nRHS, &beta, As.ptr, lda,
-                                 data->size()));
+                                 devPtrsX.ptr, nCols, devSolveBufsDev.ptr, nRHS, &beta,
+                                 devPtrsY.ptr, lda, data->size()));
 }
 
 NumericCtxBase* CudaSymbolicCtx::createNumericCtxForType(type_index tIdx, int64_t tempBufSize,
