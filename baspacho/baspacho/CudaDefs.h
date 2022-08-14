@@ -81,39 +81,72 @@ struct DevMirror {
     if (ptr) {
       cuCHECK(cudaFree(ptr));
       ptr = nullptr;
+      allocSize = 0;
+    }
+  }
+  void resizeToAtLeast(size_t size) {
+    if (allocSize < size) {
+      clear();
+    }
+    if (!ptr && size > 0) {
+      cuCHECK(cudaMalloc((void**)&ptr, size * sizeof(T)));
+      CHECK_ALLOCATION(ptr, size * sizeof(T));
+      allocSize = size;
     }
   }
   void load(const std::vector<T>& vec) {
-    clear();
+    if (allocSize < vec.size()) {
+      clear();
+    }
     if (!vec.size()) {
       return;  // cudaMalloc of size 0 fails
     }
-    cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T)));
-    CHECK_ALLOCATION(ptr, vec.size() * sizeof(T));
+    if (!ptr) {
+      cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T)));
+      CHECK_ALLOCATION(ptr, vec.size() * sizeof(T));
+      allocSize = vec.size();
+    }
     cuCHECK(cudaMemcpy(ptr, vec.data(), vec.size() * sizeof(T), cudaMemcpyHostToDevice));
   }
   void get(std::vector<T>& vec) const {
     cuCHECK(cudaMemcpy(vec.data(), ptr, vec.size() * sizeof(T), cudaMemcpyDeviceToHost));
   }
   T* ptr = nullptr;
+  size_t allocSize = 0;
 };
 
 // utility class to mirror an std::vector of pointers, applying an offset
 template <typename T>
 struct DevPtrMirror {
-  DevPtrMirror(const std::vector<T*>& vec, int64_t offset = 0) {
+  DevPtrMirror() {}
+  DevPtrMirror(const std::vector<T*>& vec, int64_t offset = 0) { load(vec, offset); }
+  void clear() {
+    if (ptr) {
+      cuCHECK(cudaFree(ptr));
+      ptr = nullptr;
+      allocSize = 0;
+    }
+  }
+  void load(const std::vector<T*>& vec, int64_t offset = 0) {
     T** vecCopy = (T**)alloca(vec.size() * sizeof(T*));
     for (size_t i = 0; i < vec.size(); i++) {
       vecCopy[i] = vec[i] + offset;
     }
-    cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T*)));
-    CHECK_ALLOCATION(ptr, vec.size() * sizeof(T*));
+
+    if (allocSize < vec.size()) {
+      clear();
+    }
+    if (!vec.size()) {
+      return;  // cudaMalloc of size 0 fails
+    }
+    if (!ptr) {
+      cuCHECK(cudaMalloc((void**)&ptr, vec.size() * sizeof(T*)));
+      CHECK_ALLOCATION(ptr, vec.size() * sizeof(T*));
+      allocSize = vec.size();
+    }
     cuCHECK(cudaMemcpy(ptr, vecCopy, vec.size() * sizeof(T*), cudaMemcpyHostToDevice));
   }
-  ~DevPtrMirror() {
-    if (ptr) {
-      cuCHECK(cudaFree(ptr));
-    }
-  }
+  ~DevPtrMirror() { clear(); }
   T** ptr = nullptr;
+  size_t allocSize = 0;
 };

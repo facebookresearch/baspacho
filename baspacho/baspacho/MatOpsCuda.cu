@@ -398,18 +398,11 @@ template <typename T>
 struct CudaNumericCtx : NumericCtx<T> {
   CudaNumericCtx(const CudaSymbolicCtx& sym, int64_t bufSize, int64_t numSpans)
       : spanToChainOffset(numSpans), sym(sym) {
-    cuCHECK(cudaMalloc((void**)&devTempBuffer, bufSize * sizeof(T)));
-    cuCHECK(cudaMalloc((void**)&devSpanToChainOffset, spanToChainOffset.size() * sizeof(int64_t)));
+    devTempBuffer.resizeToAtLeast(bufSize);
+    devSpanToChainOffset.resizeToAtLeast(spanToChainOffset.size());
   }
 
-  virtual ~CudaNumericCtx() override {
-    if (devTempBuffer) {
-      cuCHECK(cudaFree(devTempBuffer));
-    }
-    if (devSpanToChainOffset) {
-      cuCHECK(cudaFree(devSpanToChainOffset));
-    }
-  }
+  virtual ~CudaNumericCtx() override {}
 
   virtual void pseudoFactorSpans(T* data, int64_t spanBegin, int64_t spanEnd) override {
     auto timer = sym.pseudoFactorStat.instance();
@@ -474,7 +467,7 @@ struct CudaNumericCtx : NumericCtx<T> {
          i < iEnd; i++) {
       spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
     }
-    cuCHECK(cudaMemcpy(devSpanToChainOffset, spanToChainOffset.data(),
+    cuCHECK(cudaMemcpy(devSpanToChainOffset.ptr, spanToChainOffset.data(),
                        spanToChainOffset.size() * sizeof(int64_t), cudaMemcpyHostToDevice));
   }
 
@@ -485,18 +478,19 @@ struct CudaNumericCtx : NumericCtx<T> {
     auto timer = sym.asmblStat.instance(sizeof(T), numBlockRows, numBlockCols);
     const int64_t* pChainRowsTillEnd = sym.devChainRowsTillEnd.ptr + srcColDataOffset;
     const int64_t* pToSpan = sym.devChainRowSpan.ptr + srcColDataOffset;
-    const int64_t* pSpanToChainOffset = devSpanToChainOffset;
+    const int64_t* pSpanToChainOffset = devSpanToChainOffset.ptr;
     const int64_t* pSpanOffsetInLump = sym.devSpanOffsetInLump.ptr;
 
     int wgs = 32;
     int numGroups = (numBlockRows * numBlockCols + wgs - 1) / wgs;
     assemble_kernel<T><<<numGroups, wgs>>>(
         numBlockRows, numBlockCols, rectRowBegin, srcRectWidth, dstStride, pChainRowsTillEnd,
-        pToSpan, pSpanToChainOffset, pSpanOffsetInLump, devTempBuffer, data, Plain{});
+        pToSpan, pSpanToChainOffset, pSpanOffsetInLump, devTempBuffer.ptr, data, Plain{});
   }
 
-  T* devTempBuffer;
-  int64_t* devSpanToChainOffset;
+  DevMirror<T> devTempBuffer;
+  DevMirror<int> devPotrfSingIndex;
+  DevMirror<int64_t> devSpanToChainOffset;
   vector<int64_t> spanToChainOffset;
 
   const CudaSymbolicCtx& sym;
@@ -511,18 +505,16 @@ void CudaNumericCtx<double>::potrf(int64_t n, double* data, int64_t offA) {
   cusolverCHECK(cusolverDnDpotrf_bufferSize(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, data + offA,
                                             n, &workspaceSize));
 
-  double* workspace;
-  int* devInfo;
-  cuCHECK(cudaMalloc((void**)&workspace, workspaceSize * sizeof(double)));
-  cuCHECK(cudaMalloc((void**)&devInfo, 1 * sizeof(int)));
+  devTempBuffer.resizeToAtLeast(workspaceSize);
+  devPotrfSingIndex.resizeToAtLeast(1);
 
   cusolverCHECK(cusolverDnDpotrf(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, data + offA, n,
-                                 workspace, workspaceSize, devInfo));
+                                 devTempBuffer.ptr, workspaceSize, devPotrfSingIndex.ptr));
 
-  int info;
-  cuCHECK(cudaMemcpy(&info, devInfo, 1 * sizeof(int), cudaMemcpyDeviceToHost));
-  cuCHECK(cudaFree(devInfo));
-  cuCHECK(cudaFree(workspace));
+  // TODO: handle/report singularity
+  // int info;
+  // cuCHECK(cudaMemcpy(&info, devPotrfSingIndex.ptr, 1 * sizeof(int), cudaMemcpyDeviceToHost));
+  // std::cout << info << std::endl;
 }
 
 template <>
@@ -534,18 +526,16 @@ void CudaNumericCtx<float>::potrf(int64_t n, float* data, int64_t offA) {
   cusolverCHECK(cusolverDnSpotrf_bufferSize(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, data + offA,
                                             n, &workspaceSize));
 
-  float* workspace;
-  int* devInfo;
-  cuCHECK(cudaMalloc((void**)&workspace, workspaceSize * sizeof(float)));
-  cuCHECK(cudaMalloc((void**)&devInfo, 1 * sizeof(int)));
+  devTempBuffer.resizeToAtLeast(workspaceSize);
+  devPotrfSingIndex.resizeToAtLeast(1);
 
   cusolverCHECK(cusolverDnSpotrf(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, data + offA, n,
-                                 workspace, workspaceSize, devInfo));
+                                 devTempBuffer.ptr, workspaceSize, devPotrfSingIndex.ptr));
 
-  int info;
-  cuCHECK(cudaMemcpy(&info, devInfo, 1 * sizeof(int), cudaMemcpyDeviceToHost));
-  cuCHECK(cudaFree(devInfo));
-  cuCHECK(cudaFree(workspace));
+  // TODO: handle/report singularity
+  // int info;
+  // cuCHECK(cudaMemcpy(&info, devPotrfSingIndex.ptr, 1 * sizeof(int), cudaMemcpyDeviceToHost));
+  // std::cout << info << std::endl;
 }
 
 template <>
@@ -573,7 +563,7 @@ void CudaNumericCtx<double>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const
 
   double alpha(1.0), beta(0.0);
   cublasCHECK(cublasDgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha, data + offset, k,
-                          data + offset, k, &beta, devTempBuffer, m));
+                          data + offset, k, &beta, devTempBuffer.ptr, m));
 
   sym.gemmCalls++;
 }
@@ -585,7 +575,7 @@ void CudaNumericCtx<float>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const 
 
   float alpha(1.0), beta(0.0);
   cublasCHECK(cublasSgemm(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha, data + offset, k,
-                          data + offset, k, &beta, devTempBuffer, m));
+                          data + offset, k, &beta, devTempBuffer.ptr, m));
 
   sym.gemmCalls++;
 }
@@ -611,7 +601,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
       cuCHECK(cudaMalloc((void**)&devTempBufs[i], bufSize * sizeof(T)));
     }
     devTempBufsDev.load(devTempBufs);
-    cuCHECK(cudaMalloc((void**)&devSpanToChainOffset, spanToChainOffset.size() * sizeof(int64_t)));
+    devSpanToChainOffset.resizeToAtLeast(spanToChainOffset.size());
   }
 
   virtual ~CudaNumericCtx() override {
@@ -619,9 +609,6 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
       if (devTempBufs[i]) {
         cuCHECK(cudaFree(devTempBufs[i]));
       }
-    }
-    if (devSpanToChainOffset) {
-      cuCHECK(cudaFree(devSpanToChainOffset));
     }
   }
 
@@ -637,7 +624,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
     const CudaSymElimCtx& elim = *pElim;
 
     auto timer = elim.elimStat.instance();
-    DevPtrMirror<T> dataDev(*data, 0);
+    devPtrsA.load(*data, 0);
 
     int batchWgs = 32;
     while (batchWgs / 2 >= (int)data->size()) {
@@ -651,8 +638,8 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
 
     factor_lumps_kernel<T*><<<gridDim, blockDim>>>(
         sym.devLumpStart.ptr, sym.devChainColPtr.ptr, sym.devChainData.ptr, sym.devBoardColPtr.ptr,
-        sym.devBoardChainColOrd.ptr, sym.devChainRowsTillEnd.ptr, dataDev.ptr, lumpsBegin, lumpsEnd,
-        Batched{.batchSize = (int)data->size(), .batchIndex = 0});
+        sym.devBoardChainColOrd.ptr, sym.devChainRowsTillEnd.ptr, devPtrsA.ptr, lumpsBegin,
+        lumpsEnd, Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 
     // cuCHECK(cudaDeviceSynchronize());
 
@@ -661,7 +648,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
         sparse_elim_2loops_kernel<T*><<<numGroups, wgs>>>(
             sym.devChainColPtr.ptr, sym.devLumpStart.ptr,
             sym.devChainRowSpan.ptr, sym.devSpanStart.ptr, sym.devChainData.ptr,
-            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, dataDev.ptr,
+            sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, devPtrsA.ptr,
             lumpsBegin, lumpsEnd,
             Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 #else
@@ -671,7 +658,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
     dim3 blockDim2(wgs2, batchWgs);
     sparse_elim_straight_kernel<T*><<<gridDim2, blockDim2>>>(
         sym.devChainColPtr.ptr, sym.devLumpStart.ptr, sym.devChainRowSpan.ptr, sym.devSpanStart.ptr,
-        sym.devChainData.ptr, sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, dataDev.ptr,
+        sym.devChainData.ptr, sym.devSpanToLump.ptr, sym.devSpanOffsetInLump.ptr, devPtrsA.ptr,
         lumpsBegin, lumpsEnd, elim.makeBlockPairEnumStraight.ptr, elim.numBlockPairs,
         Batched{.batchSize = (int)data->size(), .batchIndex = 0});
 #endif
@@ -692,7 +679,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
          i < iEnd; i++) {
       spanToChainOffset[skel.chainRowSpan[i]] = skel.chainData[i];
     }
-    cuCHECK(cudaMemcpy(devSpanToChainOffset, spanToChainOffset.data(),
+    cuCHECK(cudaMemcpy(devSpanToChainOffset.ptr, spanToChainOffset.data(),
                        spanToChainOffset.size() * sizeof(int64_t), cudaMemcpyHostToDevice));
   }
 
@@ -702,10 +689,10 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
                         int64_t numBlockCols) override {
     BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
     auto timer = sym.asmblStat.instance(sizeof(T) + data->size() * 100, numBlockRows, numBlockCols);
-    DevPtrMirror<T> dataDev(*data, 0);
+    devPtrsA.load(*data, 0);
     const int64_t* pChainRowsTillEnd = sym.devChainRowsTillEnd.ptr + srcColDataOffset;
     const int64_t* pToSpan = sym.devChainRowSpan.ptr + srcColDataOffset;
-    const int64_t* pSpanToChainOffset = devSpanToChainOffset;
+    const int64_t* pSpanToChainOffset = devSpanToChainOffset.ptr;
     const int64_t* pSpanOffsetInLump = sym.devSpanOffsetInLump.ptr;
 
     int batchWgs = 32;
@@ -719,13 +706,15 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
     dim3 blockDim(wgs, batchWgs);
     assemble_kernel<T*><<<gridDim, blockDim>>>(
         numBlockRows, numBlockCols, rectRowBegin, srcRectWidth, dstStride, pChainRowsTillEnd,
-        pToSpan, pSpanToChainOffset, pSpanOffsetInLump, devTempBufsDev.ptr, dataDev.ptr,
+        pToSpan, pSpanToChainOffset, pSpanOffsetInLump, devTempBufsDev.ptr, devPtrsA.ptr,
         Batched{.batchSize = (int)data->size(), .batchIndex = 0});
   }
 
   vector<T*> devTempBufs;
   DevMirror<T*> devTempBufsDev;
-  int64_t* devSpanToChainOffset;
+  DevMirror<int> devPotrfSingIndex;
+  DevPtrMirror<T> devPtrsA, devPtrsB;
+  DevMirror<int64_t> devSpanToChainOffset;
   vector<int64_t> spanToChainOffset;
 
   const CudaSymbolicCtx& sym;
@@ -734,38 +723,30 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
 template <>
 void CudaNumericCtx<vector<double*>>::potrf(int64_t n, vector<double*>* data, int64_t offA) {
   auto timer = sym.potrfStat.instance(sizeof(double) + data->size() * 100, n);
-  DevPtrMirror<double> A(*data, offA);
+  devPtrsA.load(*data, offA);
+  devPotrfSingIndex.resizeToAtLeast(data->size());
 
-  int* devInfo;
-  cuCHECK(cudaMalloc((void**)&devInfo, data->size() * sizeof(int)));
+  cusolverCHECK(cusolverDnDpotrfBatched(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, devPtrsA.ptr, n,
+                                        devPotrfSingIndex.ptr, data->size()));
 
-  cusolverCHECK(cusolverDnDpotrfBatched(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, A.ptr, n,
-                                        devInfo, data->size()));
-
-  vector<int> info(data->size());
-  cuCHECK(cudaMemcpy(info.data(), devInfo, data->size() * sizeof(int), cudaMemcpyDeviceToHost));
-  cuCHECK(cudaFree(devInfo));
-
-  // TODO: add error handling
+  // TODO: handle/report singularity
+  // vector<int> info(data->size());
+  // devPotrfSingIndex.get(info);
   // cout << "info: " << printVec(info) << endl;
 }
 
 template <>
 void CudaNumericCtx<vector<float*>>::potrf(int64_t n, vector<float*>* data, int64_t offA) {
   auto timer = sym.potrfStat.instance(sizeof(float) + data->size() * 100, n);
-  DevPtrMirror<float> A(*data, offA);
+  devPtrsA.load(*data, offA);
+  devPotrfSingIndex.resizeToAtLeast(data->size());
 
-  int* devInfo;
-  cuCHECK(cudaMalloc((void**)&devInfo, data->size() * sizeof(int)));
+  cusolverCHECK(cusolverDnSpotrfBatched(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, devPtrsA.ptr, n,
+                                        devPotrfSingIndex.ptr, data->size()));
 
-  cusolverCHECK(cusolverDnSpotrfBatched(sym.cusolverDnH, CUBLAS_FILL_MODE_UPPER, n, A.ptr, n,
-                                        devInfo, data->size()));
-
-  vector<int> info(data->size());
-  cuCHECK(cudaMemcpy(info.data(), devInfo, data->size() * sizeof(int), cudaMemcpyDeviceToHost));
-  cuCHECK(cudaFree(devInfo));
-
-  // TODO: add error handling
+  // TODO: handle/report singularity
+  // vector<int> info(data->size());
+  // devPotrfSingIndex.get(info);
   // cout << "info: " << printVec(info) << endl;
 }
 
@@ -773,26 +754,26 @@ template <>
 void CudaNumericCtx<vector<double*>>::trsm(int64_t n, int64_t k, vector<double*>* data,
                                            int64_t offA, int64_t offB) {
   auto timer = sym.trsmStat.instance(sizeof(double) + data->size() * 100, n, k);
-  DevPtrMirror<double> A(*data, offA);
-  DevPtrMirror<double> B(*data, offB);
+  devPtrsA.load(*data, offA);
+  devPtrsB.load(*data, offB);
 
   double alpha(1.0);
   cublasCHECK(cublasDtrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
-                                 CUBLAS_DIAG_NON_UNIT, n, k, &alpha, A.ptr, n, B.ptr, n,
-                                 data->size()));
+                                 CUBLAS_DIAG_NON_UNIT, n, k, &alpha, devPtrsA.ptr, n, devPtrsB.ptr,
+                                 n, data->size()));
 }
 
 template <>
 void CudaNumericCtx<vector<float*>>::trsm(int64_t n, int64_t k, vector<float*>* data, int64_t offA,
                                           int64_t offB) {
   auto timer = sym.trsmStat.instance(sizeof(float) + data->size() * 100, n, k);
-  DevPtrMirror<float> A(*data, offA);
-  DevPtrMirror<float> B(*data, offB);
+  devPtrsA.load(*data, offA);
+  devPtrsB.load(*data, offB);
 
   float alpha(1.0);
   cublasCHECK(cublasStrsmBatched(sym.cublasH, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C,
-                                 CUBLAS_DIAG_NON_UNIT, n, k, &alpha, A.ptr, n, B.ptr, n,
-                                 data->size()));
+                                 CUBLAS_DIAG_NON_UNIT, n, k, &alpha, devPtrsA.ptr, n, devPtrsB.ptr,
+                                 n, data->size()));
 }
 
 template <>
@@ -800,10 +781,11 @@ void CudaNumericCtx<vector<double*>>::saveSyrkGemm(int64_t m, int64_t n, int64_t
                                                    const vector<double*>* data, int64_t offset) {
   BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
   auto timer = sym.sygeStat.instance(sizeof(double) + data->size() * 100, m, n, k);
-  DevPtrMirror<double> A(*data, offset);
+  devPtrsA.load(*data, offset);
   double alpha(1.0), beta(0.0);
-  cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha, A.ptr, k,
-                                 A.ptr, k, &beta, devTempBufsDev.ptr, m, data->size()));
+  cublasCHECK(cublasDgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha,
+                                 devPtrsA.ptr, k, devPtrsA.ptr, k, &beta, devTempBufsDev.ptr, m,
+                                 data->size()));
   sym.gemmCalls++;
 }
 
@@ -812,10 +794,11 @@ void CudaNumericCtx<vector<float*>>::saveSyrkGemm(int64_t m, int64_t n, int64_t 
                                                   const vector<float*>* data, int64_t offset) {
   BASPACHO_CHECK_LE(data->size(), devTempBufs.size());
   auto timer = sym.sygeStat.instance(sizeof(float) + data->size() * 100, m, n, k);
-  DevPtrMirror<float> A(*data, offset);
+  devPtrsA.load(*data, offset);
   float alpha(1.0), beta(0.0);
-  cublasCHECK(cublasSgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha, A.ptr, k,
-                                 A.ptr, k, &beta, devTempBufsDev.ptr, m, data->size()));
+  cublasCHECK(cublasSgemmBatched(sym.cublasH, CUBLAS_OP_C, CUBLAS_OP_N, m, n, k, &alpha,
+                                 devPtrsA.ptr, k, devPtrsA.ptr, k, &beta, devTempBufsDev.ptr, m,
+                                 data->size()));
   sym.gemmCalls++;
 }
 
