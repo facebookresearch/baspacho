@@ -40,8 +40,19 @@ struct CoalescedBlockMatrixSkel {
                            const std::vector<int64_t>& lumpToSpan,
                            const std::vector<int64_t>& colPtr, const std::vector<int64_t>& rowInd);
 
+  /* densify the data pointed to by `data`.
+     by default only lower half is filled, unless `fillUpperHalf` is true
+     if startSpanIndex is set it must be on supernode boundary, and then only the
+     bottom right corner will be returned.
+   */
   template <typename T>
-  Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> densify(const std::vector<T>& data) const;
+  void densify(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>& dense, const T* data,
+               bool fillUpperHalf = false, int64_t startSpanIndex = 0) const;
+
+  /* convenience overload */
+  template <typename T>
+  Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> densify(const std::vector<T>& data,
+                                                           bool fillUpperHalf = false) const;
 
   template <typename T>
   void damp(std::vector<T>& data, T alpha, T beta) const;

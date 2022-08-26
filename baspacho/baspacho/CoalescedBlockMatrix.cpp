@@ -122,16 +122,20 @@ CoalescedBlockMatrixSkel::CoalescedBlockMatrixSkel(const vector<int64_t>& spanSt
 }
 
 template <typename T>
-Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> CoalescedBlockMatrixSkel::densify(
-    const std::vector<T>& data) const {
-  int64_t totData = chainData[chainData.size() - 1];
-  BASPACHO_CHECK_EQ(totData, (int64_t)data.size());
+void CoalescedBlockMatrixSkel::densify(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>& dense,
+                                       const T* data, bool fillUpperHalf,
+                                       int64_t startSpanIndex) const {
+  BASPACHO_CHECK_GE(startSpanIndex, 0);
+  BASPACHO_CHECK_LT(startSpanIndex, (int64_t)spanOffsetInLump.size());
+  BASPACHO_CHECK_EQ(spanOffsetInLump[startSpanIndex], 0);
+  int64_t startLump = spanToLump[startSpanIndex];
 
-  int64_t totSize = spanStart[spanStart.size() - 1];
-  Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> retv(totSize, totSize);
-  retv.setZero();
+  int64_t offset = spanStart[startSpanIndex];
+  int64_t totSize = spanStart[spanStart.size() - 1] - offset;
+  dense.resize(totSize, totSize);
+  dense.setZero();
 
-  for (size_t a = 0; a < chainColPtr.size() - 1; a++) {
+  for (size_t a = startLump; a < chainColPtr.size() - 1; a++) {
     int64_t lBegin = lumpStart[a];
     int64_t lSize = lumpStart[a + 1] - lBegin;
     int64_t colStart = chainColPtr[a];
@@ -142,12 +146,27 @@ Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> CoalescedBlockMatrixSkel::densi
       int64_t pSize = spanStart[p + 1] - pStart;
       int64_t dataPtr = chainData[i];
 
-      retv.block(pStart, lBegin, pSize, lSize) =
-          Eigen::Map<const MatRMaj<T>>(data.data() + dataPtr, pSize, lSize);
+      dense.block(pStart - offset, lBegin - offset, pSize, lSize) =
+          Eigen::Map<const MatRMaj<T>>(data + dataPtr, pSize, lSize);
     }
   }
 
-  return retv;
+  if (fillUpperHalf) {
+    dense.template triangularView<Eigen::StrictlyUpper>() =
+        dense.template triangularView<Eigen::StrictlyLower>().adjoint();
+  }
+}
+
+template <typename T>
+Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> CoalescedBlockMatrixSkel::densify(
+    const std::vector<T>& data, bool fillUpperHalf) const {
+  int64_t totData = chainData[chainData.size() - 1];
+  BASPACHO_CHECK_EQ(totData, (int64_t)data.size());
+
+  Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> dense;
+  densify(dense, data.data(), fillUpperHalf);
+
+  return dense;
 }
 
 template <typename T>
@@ -167,10 +186,14 @@ void CoalescedBlockMatrixSkel::damp(std::vector<T>& data, T alpha, T beta) const
   }
 }
 
+template void CoalescedBlockMatrixSkel::densify<double>(
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>&, const double*, bool, int64_t) const;
+template void CoalescedBlockMatrixSkel::densify<float>(
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>&, const float*, bool, int64_t) const;
 template Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>
-CoalescedBlockMatrixSkel::densify<double>(const std::vector<double>& data) const;
+CoalescedBlockMatrixSkel::densify<double>(const std::vector<double>&, bool) const;
 template Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>
-CoalescedBlockMatrixSkel::densify<float>(const std::vector<float>& data) const;
+CoalescedBlockMatrixSkel::densify<float>(const std::vector<float>&, bool) const;
 template void CoalescedBlockMatrixSkel::damp<double>(std::vector<double>& data, double alpha,
                                                      double beta) const;
 template void CoalescedBlockMatrixSkel::damp<float>(std::vector<float>& data, float alpha,
