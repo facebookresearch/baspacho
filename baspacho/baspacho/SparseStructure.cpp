@@ -7,7 +7,7 @@
 
 #include "baspacho/baspacho/SparseStructure.h"
 
-#if BASPACHO_USE_SUITESPARSE_AMD
+#ifdef BASPACHO_USE_SUITESPARSE_AMD
 #include <amd.h>
 #else
 #include <Eigen/OrderingMethods>
@@ -200,13 +200,13 @@ SparseStructure SparseStructure::addIndependentEliminationFill(int64_t elimStart
         int64_t tStart = tThis.ptrs[i];
         int64_t tEnd = tThis.ptrs[i + 1];
         for (int64_t t = tStart; t < tEnd; t++) {
-          int64_t q = tThis.inds[t];
-          if (q >= k) {
+          int64_t w = tThis.inds[t];
+          if (w >= k) {
             break;  // tThis rows are sorted
           }
-          if (tags[q] < k) {
-            tags[q] = k;
-            retv.inds.push_back(q); /* L(k,q) is nonzero */
+          if (tags[w] < k) {
+            tags[w] = k;
+            retv.inds.push_back(w); /* L(k,q) is nonzero */
           }
         }
       }
@@ -292,7 +292,7 @@ SparseStructure SparseStructure::addFullEliminationFill() const {
   return retv;
 }
 
-#if BASPACHO_USE_SUITESPARSE_AMD
+#ifdef BASPACHO_USE_SUITESPARSE_AMD
 
 std::vector<int64_t> SparseStructure::fillReducingPermutation() const {
   std::vector<int64_t> colPtr(ptrs.begin(), ptrs.end()), rowInd(inds.begin(), inds.end());

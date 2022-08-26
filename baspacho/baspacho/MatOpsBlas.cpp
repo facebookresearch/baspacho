@@ -122,7 +122,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
         dispenso::parallel_for(
             taskSet, contexts, [=]() -> ElimContext { return ElimContext(numSpans); },
             dispenso::makeChunkedRange(0L, numElimRows, 5L),
-            [&, this](ElimContext& ctx, int64_t sBegin, int64_t sEnd) {
+            [&](ElimContext& ctx, int64_t sBegin, int64_t sEnd) {
               for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
                 eliminateRowChain(elim, skel, data, sRel, ctx.spanToChainOffset);
               }
@@ -136,7 +136,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
       } else {
         dispenso::TaskSet taskSet(sym.threadPool);
         dispenso::parallel_for(taskSet, dispenso::makeChunkedRange(0L, numElimRows, 5L),
-                               [&, this](int64_t sBegin, int64_t sEnd) {
+                               [&](int64_t sBegin, int64_t sEnd) {
                                  for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
                                    eliminateVerySparseRowChain(elim, skel, data, sRel);
                                  }

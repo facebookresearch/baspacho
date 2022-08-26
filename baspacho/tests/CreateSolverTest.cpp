@@ -40,10 +40,6 @@ struct Epsilon<float> {
   static constexpr float value2 = 1e-6;
 };
 
-// this value must match the value in EliminationTree.cpp - so that the no-cross
-// barriers are placed without preventing the sparse elimination from happening
-static constexpr int64_t minNumSparseElimNodes = 50;
-
 template <typename T>
 void check(Solver& solver, int seed, const std::unordered_set<int64_t>& elimLastIds) {
   vector<T> data = randomData<T>(solver.dataSize(), -1.0, 1.0, 9 + seed);
@@ -101,9 +97,6 @@ void testCreateSolver_Many(bool elimSet, bool lastIds) {
     }
 
     SparseStructure ss = columnsToCscStruct(colBlocks).transpose();
-
-    // test no-cross barrier - make sure the elim set is still present
-    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
 
     vector<int64_t> paramSize = randomVec(ss.ptrs.size() - 1, 2, 3, 47);
 

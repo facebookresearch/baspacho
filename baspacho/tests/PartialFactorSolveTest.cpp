@@ -81,7 +81,6 @@ void testPartialFactor_Many(const std::function<OpsPtr()>& genOps) {
     verifyMat.bottomRightCorner(afterBar, afterBar) = marginalBr;
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     solver.factorUpTo(data.data(), nocross);
     Matrix<T> computedMat = solver.skel().densify(data);
@@ -129,7 +128,6 @@ void testSplitFactor_Many(const std::function<OpsPtr()>& genOps) {
     Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat);
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     solver.factorUpTo(data.data(), nocross);
     solver.factorFrom(data.data(), nocross);
@@ -187,7 +185,6 @@ void testPartialSolveL_Many(const std::function<OpsPtr()>& genOps) {
     int afterBar = order - barrierAt;
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
 
     for (int j = 0; j < 5; j++) {
@@ -245,7 +242,6 @@ void testPartialSolveLt_Many(const std::function<OpsPtr()>& genOps) {
     int afterBar = order - barrierAt;
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
 
     for (int j = 0; j < 5; j++) {
@@ -306,7 +302,6 @@ void testPartialAddMv_Many(const std::function<OpsPtr()>& genOps) {
     int afterBar = order - barrierAt;
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
 
     for (int j = 0; j < 5; j++) {
@@ -372,9 +367,9 @@ void testPseudoFactor_Many(const std::function<OpsPtr()>& genOps) {
 
     Matrix<T> verifyMat = factorSkel.densify(data);
     int64_t order = factorSkel.order();
-    for (int64_t i = 0; i < factorSkel.numSpans(); i++) {
-      int64_t start = factorSkel.spanStart[i];
-      int64_t end = factorSkel.spanStart[i + 1];
+    for (int64_t j = 0; j < factorSkel.numSpans(); j++) {
+      int64_t start = factorSkel.spanStart[j];
+      int64_t end = factorSkel.spanStart[j + 1];
       int64_t size = end - start;
 
       auto diagBlock = verifyMat.block(start, start, size, size);
@@ -445,7 +440,6 @@ void testPartialSolveLFrom_Many(const std::function<OpsPtr()>& genOps) {
     int afterBar = order - barrierAt;
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
 
     for (int j = 0; j < 5; j++) {
@@ -501,7 +495,6 @@ void testPartialSolveLtFrom_Many(const std::function<OpsPtr()>& genOps) {
     int afterBar = order - barrierAt;
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
 
     for (int j = 0; j < 5; j++) {

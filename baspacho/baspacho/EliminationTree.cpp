@@ -177,8 +177,6 @@ void EliminationTree::computeSparseElimRanges(const vector<int64_t>& noCrossPoin
   }
 }
 
-static constexpr double flopsColOverhead = 2e7;
-
 void EliminationTree::computeMerges() {
   int64_t ord = ss.order();
   numMergedNodes.assign(ord, 1);
@@ -357,8 +355,8 @@ void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int6
   permInverse.resize(ord);
   for (int64_t i = 0; i < ord; i++) {
     int64_t p = mergeWith[i];
-    int64_t lumpIndex = unpermutedRootSpanToLump[p == -1 ? i : p];
-    permInverse[i] = lumpToSpan[lumpIndex]++;  // advance
+    int64_t lumpIndex1 = unpermutedRootSpanToLump[p == -1 ? i : p];
+    permInverse[i] = lumpToSpan[lumpIndex1]++;  // advance
   }
   rewindVec(lumpToSpan);  // restore after advancing
 }

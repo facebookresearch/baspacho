@@ -148,7 +148,6 @@ void testSolveLt_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps,
             Eigen::Map<Matrix<T>>(rhsData.data(), order, nRHS));
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     solver.solveLt(data.data(), rhsData.data(), order, nRHS);
 
@@ -207,7 +206,6 @@ void testSolveL_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps, 
             Eigen::Map<Matrix<T>>(rhsData.data(), order, nRHS));
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     solver.solveL(data.data(), rhsData.data(), order, nRHS);
 

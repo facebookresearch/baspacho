@@ -37,7 +37,7 @@ struct Epsilon<double> {
 template <>
 struct Epsilon<float> {
   static constexpr float value = 1e-5;
-  static constexpr float value2 = 4e-5;
+  static constexpr float value2 = 5e-5;
 };
 
 template <typename T>
@@ -209,7 +209,6 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
     Eigen::LLT<Eigen::Ref<Matrix<T>>> llt(verifyMat);
 
     ASSERT_GE(et.sparseElimRanges.size(), 2);
-    int64_t largestIndep = et.sparseElimRanges[1];
     Solver solver(move(factorSkel), move(et.sparseElimRanges), {}, genOps());
     solver.factor(data.data());
     Matrix<T> computedMat = solver.skel().densify(data);

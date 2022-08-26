@@ -121,13 +121,13 @@ void Solver::initElimination() {
   maxElimTempSize = 0;
   for (int64_t l = denseOpsFromLump; l < (int64_t)factorSkel.chainColPtr.size() - 1; l++) {
     //  iterate over columns having a non-trivial a-block
-    int64_t rPtr = factorSkel.boardRowPtr[l];
-    int64_t rEnd = factorSkel.boardRowPtr[l + 1];
-    BASPACHO_CHECK_EQ(factorSkel.boardColLump[rEnd - 1], l);
-    while (factorSkel.boardColLump[rPtr] < denseOpsFromLump) rPtr++;
-    BASPACHO_CHECK_LT(rPtr,
-                      rEnd);  // will stop before end as l > denseOpsFromLump
-    startElimRowPtr[l - denseOpsFromLump] = rPtr;
+    int64_t rPtr0 = factorSkel.boardRowPtr[l];
+    int64_t rEnd0 = factorSkel.boardRowPtr[l + 1];
+    BASPACHO_CHECK_EQ(factorSkel.boardColLump[rEnd0 - 1], l);
+    while (factorSkel.boardColLump[rPtr0] < denseOpsFromLump) rPtr0++;
+    BASPACHO_CHECK_LT(rPtr0,
+                      rEnd0);  // will stop before end as l > denseOpsFromLump
+    startElimRowPtr[l - denseOpsFromLump] = rPtr0;
 
     for (int64_t rPtr = startElimRowPtr[l - denseOpsFromLump],
                  rEnd = factorSkel.boardRowPtr[l + 1];      //
