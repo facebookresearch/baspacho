@@ -115,7 +115,7 @@ bool isWeaklyIncreasing(const std::vector<T>& v, std::size_t begin, std::size_t 
 #endif
 
 template <typename... Args>
-__BASPACHO_HOST_DEVICE__ void UNUSED(const Args&... args) {
+__BASPACHO_HOST_DEVICE__ void BASPACHO_UNUSED(const Args&... args) {
   (void)(sizeof...(args));
 }
 

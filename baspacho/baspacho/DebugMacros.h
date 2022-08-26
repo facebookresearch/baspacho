@@ -29,8 +29,8 @@
                         #a " " #op " " #b " (" << aEval << " vs. " << bEval << ")") \
   }
 #else
-#define BASPACHO_CHECK(a) ::BaSpaCho::UNUSED(a)
-#define BASPACHO_CHECK_OP(a, b, op) ::BaSpaCho::UNUSED(a, b)
+#define BASPACHO_CHECK(a) ::BaSpaCho::BASPACHO_UNUSED(a)
+#define BASPACHO_CHECK_OP(a, b, op) ::BaSpaCho::BASPACHO_UNUSED(a, b)
 #endif
 
 #define BASPACHO_CHECK_EQ(a, b) BASPACHO_CHECK_OP(a, b, ==)

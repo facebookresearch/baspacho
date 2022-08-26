@@ -608,7 +608,7 @@ struct CudaNumericCtx<vector<T*>> : NumericCtx<vector<T*>> {
   virtual ~CudaNumericCtx() override {}
 
   virtual void pseudoFactorSpans(vector<T*>* data, int64_t spanBegin, int64_t spanEnd) override {
-    UNUSED(data, spanBegin, spanEnd);
+    BASPACHO_UNUSED(data, spanBegin, spanEnd);
     throw std::runtime_error("pseudo factor not implemented for batched ops");
   }
 
@@ -1316,7 +1316,7 @@ void CudaSolveCtx<vector<double*>>::symm(const vector<double*>* data, int64_t of
                                          const vector<double*>* C, int64_t offC, int64_t ldc,
                                          vector<double*>* D, int64_t ldd, double alpha) {
   auto timer = sym.symmStat.instance();
-  UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
+  BASPACHO_UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
   throw std::runtime_error("symm not implemented for batched ops");
 }
 
@@ -1325,7 +1325,7 @@ void CudaSolveCtx<vector<float*>>::symm(const vector<float*>* data, int64_t offs
                                         const vector<float*>* C, int64_t offC, int64_t ldc,
                                         vector<float*>* D, int64_t ldd, float alpha) {
   auto timer = sym.symmStat.instance();
-  UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
+  BASPACHO_UNUSED(data, offset, n, C, offC, ldc, D, ldd, alpha);
   throw std::runtime_error("symm not implemented for batched ops");
 }
 
