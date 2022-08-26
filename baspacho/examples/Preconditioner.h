@@ -30,7 +30,7 @@ class IdentityPrecond : public Preconditioner<T> {
   IdentityPrecond(const BaSpaCho::Solver& solver, int64_t paramStart)
       : solver(solver), vecSize(solver.order() - solver.spanVectorOffset(paramStart)) {}
 
-  virtual ~IdentityPrecond() {}
+  virtual ~IdentityPrecond() override {}
 
   virtual void init(T* /* data */) override {}
 
@@ -64,7 +64,7 @@ class BlockJacobiPrecond : public Preconditioner<T> {
     diagBlockData.resize(offset);
   }
 
-  virtual ~BlockJacobiPrecond() {}
+  virtual ~BlockJacobiPrecond() override {}
 
   virtual void init(T* data) override {
     auto acc = solver.accessor();
@@ -113,7 +113,7 @@ class BlockGaussSeidelPrecond : public Preconditioner<T> {
         paramStart(paramStart),
         vecSize(solver.order() - solver.spanVectorOffset(paramStart)) {}
 
-  virtual ~BlockGaussSeidelPrecond() {}
+  virtual ~BlockGaussSeidelPrecond() override {}
 
   virtual void init(T* data) override {
     matData.assign(data + solver.spanMatrixOffset(paramStart), data + solver.dataSize());
@@ -151,7 +151,7 @@ class LowerPrecSolvePrecond<double> : public Preconditioner<double> {
         vecSize(solver.order() - solver.spanVectorOffset(paramStart)),
         paramStart(paramStart) {}
 
-  virtual ~LowerPrecSolvePrecond() {}
+  virtual ~LowerPrecSolvePrecond() override {}
 
   virtual void init(double* data) override {
     int64_t offset = solver.spanMatrixOffset(paramStart);

@@ -139,7 +139,7 @@ class VariableStore : public VariableStoreBase {
   static_assert(std::is_base_of_v<VarBase, Variable>);
 
  public:
-  virtual ~VariableStore() {}
+  virtual ~VariableStore() override {}
 
   virtual int64_t totalSize() const override { return Variable::DataDim * variables.size(); }
 
@@ -208,16 +208,20 @@ class FactorStore : public FactorStoreBase {
   virtual ~FactorStore() override {}
 
   double computeSingleCost(int64_t i) {
-    auto [factor, loss, args] = boundFactors[i];
+    auto& [factor_, loss, args] = boundFactors[i];
+    auto& factor = factor_;
+
     ErrorType err = std::apply(  // expanding argument pack...
-        [&](auto&&... args) { return factor(args->value..., (args, nullptr)...); }, args);
+        [&](auto&&... args) { return factor(args->value..., ((void)args, nullptr)...); }, args);
     return loss->val(err.squaredNorm()) * 0.5;
   }
 
   template <typename Ops>
   double computeSingleGradHess(int64_t i, double* gradData,
                                const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) {
-    auto [factor, loss, args] = boundFactors[i];
+    auto [factor_, loss, args_] = boundFactors[i];
+    auto& factor = factor_;
+    auto& args = args_;
 
     std::tuple<Eigen::Matrix<double, ErrorSize, Variables::TangentDim>...> jacobians;
     ErrorType err = withTuple<0, sizeof...(Variables)>(  // expanding argument pack...
@@ -227,9 +231,10 @@ class FactorStore : public FactorStoreBase {
                              ? nullptr
                              : &std::get<decltype(iWraps)::value>(jacobians))...);
         });
-    auto [softErr, dSoftErr] = loss->jet2(err.squaredNorm());
+    auto [softErr, dSoftErr_] = loss->jet2(err.squaredNorm());
+    auto& dSoftErr = dSoftErr_;
 
-    forEach<0, sizeof...(Variables)>([&, this](auto iWrap) {
+    forEach<0, sizeof...(Variables)>([&](auto iWrap) {
       static constexpr int i = decltype(iWrap)::value;
       int64_t iIndex = std::get<i>(args)->index;
       if (iIndex == kConstantVar) {
@@ -248,7 +253,7 @@ class FactorStore : public FactorStoreBase {
       Eigen::Map<Eigen::Vector<double, iTangentDim>> gradSeg(gradData + paramStart);
       Ops::vectorAdd(gradSeg, dSoftErr * (err.transpose() * iJac));
 
-      forEach<0, i>([&, this](auto jWrap) {
+      forEach<0, i>([&](auto jWrap) {
         static constexpr int j = decltype(jWrap)::value;
         int64_t jIndex = std::get<j>(args)->index;
         if (jIndex == kConstantVar) {
@@ -313,14 +318,16 @@ class FactorStore : public FactorStoreBase {
 
   virtual void registerVariables(std::vector<int64_t>& sizes,
                                  std::unordered_set<std::pair<int64_t, int64_t>, pair_hash>& blocks,
-                                 TypedStore<VariableStoreBase>& varStores) {
+                                 TypedStore<VariableStoreBase>& varStores) override {
     forEach<0, sizeof...(Variables)>([&, this](auto iWrap) {
       static constexpr int i = decltype(iWrap)::value;
       using Variable =
           std::remove_reference_t<decltype(*std::get<i>(std::get<2>(boundFactors[0])))>;
       auto& store = varStores.get<VariableStore<Variable>>();
 
-      for (auto& [factor, loss, args] : boundFactors) {
+      for (auto& [factor, loss, args_] : boundFactors) {
+        auto& args = args_;
+
         // register variable (if needed)
         auto& Vi = *std::get<i>(args);
         if (Vi.index == kUnsetIndex) {
@@ -332,7 +339,7 @@ class FactorStore : public FactorStoreBase {
         }
 
         // add off-diagonal block to Hessian structure
-        forEach<0, i>([&, this](auto jWrap) {
+        forEach<0, i>([&](auto jWrap) {
           static constexpr int j = decltype(jWrap)::value;
           auto& Vj = *std::get<j>(args);
           if (Vj.index >= 0) {
@@ -656,7 +663,6 @@ class Optimizer {
 
       double modelCostReduction;
       std::string solverReport;
-      int attempts = 1;
       do {
         hessBackup = hess;
         addDamping(hess, accessor, solver->paramToSpan().size(), damping);
