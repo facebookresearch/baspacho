@@ -188,6 +188,8 @@ class FactorStoreBase {
  public:
   virtual ~FactorStoreBase() {}
 
+  virtual bool verifyJacobians(double epsilon, double maxRelativeError) = 0;
+
   virtual double computeCost(dispenso::ThreadPool* threadPool = nullptr) = 0;
 
   virtual double computeGradHess(double* gradData, const BaSpaCho::PermutedCoalescedAccessor& acc,
@@ -198,30 +200,141 @@ class FactorStoreBase {
                                  TypedStore<VariableStoreBase>& varStores) = 0;
 };
 
-template <typename Factor, typename SoftLoss, typename... Variables>
+template <typename Factor, bool HasPrecisionMatrix, typename SoftLoss, typename... Variables>
 class FactorStore : public FactorStoreBase {
  public:
   using ErrorType = decltype((*(Factor*)nullptr)(Variables().value..., (Variables(), nullptr)...));
   static constexpr int ErrorSize = VarUtil<ErrorType>::TangentDim;
   static constexpr bool HasSoftLoss = !std::is_same<SoftLoss, TrivialLoss>::value;
+  using PrecisionMatrix = Eigen::Matrix<double, ErrorSize, ErrorSize>;
+  using VarTuple = std::tuple<Variables*...>;
+  using TupleType = std::conditional_t<
+      HasPrecisionMatrix,
+      std::conditional_t<HasSoftLoss,
+                         std::tuple<Factor, VarTuple, PrecisionMatrix, const SoftLoss*>,
+                         std::tuple<Factor, VarTuple, PrecisionMatrix>>,
+      std::conditional_t<HasSoftLoss, std::tuple<Factor, VarTuple, const SoftLoss*>,
+                         std::tuple<Factor, VarTuple>>>;
+
+  auto getLoss(int64_t i) const {
+    if constexpr (!HasSoftLoss) {
+      return TrivialLoss();
+    } else {
+      return *std::get<(HasPrecisionMatrix ? 3 : 2)>(boundFactors[i]);
+    }
+  }
+
+  double squaredError(int64_t i, const ErrorType& err) const {
+    if constexpr (HasPrecisionMatrix) {
+      return err.dot(std::get<2>(boundFactors[i]) * err);
+    } else {
+      return err.squaredNorm();
+    }
+  }
+
+  template <int N>
+  Eigen::Matrix<double, ErrorSize, N> precisionScaled(
+      int64_t i, const Eigen::Matrix<double, ErrorSize, N>& t) const {
+    if constexpr (HasPrecisionMatrix) {
+      return std::get<2>(boundFactors[i]) * t;
+    } else {
+      return t;
+    }
+  }
 
   virtual ~FactorStore() override {}
 
+  virtual bool verifyJacobians(double epsilon, double maxRelativeError) override {
+    std::tuple<Eigen::Vector<double, Variables::TangentDim>...> maxRelErr(
+        (Eigen::Vector<double, Variables::TangentDim>::Zero())...);
+
+    const int nCheck = std::min(boundFactors.size(), 100UL);
+    bool stop = false;
+    for (size_t k = 0; k < nCheck; k++) {
+      auto& factor = std::get<0>(boundFactors[k]);
+      auto& args = std::get<1>(boundFactors[k]);
+
+      std::tuple<Eigen::Matrix<double, ErrorSize, Variables::TangentDim>...> jacobians;
+      ErrorType err = withTuple<0, sizeof...(Variables)>(  // expanding argument pack...
+          [&](auto... iWraps) {
+            return factor(std::get<decltype(iWraps)::value>(args)->value...,
+                          (&std::get<decltype(iWraps)::value>(jacobians))...);
+          });
+
+      forEach<0, sizeof...(Variables)>([&](auto iWrap) {
+        static constexpr int i = decltype(iWrap)::value;
+        using iVarType = std::remove_reference_t<decltype(*std::get<i>(args))>;
+        iVarType& iVar = *std::get<i>(args);
+        using iVarUtil = VarUtil<typename iVarType::DataType>;
+        static constexpr int iTangentDim = iVarType::TangentDim;
+        static constexpr int iDataDim = iVarType::DataDim;
+        Eigen::Vector<double, iDataDim> iVarBackup(iVarUtil::dataPtr(iVar.value));
+        const auto& iJac = std::get<i>(jacobians);
+        Eigen::Matrix<double, ErrorSize, iTangentDim> iNumJac;
+
+        double paramMaxRelErrs = 0;
+        int maxRelErrCol = -1;
+        for (int t = 0; t < iTangentDim; t++) {
+          Eigen::Vector<double, iTangentDim> tgStep = Eigen::Vector<double, iTangentDim>::Zero();
+          tgStep[t] = epsilon;
+          iVarUtil::tangentStep(tgStep, iVar.value);
+
+          ErrorType pErr = std::apply(  // expanding argument pack...
+              [&](auto&&... args) { return factor(args->value..., ((void)args, nullptr)...); },
+              args);
+          iNumJac.col(t) = (pErr - err) / epsilon;
+          double relErr = (iNumJac.col(t) - iJac.col(t)).norm() / (iNumJac.col(t).norm() + epsilon);
+          std::get<i>(maxRelErr)[t] = std::max(std::get<i>(maxRelErr)[t], relErr);
+          if (relErr > paramMaxRelErrs) {
+            paramMaxRelErrs = relErr;
+            maxRelErrCol = t;
+          }
+
+          Eigen::Map<Eigen::Vector<double, iDataDim>>(iVarUtil::dataPtr(iVar.value)) =
+              iVarBackup;  // restore
+        }
+        if (paramMaxRelErrs > maxRelativeError) {
+          std::cout << "Factor" << k << ".Jac" << i << ":\n"
+                    << iJac << "\nwhile numeric Jacobian is\n"
+                    << iNumJac << "\n and has relative error " << paramMaxRelErrs << " > "
+                    << maxRelativeError << " in column " << maxRelErrCol << std::endl;
+          stop = true;
+        }
+      });
+
+      if (stop) {
+        break;
+      }
+    }
+
+    std::cout << "Factor " << prettyTypeName<FactorStore>() << ", factors checked: " << nCheck
+              << "/" << boundFactors.size() << ", Jacobians check! (rel errors < "
+              << maxRelativeError << ")\n";
+    forEach<0, sizeof...(Variables)>([&](auto iWrap) {
+      static constexpr int i = decltype(iWrap)::value;
+      std::cout << "Relative errors in cols of " << i << "-th Jacobian:\n  "
+                << std::get<i>(maxRelErr).transpose() << std::endl;
+    });
+
+    return !stop;
+  }
+
   double computeSingleCost(int64_t i) {
-    auto& [factor_, loss, args] = boundFactors[i];
-    auto& factor = factor_;
+    auto& factor = std::get<0>(boundFactors[i]);
+    auto& args = std::get<1>(boundFactors[i]);
+    const auto& loss = getLoss(i);
 
     ErrorType err = std::apply(  // expanding argument pack...
         [&](auto&&... args) { return factor(args->value..., ((void)args, nullptr)...); }, args);
-    return loss->val(err.squaredNorm()) * 0.5;
+    return loss.val(squaredError(i, err)) * 0.5;
   }
 
   template <typename Ops>
-  double computeSingleGradHess(int64_t i, double* gradData,
+  double computeSingleGradHess(int64_t k, double* gradData,
                                const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) {
-    auto& [factor_, loss, args_] = boundFactors[i];
-    auto& factor = factor_;
-    auto& args = args_;
+    auto& factor = std::get<0>(boundFactors[k]);
+    auto& args = std::get<1>(boundFactors[k]);
+    const auto& loss = getLoss(k);
 
     std::tuple<Eigen::Matrix<double, ErrorSize, Variables::TangentDim>...> jacobians;
     ErrorType err = withTuple<0, sizeof...(Variables)>(  // expanding argument pack...
@@ -231,7 +344,7 @@ class FactorStore : public FactorStoreBase {
                              ? nullptr
                              : &std::get<decltype(iWraps)::value>(jacobians))...);
         });
-    auto [softErr, dSoftErr_] = loss->jet2(err.squaredNorm());
+    auto [softErr, dSoftErr_] = loss.jet2(err.squaredNorm());
     auto& dSoftErr = dSoftErr_;
 
     forEach<0, sizeof...(Variables)>([&](auto iWrap) {
@@ -244,7 +357,8 @@ class FactorStore : public FactorStoreBase {
       static constexpr int iTangentDim =
           std::remove_reference_t<decltype(*std::get<i>(args))>::TangentDim;
       const auto& iJac = std::get<i>(jacobians);
-      const Eigen::Matrix<double, ErrorSize, iTangentDim> iAdjJac = dSoftErr * iJac;
+      const Eigen::Matrix<double, ErrorSize, iTangentDim> iAdjJac =
+          dSoftErr * precisionScaled(k, iJac);
 
       // gradient contribution
       int64_t paramStart = acc.paramStart(iIndex);
@@ -283,7 +397,8 @@ class FactorStore : public FactorStoreBase {
       dispenso::TaskSet taskSet(*threadPool);
       dispenso::parallel_for(
           taskSet, perThreadCost, []() -> double { return 0.0; },
-          dispenso::makeChunkedRange(0L, boundFactors.size()),
+          dispenso::makeChunkedRange(0L, boundFactors.size(),
+                                     boundFactors.size() / threadPool->numThreads()),
           [this](double& threadCost, int64_t iBegin, int64_t iEnd) {
             for (int64_t i = iBegin; i < iEnd; i++) {
               threadCost += computeSingleCost(i);
@@ -329,11 +444,11 @@ class FactorStore : public FactorStoreBase {
     forEach<0, sizeof...(Variables)>([&, this](auto iWrap) {
       static constexpr int i = decltype(iWrap)::value;
       using Variable =
-          std::remove_reference_t<decltype(*std::get<i>(std::get<2>(boundFactors[0])))>;
+          std::remove_reference_t<decltype(*std::get<i>(std::get<1>(boundFactors[0])))>;
       auto& store = varStores.get<VariableStore<Variable>>();
 
-      for (auto& [factor, loss, args_] : boundFactors) {
-        auto& args = args_;
+      for (auto& tup : boundFactors) {
+        auto& args = std::get<1>(tup);
 
         // register variable (if needed)
         auto& Vi = *std::get<i>(args);
@@ -359,7 +474,7 @@ class FactorStore : public FactorStoreBase {
     });
   }
 
-  std::vector<std::tuple<Factor, SoftLoss*, std::tuple<Variables*...>>> boundFactors;
+  std::vector<TupleType> boundFactors;
 };
 
 class Optimizer {
@@ -371,23 +486,43 @@ class Optimizer {
   TypedStore<VariableStoreBase> variableStores;
   std::vector<int64_t> paramSizes;
   std::vector<int64_t> elimRanges;
-  TrivialLoss defaultLoss;
 
-  template <typename Factor, typename SoftLoss, typename... Variables>
-  std::enable_if_t<std::is_base_of_v<Loss, SoftLoss>> addFactor(Factor&& f, const SoftLoss& l,
-                                                                Variables&... v) {
+  template <typename Factor, typename Derived, typename SoftLoss, typename... Variables,
+            std::enable_if_t<std::is_base_of_v<Loss, SoftLoss>, int> q = 0>
+  void addFactor(Factor&& f, const Eigen::MatrixBase<Derived>& prec, const SoftLoss& l,
+                 Variables&... v) {
+    using FactorStoreType = FactorStore<Factor, true, SoftLoss, Variables...>;
     static_assert((std::is_base_of_v<VarBase, Variables> && ...));
-    auto& store = factorStores.get<FactorStore<Factor, SoftLoss, Variables...>>();
-    store.boundFactors.emplace_back(std::move(f), &l, std::make_tuple(&v...));
+    auto& store = factorStores.get<FactorStoreType>();
+    store.boundFactors.emplace_back(std::move(f), std::make_tuple(&v...), prec, &l);
   }
 
-  template <typename Factor, typename Variable0, typename... Variables>
-  std::enable_if_t<!std::is_base_of_v<Loss, Variable0>> addFactor(Factor&& f, Variable0& v0,
-                                                                  Variables&... v) {
-    static_assert(
-        (std::is_base_of_v<VarBase, Variable0> && ... && std::is_base_of_v<VarBase, Variables>));
-    auto& store = factorStores.get<FactorStore<Factor, TrivialLoss, Variable0, Variables...>>();
-    store.boundFactors.emplace_back(std::move(f), &defaultLoss, std::make_tuple(&v0, &v...));
+  template <typename Factor, typename Derived, typename Variable0, typename... Variables,
+            std::enable_if_t<std::is_base_of_v<VarBase, Variable0>, int> q = 0>
+  void addFactor(Factor&& f, const Eigen::MatrixBase<Derived>& prec, Variable0& v0,
+                 Variables&... v) {
+    using FactorStoreType = FactorStore<Factor, true, TrivialLoss, Variable0, Variables...>;
+    static_assert((std::is_base_of_v<VarBase, Variables> && ...));
+    auto& store = factorStores.get<FactorStoreType>();
+    store.boundFactors.emplace_back(std::move(f), std::make_tuple(&v0, &v...), prec);
+  }
+
+  template <typename Factor, typename SoftLoss, typename... Variables,
+            std::enable_if_t<std::is_base_of_v<Loss, SoftLoss>, int> q = 0>
+  void addFactor(Factor&& f, const SoftLoss& l, Variables&... v) {
+    using FactorStoreType = FactorStore<Factor, false, SoftLoss, Variables...>;
+    static_assert((std::is_base_of_v<VarBase, Variables> && ...));
+    auto& store = factorStores.get<FactorStoreType>();
+    store.boundFactors.emplace_back(std::move(f), std::make_tuple(&v...), &l);
+  }
+
+  template <typename Factor, typename Variable0, typename... Variables,
+            std::enable_if_t<std::is_base_of_v<VarBase, Variable0>, int> q = 0>
+  void addFactor(Factor&& f, Variable0& v0, Variables&... v) {
+    using FactorStoreType = FactorStore<Factor, false, TrivialLoss, Variable0, Variables...>;
+    static_assert((std::is_base_of_v<VarBase, Variables> && ...));
+    auto& store = factorStores.get<FactorStoreType>();
+    store.boundFactors.emplace_back(std::move(f), std::make_tuple(&v0, &v...));
   }
 
   template <typename Variable>
@@ -412,7 +547,17 @@ class Optimizer {
     for (auto& [ti, fStore] : factorStores.stores) {
       retv += fStore->computeGradHess(gradData, acc, hessData, threadPool);
     }
+
     return retv;
+  }
+
+  bool verifyJacobians(double epsilon = 1e-7, double maxRelativeError = 1e-2) {
+    for (auto& [ti, fStore] : factorStores.stores) {
+      if (!fStore->verifyJacobians(epsilon, maxRelativeError)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   double computeCost(dispenso::ThreadPool* threadPool = nullptr) {
