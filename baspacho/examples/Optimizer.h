@@ -219,7 +219,7 @@ class FactorStore : public FactorStoreBase {
   template <typename Ops>
   double computeSingleGradHess(int64_t i, double* gradData,
                                const BaSpaCho::PermutedCoalescedAccessor& acc, double* hessData) {
-    auto [factor_, loss, args_] = boundFactors[i];
+    auto& [factor_, loss, args_] = boundFactors[i];
     auto& factor = factor_;
     auto& args = args_;
 
@@ -241,17 +241,21 @@ class FactorStore : public FactorStoreBase {
         return;
       }
 
-      // Hessian diagonal contribution
-      auto const& iJac = std::get<i>(jacobians);
-      auto dBlock = acc.diagBlock(hessData, iIndex);
-      Ops::matrixAdd(dBlock, dSoftErr * (iJac.transpose() * iJac));
-
-      // gradient contribution
       static constexpr int iTangentDim =
           std::remove_reference_t<decltype(*std::get<i>(args))>::TangentDim;
+      const auto& iJac = std::get<i>(jacobians);
+      const Eigen::Matrix<double, ErrorSize, iTangentDim> iAdjJac = dSoftErr * iJac;
+
+      // gradient contribution
       int64_t paramStart = acc.paramStart(iIndex);
       Eigen::Map<Eigen::Vector<double, iTangentDim>> gradSeg(gradData + paramStart);
-      Ops::vectorAdd(gradSeg, dSoftErr * (err.transpose() * iJac));
+      Eigen::Vector<double, iTangentDim> gradSegAdd = err.transpose() * iAdjJac;
+      Ops::vectorAdd(gradSeg, gradSegAdd);
+
+      // Hessian diagonal contribution
+      auto dBlock = acc.diagBlock(hessData, iIndex);
+      Eigen::Matrix<double, iTangentDim, iTangentDim> dBlockAdd = iAdjJac.transpose() * iJac;
+      Ops::matrixAdd(dBlock, dBlockAdd);
 
       forEach<0, i>([&](auto jWrap) {
         static constexpr int j = decltype(jWrap)::value;
@@ -261,9 +265,12 @@ class FactorStore : public FactorStoreBase {
         }
 
         // Hessian off-diagonal contribution
-        auto const& jJac = std::get<j>(jacobians);
+        static constexpr int jTangentDim =
+            std::remove_reference_t<decltype(*std::get<j>(args))>::TangentDim;
+        const auto& jJac = std::get<j>(jacobians);
         auto odBlock = acc.block(hessData, iIndex, jIndex);
-        Ops::matrixAdd(odBlock, dSoftErr * (iJac.transpose() * jJac));
+        Eigen::Matrix<double, iTangentDim, jTangentDim> odBlockAdd = iAdjJac.transpose() * jJac;
+        Ops::matrixAdd(odBlock, odBlockAdd);
       });
     });
 
@@ -276,7 +283,7 @@ class FactorStore : public FactorStoreBase {
       dispenso::TaskSet taskSet(*threadPool);
       dispenso::parallel_for(
           taskSet, perThreadCost, []() -> double { return 0.0; },
-          dispenso::makeChunkedRange(0L, boundFactors.size(), 32L),
+          dispenso::makeChunkedRange(0L, boundFactors.size()),
           [this](double& threadCost, int64_t iBegin, int64_t iEnd) {
             for (int64_t i = iBegin; i < iEnd; i++) {
               threadCost += computeSingleCost(i);
@@ -300,7 +307,7 @@ class FactorStore : public FactorStoreBase {
       dispenso::TaskSet taskSet(*threadPool);
       dispenso::parallel_for(
           taskSet, perThreadCost, []() -> double { return 0.0; },
-          dispenso::makeChunkedRange(0L, boundFactors.size(), 32L),
+          dispenso::makeChunkedRange(0L, boundFactors.size()),
           [gradData, &acc, hessData, this](double& threadCost, int64_t iBegin, int64_t iEnd) {
             for (int64_t i = iBegin; i < iEnd; i++) {
               threadCost += computeSingleGradHess<LockedSharedOps>(i, gradData, acc, hessData);
