@@ -197,8 +197,12 @@ SolveCtxPtr<T> SymbolicCtx::createSolveCtx(int nRHS, const T* data) {
 
 OpsPtr simpleOps();
 
+#ifdef BASPACHO_USE_BLAS
 OpsPtr blasOps(int numThreads = 16);
+#endif
 
+#ifdef BASPACHO_USE_CUBLAS
 OpsPtr cudaOps();
+#endif
 
 }  // end namespace BaSpaCho

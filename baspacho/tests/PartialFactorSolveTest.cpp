@@ -333,6 +333,7 @@ TEST(Partial, PartialAddMv_Ref_float) {
   testPartialAddMv_Many<float>([] { return simpleOps(); });
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Partial, PartialAddMv_Blas_double) {
   testPartialAddMv_Many<double>([] { return blasOps(); });
 }
@@ -340,6 +341,7 @@ TEST(Partial, PartialAddMv_Blas_double) {
 TEST(Partial, PartialAddMv_Blas_float) {
   testPartialAddMv_Many<float>([] { return blasOps(); });
 }
+#endif
 
 template <typename T>
 void testPseudoFactor_Many(const std::function<OpsPtr()>& genOps) {
@@ -402,6 +404,7 @@ TEST(Partial, testPseudoFactor_Ref_float) {
   testPseudoFactor_Many<float>([] { return simpleOps(); });
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Partial, testPseudoFactor_Blas_double) {
   testPseudoFactor_Many<double>([] { return blasOps(); });
 }
@@ -409,6 +412,7 @@ TEST(Partial, testPseudoFactor_Blas_double) {
 TEST(Partial, testPseudoFactor_Blas_float) {
   testPseudoFactor_Many<float>([] { return blasOps(); });
 }
+#endif
 
 template <typename T>
 void testPartialSolveLFrom_Many(const std::function<OpsPtr()>& genOps) {

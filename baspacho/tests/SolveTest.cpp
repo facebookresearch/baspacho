@@ -70,11 +70,15 @@ void testSolveL(OpsPtr&& ops, int nRHS = 1) {
               0, Epsilon<T>::value);
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Solve, SolveL_Blas_double) { testSolveL<double>(blasOps(), 5); }
+#endif
 
 TEST(Solve, SolveL_Ref_double) { testSolveL<double>(simpleOps(), 5); }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Solve, SolveL_Blas_float) { testSolveL<float>(blasOps(), 5); }
+#endif
 
 TEST(Solve, SolveL_Ref_float) { testSolveL<float>(simpleOps(), 5); }
 
@@ -108,11 +112,15 @@ void testSolveLt(OpsPtr&& ops, int nRHS = 1) {
               0, Epsilon<T>::value);
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Solve, SolveLt_Blas_double) { testSolveLt<double>(blasOps(), 5); }
+#endif
 
 TEST(Solve, SolveLt_Ref_double) { testSolveLt<double>(simpleOps(), 5); }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Solve, SolveLt_Blas_float) { testSolveLt<float>(blasOps(), 5); }
+#endif
 
 TEST(Solve, SolveLt_Ref_float) { testSolveLt<float>(simpleOps(), 5); }
 
@@ -158,17 +166,21 @@ void testSolveLt_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps,
   }
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Solve, SolveLt_SparseElimAndFactor_Many_Blas_double) {
   testSolveLt_SparseElimAndFactor_Many<double>([] { return blasOps(); }, 5);
 }
+#endif
 
 TEST(Solve, SolveLt_SparseElimAndFactor_Many_Ref_double) {
   testSolveLt_SparseElimAndFactor_Many<double>([] { return simpleOps(); }, 5);
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Solve, SolveLt_SparseElimAndFactor_Many_Blas_float) {
   testSolveLt_SparseElimAndFactor_Many<float>([] { return blasOps(); }, 5);
 }
+#endif
 
 TEST(Solve, SolveLt_SparseElimAndFactor_Many_Ref_float) {
   testSolveLt_SparseElimAndFactor_Many<float>([] { return simpleOps(); }, 5);
@@ -216,17 +228,21 @@ void testSolveL_SparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps, 
   }
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Solve, SolveL_SparseElimAndFactor_Many_Blas_double) {
   testSolveL_SparseElimAndFactor_Many<double>([] { return blasOps(); }, 5);
 }
+#endif
 
 TEST(Solve, SolveL_SparseElimAndFactor_Many_Ref_double) {
   testSolveL_SparseElimAndFactor_Many<double>([] { return simpleOps(); }, 5);
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Solve, SolveL_SparseElimAndFactor_Many_Blas_float) {
   testSolveL_SparseElimAndFactor_Many<float>([] { return blasOps(); }, 5);
 }
+#endif
 
 TEST(Solve, SolveL_SparseElimAndFactor_Many_Ref_float) {
   testSolveL_SparseElimAndFactor_Many<float>([] { return simpleOps(); }, 5);

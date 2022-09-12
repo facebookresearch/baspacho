@@ -95,6 +95,8 @@ a few possibilities are:
 * OpenBLAS
 * Intel10_64{i}lp{_seq}
 (if 'i' indices are 64bits, if '_seq' sequential ie single thread)
+Blas is enabled by default with BASPACHO_USE_BLAS option (on by default), add
+`-DBASPACHO_USE_BLAS=0` to disable in build.
 
 For the full list check CMake docs at:
 https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors

@@ -184,7 +184,7 @@ using SolverPtr = std::unique_ptr<Solver>;
  * data on the CPU. Ref/Blas engines in the other hand will only work with CPU data.
  **/
 enum BackendType {
-  BackendRef,
+  BackendRef,  // reference implementation, not recommended
   BackendBlas,
   BackendCuda,
 };
@@ -209,7 +209,11 @@ struct ComputationModel;
 struct Settings {
   bool findSparseEliminationRanges = true;
   int numThreads = 16;
+#ifdef BASPACHO_USE_BLAS
   BackendType backend = BackendBlas;
+#else
+  BackendType backend = BackendRef;
+#endif
   AddFillPolicy addFillPolicy = AddFillComplete;
   const ComputationModel* computationModel = nullptr;
 };

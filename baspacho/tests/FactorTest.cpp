@@ -64,11 +64,15 @@ void testCoalescedFactor(OpsPtr&& ops) {
               0, Epsilon<T>::value);
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Factor, CoalescedFactor_Blas_double) { testCoalescedFactor<double>(blasOps()); }
+#endif
 
 TEST(Factor, CoalescedFactor_Ref_double) { testCoalescedFactor<double>(simpleOps()); }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Factor, CoalescedFactor_Blas_float) { testCoalescedFactor<float>(blasOps()); }
+#endif
 
 TEST(Factor, CoalescedFactor_Ref_float) { testCoalescedFactor<float>(simpleOps()); }
 
@@ -106,17 +110,21 @@ void testCoalescedFactor_Many(const std::function<OpsPtr()>& genOps) {
   }
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Factor, CoalescedFactor_Many_Blas_double) {
   testCoalescedFactor_Many<double>([] { return blasOps(); });
 }
+#endif
 
 TEST(Factor, CoalescedFactor_Many_Ref_double) {
   testCoalescedFactor_Many<double>([] { return simpleOps(); });
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Factor, CoalescedFactor_Many_Blas_float) {
   testCoalescedFactor_Many<float>([] { return blasOps(); });
 }
+#endif
 
 TEST(Factor, CoalescedFactor_Many_Ref_float) {
   testCoalescedFactor_Many<float>([] { return simpleOps(); });
@@ -166,17 +174,21 @@ void testSparseElim_Many(const std::function<OpsPtr()>& genOps) {
   }
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Factor, SparseElim_Many_Blas_double) {
   testSparseElim_Many<double>([] { return blasOps(); });
 }
+#endif
 
 TEST(Factor, SparseElim_Many_Ref_double) {
   testSparseElim_Many<double>([] { return simpleOps(); });
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Factor, SparseElim_Many_Blas_float) {
   testSparseElim_Many<float>([] { return blasOps(); });
 }
+#endif
 
 TEST(Factor, SparseElim_Many_Ref_float) {
   testSparseElim_Many<float>([] { return simpleOps(); });
@@ -218,17 +230,21 @@ void testSparseElimAndFactor_Many(const std::function<OpsPtr()>& genOps) {
   }
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Factor, SparseElimAndFactor_Many_Blas_double) {
   testSparseElimAndFactor_Many<double>([] { return blasOps(); });
 }
+#endif
 
 TEST(Factor, SparseElimAndFactor_Many_Ref_double) {
   testSparseElimAndFactor_Many<double>([] { return simpleOps(); });
 }
 
+#ifdef BASPACHO_USE_BLAS
 TEST(Factor, SparseElimAndFactor_Many_Blas_float) {
   testSparseElimAndFactor_Many<float>([] { return blasOps(); });
 }
+#endif
 
 TEST(Factor, SparseElimAndFactor_Many_Ref_float) {
   testSparseElimAndFactor_Many<float>([] { return simpleOps(); });

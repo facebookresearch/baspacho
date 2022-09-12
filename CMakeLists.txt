@@ -59,18 +59,22 @@ endif()
 # * OpenBLAS
 # * Intel10_64{i}lp{_seq}
 #   (if 'i' indices are 64bits, if '_seq' sequential ie single thread)
-message("==============================[ BLAS ]==================================")
-set(BLA_VENDOR OpenBLAS CACHE STRING
-    "BLAS Library to be searched, possibilities are: ATLAS, OpenBLAS, Intel10_64ilp_seq, etc")
-message("* BLA_VENDOR = " ${BLA_VENDOR})
-find_package(BLAS REQUIRED)
-message("* BLAS linkerFlags = " ${BLAS_LINKER_FLAGS})
-message("* BLAS Libraries = " ${BLAS_LIBRARIES})
-if(BLA_VENDOR MATCHES "Intel10_*")
-  message("* BLAS appears to be MKL, MKL_ROOT should be set")
-  message("* Adding includes: " $ENV{MKLROOT}/include)
-  include_directories($ENV{MKLROOT}/include) # if MKL
-  add_compile_definitions(BASPACHO_USE_MKL)
+set(BASPACHO_USE_BLAS ON CACHE BOOL "If on, BLAS support is enabled")
+if(BASPACHO_USE_BLAS)
+  message("==============================[ BLAS ]==================================")
+  set(BLA_VENDOR OpenBLAS CACHE STRING
+      "BLAS Library to be searched, possibilities are: ATLAS, OpenBLAS, Intel10_64ilp_seq, etc")
+  message("* BLA_VENDOR = " ${BLA_VENDOR})
+  find_package(BLAS REQUIRED)
+  message("* BLAS linkerFlags = " ${BLAS_LINKER_FLAGS})
+  message("* BLAS Libraries = " ${BLAS_LIBRARIES})
+  if(BLA_VENDOR MATCHES "Intel10_*")
+    message("* BLAS appears to be MKL, MKL_ROOT should be set")
+    message("* Adding includes: " $ENV{MKLROOT}/include)
+    include_directories($ENV{MKLROOT}/include) # if MKL
+    add_compile_definitions(BASPACHO_USE_MKL)
+  endif()
+  add_compile_definitions(BASPACHO_USE_BLAS)
 endif()
 
 # amd, if using amd from SuiteSparse

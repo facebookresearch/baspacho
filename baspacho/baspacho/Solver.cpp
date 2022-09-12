@@ -558,7 +558,12 @@ void Solver::resetStats() {
 
 OpsPtr getBackend(const Settings& settings) {
   if (settings.backend == BackendBlas) {
+#ifdef BASPACHO_USE_BLAS
     return blasOps(settings.numThreads);
+#else
+    std::cerr << "Baspacho: BLAS not enabled at compile time" << std::endl;
+    abort();
+#endif
   } else if (settings.backend == BackendCuda) {
 #ifdef BASPACHO_USE_CUBLAS
     return cudaOps();
