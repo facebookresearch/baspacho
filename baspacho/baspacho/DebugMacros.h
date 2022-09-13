@@ -10,7 +10,9 @@
 #include <iostream>
 #include "baspacho/baspacho/Utils.h"
 
-#define BASPACHO_CHECKS
+#ifndef NO_BASPACHO_CHECKS
+  #define BASPACHO_CHECKS
+#endif // NO_BASPACHO_CHECKS
 
 #define BASPACHO_CHECK_WHAT(a, msg)                                             \
   if (!(a)) {                                                                   \
