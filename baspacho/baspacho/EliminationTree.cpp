@@ -201,7 +201,9 @@ void EliminationTree::computeMerges() {
   }
 
   while (!mergeCandidates.empty()) {
-    auto [wasFillAfterMerge, k, p] = mergeCandidates.top();
+    auto wasFillAfterMergeKP = mergeCandidates.top();
+    int64_t k = std::get<1>(wasFillAfterMergeKP);
+    int64_t p = std::get<2>(wasFillAfterMergeKP);
     mergeCandidates.pop();
 
     auto oldP = p;
@@ -335,7 +337,7 @@ void EliminationTree::processTree(bool detectSparseElimRanges, const vector<int6
   vector<int64_t> unpermutedRootSpanToLump(ord, -1);
 
   for (int64_t i = 0; i < ord; i++) {
-    auto [height, unmergedSize, k] = unmergedHeightNode[i];
+    int64_t k = std::get<2>(unmergedHeightNode[i]);
     if (mergeWith[k] != -1) {
       continue;
     }
