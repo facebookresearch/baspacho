@@ -129,7 +129,7 @@ cmake_policy(SET CMP0077 NEW)
 message("============================[ dispenso ]================================")
 FetchContent_Declare(
   dispenso
-  GIT_REPOSITORY git@github.com:facebookincubator/dispenso.git
+  GIT_REPOSITORY https://github.com/facebookincubator/dispenso.git
   GIT_TAG 22ff47d07c32303a5059bfec26304a68dff01e65
 	)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -173,7 +173,7 @@ include_directories(${eigen_SOURCE_DIR})
 message("=============================[ Sophus ]=================================")
 FetchContent_Declare(
   sophus
-  GIT_REPOSITORY git@github.com:strasdat/Sophus.git # https://github.com/
+  GIT_REPOSITORY https://github.com/strasdat/Sophus.git
   GIT_TAG 49a7e1286910019f74fb4f0bb3e213c909f8e1b7
 )
 if(NOT sophus_POPULATED)
