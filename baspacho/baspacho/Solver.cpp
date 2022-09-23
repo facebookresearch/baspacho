@@ -638,12 +638,6 @@ SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& par
   vector<int64_t> invPerm = inversePermutation(permutation);
   SparseStructure sortedSsBottom = ssBottom.symmetricPermutation(invPerm, false);
 
-  vector<int64_t> last, lastDoko;
-  for (auto l : elimLastIds) {
-    last.push_back(l);
-    lastDoko.push_back(invPerm[l]);
-  }
-
   // apply permutation to param size of right-bottom corner
   std::vector<int64_t> sortedBottomParamSize(paramSize.size() - givenSparseElimEnd);
   for (size_t i = givenSparseElimEnd; i < paramSize.size(); i++) {
