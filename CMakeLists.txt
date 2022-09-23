@@ -14,11 +14,24 @@ set(BASPACHO_CXX_FLAGS -Wall -Wextra -pedantic -Werror)
 
 message("* Build type: " ${CMAKE_BUILD_TYPE})
 
+# some fancy colors for cmake messages
+if(NOT WIN32)
+string(ASCII 27 Esc)
+set(ColourReset "${Esc}[m")
+set(Red         "${Esc}[31m")
+set(Green       "${Esc}[32m")
+set(Yellow      "${Esc}[33m")
+set(Blue        "${Esc}[34m")
+set(Magenta     "${Esc}[35m")
+set(Cyan        "${Esc}[36m")
+set(White       "${Esc}[37m")
+endif()
+
 # CUDA
 set(BASPACHO_USE_CUBLAS ON CACHE BOOL "If on, CUDA support is enabled")
 set(BASPACHO_CUDA_ARCHS "detect" CACHE STRING "List of cuda architecture (eg '60;62;75'), or 'detect'")
 if(BASPACHO_USE_CUBLAS)
-  message("==============================[ CUDA ]==================================")
+  message("${Cyan}==============================[ CUDA ]==================================${ColourReset}")
   enable_language(CUDA)
   include(CheckLanguage)
   check_language(CUDA)
@@ -28,7 +41,17 @@ if(BASPACHO_USE_CUBLAS)
     message("* Detecting CUDA architecture...")
     set(CUDA_DETECT_BIN "${CMAKE_BINARY_DIR}/detect_cuda")
     set(CUDA_DETECT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/cmake/detect_cuda.cu")
-    execute_process(COMMAND "${CMAKE_CUDA_COMPILER}" -lcuda "${CUDA_DETECT_SRC}" -o "${CUDA_DETECT_BIN}")
+
+    message("${Yellow}  ${CMAKE_CUDA_COMPILER} ${CUDA_DETECT_SRC} -o ${CUDA_DETECT_BIN}${ColourReset}")
+    execute_process(COMMAND "${CMAKE_CUDA_COMPILER}" "${CUDA_DETECT_SRC}" -o "${CUDA_DETECT_BIN}"
+                    OUTPUT_VARIABLE NVCC_OUT
+                    ERROR_VARIABLE NVCC_ERR)
+    if(NOT NVCC_OUT STREQUAL "")
+      message("  ${NVCC_OUT}")
+    endif()
+    if(NOT NVCC_ERR STREQUAL "")
+      message("${Red}  ${NVCC_ERR}${ColourReset}")
+    endif()
     execute_process(COMMAND "${CUDA_DETECT_BIN}"
                     RESULT_VARIABLE CUDA_RETURN_CODE
                     OUTPUT_VARIABLE RESULT)
@@ -61,7 +84,7 @@ endif()
 #   (if 'i' indices are 64bits, if '_seq' sequential ie single thread)
 set(BASPACHO_USE_BLAS ON CACHE BOOL "If on, BLAS support is enabled")
 if(BASPACHO_USE_BLAS)
-  message("==============================[ BLAS ]==================================")
+  message("${Cyan}==============================[ BLAS ]==================================${ColourReset}")
   set(BLA_VENDOR OpenBLAS CACHE STRING
       "BLAS Library to be searched, possibilities are: ATLAS, OpenBLAS, Intel10_64ilp_seq, etc")
   message("* BLA_VENDOR = " ${BLA_VENDOR})
@@ -78,7 +101,7 @@ if(BASPACHO_USE_BLAS)
 endif()
 
 # amd, if using amd from SuiteSparse
-message("===============[ minimum degree reordering algorithm ]==================")
+message("${Cyan}===============[ minimum degree reordering algorithm ]==================${ColourReset}")
 set(BASPACHO_USE_SUITESPARSE_AMD OFF CACHE BOOL "If on, will use AMD algorithm in SuiteSparse (must be installed)")
 if(BASPACHO_USE_SUITESPARSE_AMD)
   set(HAVE_SUITESPARSE_AMD 1)
@@ -101,7 +124,7 @@ endif()
 
 
 # cholmod (for benchmarking comparison)
-message("============================[ CHOLMOD ]=================================")
+message("${Cyan}============================[ CHOLMOD ]=================================${ColourReset}")
 find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
           PATHS ${INCLUDE_INSTALL_DIR}
           PATH_SUFFIXES suitesparse ufsparse)
@@ -126,7 +149,7 @@ cmake_policy(SET CMP0077 NEW)
 
 # dispenso for multithreading
 # currently in facebookincubator, soon to be opensourced
-message("============================[ dispenso ]================================")
+message("${Cyan}============================[ dispenso ]================================${ColourReset}")
 FetchContent_Declare(
   dispenso
   GIT_REPOSITORY https://github.com/facebookincubator/dispenso.git
@@ -141,7 +164,7 @@ message("* Dispenso Library Dir = " ${dispenso_BINARY_DIR})
 
 
 # gtest
-message("=============================[ GTest ]==================================")
+message("${Cyan}=============================[ GTest ]==================================${ColourReset}")
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
@@ -156,7 +179,7 @@ include(GoogleTest)
 
 
 # eigen
-message("=============================[ Eigen ]==================================")
+message("${Cyan}=============================[ Eigen ]==================================${ColourReset}")
 FetchContent_Declare(
   eigen
   URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip
@@ -170,7 +193,7 @@ include_directories(${eigen_SOURCE_DIR})
 
 
 # sophus (for testing on BA problem)
-message("=============================[ Sophus ]=================================")
+message("${Cyan}=============================[ Sophus ]=================================${ColourReset}")
 FetchContent_Declare(
   sophus
   GIT_REPOSITORY https://github.com/strasdat/Sophus.git

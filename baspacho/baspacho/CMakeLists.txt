@@ -29,7 +29,7 @@ if(BASPACHO_USE_CUBLAS)
     target_link_libraries(BaSpaCho
                           CUDA::cublas
                           CUDA::cusolver)
-    set_target_properties(BaSpaCho PROPERTIES CUDA_ARCHITECTURES ${BASPACHO_CUDA_ARCHITECTURES})
+    set_target_properties(BaSpaCho PROPERTIES CUDA_ARCHITECTURES "${BASPACHO_CUDA_ARCHITECTURES}")
     target_compile_options(BaSpaCho PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
                            ${BASPACHO_CXX_FLAGS}
                            >)
