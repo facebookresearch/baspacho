@@ -29,7 +29,7 @@ endif()
 
 # CUDA
 set(BASPACHO_USE_CUBLAS ON CACHE BOOL "If on, CUDA support is enabled")
-set(BASPACHO_CUDA_ARCHS "detect" CACHE STRING "List of cuda architecture (eg '60;62;75'), or 'detect'")
+set(BASPACHO_CUDA_ARCHS "detect" CACHE STRING "List of cuda architecture (eg '60;62;75'), or 'detect', or 'torch'")
 if(BASPACHO_USE_CUBLAS)
   message("${Cyan}==============================[ CUDA ]==================================${ColourReset}")
   enable_language(CUDA)
@@ -61,6 +61,19 @@ if(BASPACHO_USE_CUBLAS)
       set(BASPACHO_CUDA_ARCHITECTURES "${RESULT}")
     else()
       message(FATAL_ERROR "CUDA architecture detection failed: ${RESULT}")
+    endif()
+	elseif(BASPACHO_CUDA_ARCHS STREQUAL "torch")
+    message("* Getting Torch CUDA architectures...")
+    set(CUDA_GET_TORCH_BIN "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_torch_cuda.py")
+		execute_process(COMMAND "python" "${CUDA_GET_TORCH_BIN}"
+                    RESULT_VARIABLE CUDA_RETURN_CODE
+                    OUTPUT_VARIABLE RESULT)
+									
+    if(${CUDA_RETURN_CODE} EQUAL 0)
+      message("* CUDA architecture: ${RESULT} (autodetect)")								
+      set(BASPACHO_CUDA_ARCHITECTURES "${RESULT}")
+    else()
+      message(FATAL_ERROR "Torch CUDA architecture detection failed: ${RESULT}")
     endif()
   else()
     # https://cmake.org/cmake/help/git-stage/prop_tgt/CUDA_ARCHITECTURES.html
