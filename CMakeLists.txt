@@ -47,17 +47,17 @@ if(BASPACHO_USE_CUBLAS)
                     OUTPUT_VARIABLE NVCC_OUT
                     ERROR_VARIABLE NVCC_ERR)
     if(NOT NVCC_OUT STREQUAL "")
-      message("  ${NVCC_OUT}")
+      message("${NVCC_OUT}")
     endif()
     if(NOT NVCC_ERR STREQUAL "")
-      message("${Red}  ${NVCC_ERR}${ColourReset}")
+      message("${Red}${NVCC_ERR}${ColourReset}")
     endif()
     execute_process(COMMAND "${CUDA_DETECT_BIN}"
                     RESULT_VARIABLE CUDA_RETURN_CODE
                     OUTPUT_VARIABLE RESULT)
 
-    if(${CUDA_RETURN_CODE} EQUAL 0)
-      message("* CUDA architecture: ${RESULT} (autodetect)")								
+    if(CUDA_RETURN_CODE EQUAL 0)
+      message("* CUDA architectures: '${RESULT}' (autodetected installed GPU)")
       set(BASPACHO_CUDA_ARCHITECTURES "${RESULT}")
     else()
       message(FATAL_ERROR "CUDA architecture detection failed: ${RESULT}")
@@ -65,19 +65,28 @@ if(BASPACHO_USE_CUBLAS)
 	elseif(BASPACHO_CUDA_ARCHS STREQUAL "torch")
     message("* Getting Torch CUDA architectures...")
     set(CUDA_GET_TORCH_ARCHS_BIN "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_torch_cuda_archs.py")
+    message("${Yellow}  python ${CUDA_GET_TORCH_ARCHS_BIN}${ColourReset}")
 		execute_process(COMMAND "python" "${CUDA_GET_TORCH_ARCHS_BIN}"
-                    RESULT_VARIABLE CUDA_RETURN_CODE
-                    OUTPUT_VARIABLE RESULT)
+                    RESULT_VARIABLE TORCH_RETURN_CODE
+                    OUTPUT_VARIABLE RESULT
+                    ERROR_VARIABLE TORCH_ERROR)
 
-    if(${CUDA_RETURN_CODE} EQUAL 0)
-      message("* CUDA architecture: ${RESULT} (autodetect)")
+    if(NOT TORCH_ERROR STREQUAL "")
+      message("${Red}${TORCH_ERROR}${ColourReset}")
+    endif()
+
+    if(TORCH_RETURN_CODE EQUAL 0)
+      message("* CUDA architectures: '${RESULT}' (from torch, >=60)")
+		  if(RESULT STREQUAL "")
+				message(FATAL_ERROR "Torch architectures returned an empty result.")
+			endif()
       set(BASPACHO_CUDA_ARCHITECTURES "${RESULT}")
     else()
       message(FATAL_ERROR "Torch CUDA architecture detection failed: ${RESULT}")
     endif()
   else()
     # https://cmake.org/cmake/help/git-stage/prop_tgt/CUDA_ARCHITECTURES.html
-    message("* CUDA architectures set to: ${BASPACHO_CUDA_ARCHS}")
+    message("* CUDA architectures: '${BASPACHO_CUDA_ARCHS}' (manually set)")
     set(BASPACHO_CUDA_ARCHITECTURES "${BASPACHO_CUDA_ARCHS}")
   endif()
 
@@ -159,7 +168,9 @@ endif()
 # use fetchcontent to download dependencies
 include(FetchContent)
 cmake_policy(SET CMP0077 NEW)
-cmake_policy(SET CMP0135 NEW)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
+	cmake_policy(SET CMP0135 NEW)
+endif()
 
 # dispenso for multithreading
 # currently in facebookincubator, soon to be opensourced

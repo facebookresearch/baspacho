@@ -87,6 +87,9 @@ Cuda is enabled by default with BASPACHO_USE_CUBLAS option (on by default), add
 `-DBASPACHO_USE_CUBLAS=0` to disable in build.
 May have to add `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` to allow build
 to find the cuda compiler.
+The Cuda architectures can be specified with e.g. `-DBASPACHO_CUDA_ARCHS="60;70;75"`,
+which also supports the options 'detect' (default) which detects the installed GPU arch,
+and 'torch' which fills in the architectures supported by PyTorch and >=60 (see below).
 
 ### Blas
 The library used is specified in the CMake variable BLA_VENDOR,
