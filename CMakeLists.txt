@@ -146,6 +146,7 @@ endif()
 # use fetchcontent to download dependencies
 include(FetchContent)
 cmake_policy(SET CMP0077 NEW)
+cmake_policy(SET CMP0135 NEW)
 
 # dispenso for multithreading
 # currently in facebookincubator, soon to be opensourced
