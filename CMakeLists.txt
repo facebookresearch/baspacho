@@ -64,13 +64,13 @@ if(BASPACHO_USE_CUBLAS)
     endif()
 	elseif(BASPACHO_CUDA_ARCHS STREQUAL "torch")
     message("* Getting Torch CUDA architectures...")
-    set(CUDA_GET_TORCH_BIN "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_torch_cuda.py")
-		execute_process(COMMAND "python" "${CUDA_GET_TORCH_BIN}"
+    set(CUDA_GET_TORCH_ARCHS_BIN "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_torch_cuda_archs.py")
+		execute_process(COMMAND "python" "${CUDA_GET_TORCH_ARCHS_BIN}"
                     RESULT_VARIABLE CUDA_RETURN_CODE
                     OUTPUT_VARIABLE RESULT)
-									
+
     if(${CUDA_RETURN_CODE} EQUAL 0)
-      message("* CUDA architecture: ${RESULT} (autodetect)")								
+      message("* CUDA architecture: ${RESULT} (autodetect)")
       set(BASPACHO_CUDA_ARCHITECTURES "${RESULT}")
     else()
       message(FATAL_ERROR "Torch CUDA architecture detection failed: ${RESULT}")
