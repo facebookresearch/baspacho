@@ -152,9 +152,8 @@ cmake_policy(SET CMP0077 NEW)
 message("${Cyan}============================[ dispenso ]================================${ColourReset}")
 FetchContent_Declare(
   dispenso
-  GIT_REPOSITORY https://github.com/facebookincubator/dispenso.git
-  GIT_TAG 22ff47d07c32303a5059bfec26304a68dff01e65
-	)
+  URL https://github.com/facebookincubator/dispenso/archive/552738b62a04f5d7b51dfcef822ae2d89d154881.zip
+  )
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_MakeAvailable(dispenso)
 unset(CMAKE_POSITION_INDEPENDENT_CODE)
@@ -196,8 +195,7 @@ include_directories(${eigen_SOURCE_DIR})
 message("${Cyan}=============================[ Sophus ]=================================${ColourReset}")
 FetchContent_Declare(
   sophus
-  GIT_REPOSITORY https://github.com/strasdat/Sophus.git
-  GIT_TAG 49a7e1286910019f74fb4f0bb3e213c909f8e1b7
+  URL https://github.com/strasdat/Sophus/archive/8e1941677ef214aab0397608f42b18fbe1a19885.zip
 )
 if(NOT sophus_POPULATED)
   FetchContent_Populate(sophus)
