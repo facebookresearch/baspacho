@@ -109,7 +109,10 @@ if(BASPACHO_USE_BLAS)
   message("${Cyan}==============================[ BLAS ]==================================${ColourReset}")
   set(BLA_VENDOR OpenBLAS CACHE STRING
       "BLAS Library to be searched, possibilities are: ATLAS, OpenBLAS, Intel10_64ilp_seq, etc")
+  set(BLA_STATIC OFF CACHE STRING
+      "Link statically to BLAS Library")
   message("* BLA_VENDOR = " ${BLA_VENDOR})
+  message("* BLA_STATIC = " ${BLA_STATIC})
   find_package(BLAS REQUIRED)
   message("* BLAS linkerFlags = " ${BLAS_LINKER_FLAGS})
   message("* BLAS Libraries = " ${BLAS_LIBRARIES})
