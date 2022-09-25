@@ -13,13 +13,13 @@ if(HAVE_CHOLMOD)
 endif()
 
 add_executable(BAL_bench ${BAL_bench_sources})
-target_link_libraries (BAL_bench BaSpaCho testing BAL_utils)
+target_link_libraries (BAL_bench ${BASPACHO_LIBRARY} testing BAL_utils)
 
 add_executable(BAL_opt ${BAL_opt_sources})
-target_link_libraries (BAL_opt BaSpaCho testing BAL_utils)
+target_link_libraries (BAL_opt ${BASPACHO_LIBRARY} testing BAL_utils)
 
 add_executable(bench ${bench_sources})
-target_link_libraries (bench BaSpaCho testing)
+target_link_libraries (bench ${BASPACHO_LIBRARY} testing)
 
 if(HAVE_CHOLMOD)
   target_link_libraries (BAL_bench ${CHOLMOD_LIBRARIES})
