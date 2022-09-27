@@ -164,6 +164,12 @@ struct SolveCtx : SolveCtxBase {
                      int64_t offA, int64_t lda, BaseType<T> alpha) = 0;
 
   virtual void assembleVecT(const T* C, int64_t ldc, int64_t chainColPtr, int64_t numColItems) = 0;
+
+  virtual bool hasFragmentedMV() { return false; }
+
+  virtual void fragmentedMV(const T* data, const T* x, int64_t spanBegin, int64_t spanEnd, T* y) {
+    throw std::runtime_error("fragmentedMV: not supported");
+  }
 };
 
 // introspection shortcuts

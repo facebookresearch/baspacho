@@ -601,6 +601,57 @@ struct BlasSolveCtx : SolveCtx<T> {
     }
   }
 
+  virtual bool hasFragmentedMV() override { return true; }
+
+  virtual void fragmentedMV(const T* data, const T* x, int64_t spanBegin, int64_t spanEnd,
+                            T* y) override {
+    const CoalescedBlockMatrixSkel& skel = sym.skel;
+    for (int64_t s = spanBegin; s < spanEnd; s++) {
+      int64_t sBegin = skel.spanStart[s];
+      int64_t sSize = skel.spanStart[s + 1] - sBegin;
+      Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> outVec(y + sBegin, sSize);
+
+      // row blocks skipping last el (=diag)
+      for (int64_t b = skel.boardRowPtr[s], bEnd = skel.boardRowPtr[s + 1] - 1; b < bEnd; b++) {
+        int64_t c = skel.boardColLump[b];
+        if (c < spanBegin) {
+          continue;
+        }
+
+        int64_t cBegin = skel.spanStart[c];
+        int64_t cSize = skel.spanStart[c + 1] - cBegin;
+        // BASPACHO_CHECK_EQ(skel.chainRowSpan[skel.chainColPtr[c] + skel.boardColOrd[b]], s);
+        int64_t offset = skel.chainData[skel.chainColPtr[c] + skel.boardColOrd[b]];
+
+        Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + cBegin, cSize);
+        Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> block(
+            data + offset, sSize, cSize);
+        outVec += block * inVec;
+      }
+
+      // diagonal
+      int64_t cPtr = skel.chainColPtr[s];
+      // BASPACHO_CHECK_EQ(skel.chainRowSpan[cPtr], s);
+      Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec0(x + sBegin, sSize);
+      Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> dBlock(
+          data + skel.chainData[cPtr], sSize, sSize);
+      outVec += dBlock.template triangularView<Eigen::Lower>() * inVec0;
+      outVec += dBlock.template triangularView<Eigen::StrictlyLower>().adjoint() * inVec0;
+
+      for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {
+        int64_t r = skel.chainRowSpan[p];
+        std::cout << s << " . " << r << std::endl;
+        int64_t rBegin = skel.spanStart[r];
+        int64_t rSize = skel.spanStart[r + 1] - rBegin;
+        int64_t offset = skel.chainData[p];
+        Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + rBegin, rSize);
+        Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> block(
+            data + offset, sSize, rSize);  // swapped
+        outVec += block * inVec;
+      }
+    }
+  }
+
   const BlasSymbolicCtx& sym;
   int64_t nRHS;
   vector<T> tmpBuf;

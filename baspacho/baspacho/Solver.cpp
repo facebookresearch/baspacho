@@ -394,6 +394,14 @@ void Solver::addMvFrom(const T* matData, int64_t spanIndex, const T* inVecData, 
   int64_t denseOpsFromLump = startFromLump;  // sparse ops not supported yet
 
   int64_t upToLump = factorSkel.lumpStart.size() - 1;
+
+  int64_t numSpans = factorSkel.lumpToSpan[upToLump] - factorSkel.lumpToSpan[denseOpsFromLump];
+  if (numSpans == upToLump - denseOpsFromLump && slvCtx->hasFragmentedMV() && nRHS == 1) {
+    BASPACHO_CHECK_EQ(factorSkel.lumpToSpan[denseOpsFromLump], denseOpsFromLump);
+    slvCtx->fragmentedMV(matData, inVecData, denseOpsFromLump, upToLump, outVecData);
+    return;
+  }
+
   for (int64_t l = denseOpsFromLump; l < upToLump; l++) {
     int64_t lumpStart = factorSkel.lumpStart[l];
     int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
