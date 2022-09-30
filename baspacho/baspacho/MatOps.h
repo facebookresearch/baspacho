@@ -167,7 +167,8 @@ struct SolveCtx : SolveCtxBase {
 
   virtual bool hasFragmentedMV() { return false; }
 
-  virtual void fragmentedMV(const T* data, const T* x, int64_t spanBegin, int64_t spanEnd, T* y) {
+  virtual void fragmentedMV(const T* /*data*/, const T* /*x*/, int64_t /*spanBegin*/,
+                            int64_t /*spanEnd*/, T* /*y*/) {
     throw std::runtime_error("fragmentedMV: not supported");
   }
 };

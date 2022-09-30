@@ -606,50 +606,127 @@ struct BlasSolveCtx : SolveCtx<T> {
   virtual void fragmentedMV(const T* data, const T* x, int64_t spanBegin, int64_t spanEnd,
                             T* y) override {
     const CoalescedBlockMatrixSkel& skel = sym.skel;
-    for (int64_t s = spanBegin; s < spanEnd; s++) {
-      int64_t sBegin = skel.spanStart[s];
-      int64_t sSize = skel.spanStart[s + 1] - sBegin;
-      Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> outVec(y + sBegin, sSize);
 
-      // row blocks skipping last el (=diag)
-      for (int64_t b = skel.boardRowPtr[s], bEnd = skel.boardRowPtr[s + 1] - 1; b < bEnd; b++) {
-        int64_t c = skel.boardColLump[b];
-        if (c < spanBegin) {
-          continue;
+    dispenso::TaskSet taskSet(sym.threadPool);
+    dispenso::parallel_for(
+        taskSet, dispenso::makeChunkedRange(spanBegin, spanEnd, 8L),
+        [&](int64_t rangeBegin, int64_t rangeEnd) {
+          BASPACHO_CHECK_LE(rangeEnd, rangeBegin + 8);
+          int64_t dataStart = skel.spanStart[rangeBegin];
+          int64_t dataSize = skel.spanStart[rangeEnd] - dataStart;
+          T* outData = (T*)alloca(sizeof(T) * dataSize);
+          Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(outData, dataSize).setZero();
+
+#if 1
+          int64_t rangeSize = rangeEnd - rangeBegin;
+          int64_t* boardRowPtr = (int64_t*)alloca(sizeof(int64_t) * rangeSize);
+          int64_t* boardRowPtrEnd = (int64_t*)alloca(sizeof(int64_t) * rangeSize);
+          std::pair<int64_t, int64_t>* colIndex = (std::pair<int64_t, int64_t>*)alloca(
+              sizeof(std::pair<int64_t, int64_t>) * (rangeSize + 1));
+          int64_t added = 0;
+          for (int64_t i = 0; i < rangeSize; i++) {
+            int64_t s = i + rangeBegin;
+            int64_t b = boardRowPtr[i] = skel.boardRowPtr[s];
+            int64_t bEnd = boardRowPtrEnd[i] = skel.boardRowPtr[s + 1] - 1;
+            if (b < bEnd) {
+              colIndex[added++] = {skel.boardColLump[b], i};
+            }
+          }
+          rangeSize = added;
+          std::sort(colIndex, colIndex + rangeSize);
+          colIndex[rangeSize] = {std::numeric_limits<int64_t>::max(), 0};
+
+          while (rangeSize) {
+            auto [c, i] = colIndex[0];
+            int64_t s = i + rangeBegin;
+            int64_t b = boardRowPtr[i];
+
+            if (c >= spanBegin) {
+              int64_t sBegin = skel.spanStart[s];
+              int64_t sSize = skel.spanStart[s + 1] - sBegin;
+              Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> outVec(outData + (sBegin - dataStart),
+                                                                  sSize);
+
+              int64_t cBegin = skel.spanStart[c];
+              int64_t cSize = skel.spanStart[c + 1] - cBegin;
+              int64_t offset = skel.chainData[skel.chainColPtr[c] + skel.boardColOrd[b]];
+
+              Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + cBegin, cSize);
+              Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+                  block(data + offset, sSize, cSize);
+              outVec.noalias() += block * inVec;
+            }
+
+            b++;
+            bool beforeEnd = b < boardRowPtrEnd[i];
+            boardRowPtr[i] = b;
+            std::pair<int64_t, int64_t> newColIndex(
+                beforeEnd ? skel.boardColLump[b] : (std::numeric_limits<int64_t>::max() - 1), i);
+
+            // re-sort column indices
+            int64_t j = 1;
+            while (colIndex[j] < newColIndex) {
+              colIndex[j - 1] = colIndex[j];
+              j++;
+            }
+            colIndex[j - 1] = newColIndex;
+            /*colIndex[0] = newColIndex;
+            std::sort(colIndex, colIndex + rangeSize);*/
+
+            if (!beforeEnd) {
+              rangeSize--;
+            }
+          }
+#endif
+          for (int64_t s = rangeBegin; s < rangeEnd; s++) {
+            int64_t sBegin = skel.spanStart[s];
+            int64_t sSize = skel.spanStart[s + 1] - sBegin;
+            Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> outVec(outData + (sBegin - dataStart),
+                                                                sSize);
+
+#if 0
+        for (int64_t b = skel.boardRowPtr[s + 1] - 2, bEnd = skel.boardRowPtr[s]; b >= bEnd; b--) {
+          int64_t c = skel.boardColLump[b];
+          if (c < spanBegin) {
+            break;
+          }
+
+          int64_t cBegin = skel.spanStart[c];
+          int64_t cSize = skel.spanStart[c + 1] - cBegin;
+          int64_t offset = skel.chainData[skel.chainColPtr[c] + skel.boardColOrd[b]];
+
+          Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + cBegin, cSize);
+          Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> block(
+              data + offset, sSize, cSize);
+          outVec.noalias() += block * inVec;
         }
+#endif
 
-        int64_t cBegin = skel.spanStart[c];
-        int64_t cSize = skel.spanStart[c + 1] - cBegin;
-        // BASPACHO_CHECK_EQ(skel.chainRowSpan[skel.chainColPtr[c] + skel.boardColOrd[b]], s);
-        int64_t offset = skel.chainData[skel.chainColPtr[c] + skel.boardColOrd[b]];
+            // diagonal
+            int64_t cPtr = skel.chainColPtr[s];
+            Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec0(x + sBegin, sSize);
+            Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+                dBlock(data + skel.chainData[cPtr], sSize, sSize);
+            outVec.noalias() += dBlock.template triangularView<Eigen::Lower>() * inVec0;
+            outVec.noalias() +=
+                dBlock.template triangularView<Eigen::StrictlyLower>().adjoint() * inVec0;
 
-        Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + cBegin, cSize);
-        Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> block(
-            data + offset, sSize, cSize);
-        outVec += block * inVec;
-      }
+            // blocks below diag
+            for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {
+              int64_t r = skel.chainRowSpan[p];
+              int64_t rBegin = skel.spanStart[r];
+              int64_t rSize = skel.spanStart[r + 1] - rBegin;
+              int64_t offset = skel.chainData[p];
+              Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + rBegin, rSize);
+              Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>>
+                  block(data + offset, sSize, rSize);  // swapped
+              outVec.noalias() += block * inVec;
+            }
+          }
 
-      // diagonal
-      int64_t cPtr = skel.chainColPtr[s];
-      // BASPACHO_CHECK_EQ(skel.chainRowSpan[cPtr], s);
-      Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec0(x + sBegin, sSize);
-      Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> dBlock(
-          data + skel.chainData[cPtr], sSize, sSize);
-      outVec += dBlock.template triangularView<Eigen::Lower>() * inVec0;
-      outVec += dBlock.template triangularView<Eigen::StrictlyLower>().adjoint() * inVec0;
-
-      for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {
-        int64_t r = skel.chainRowSpan[p];
-        std::cout << s << " . " << r << std::endl;
-        int64_t rBegin = skel.spanStart[r];
-        int64_t rSize = skel.spanStart[r + 1] - rBegin;
-        int64_t offset = skel.chainData[p];
-        Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + rBegin, rSize);
-        Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> block(
-            data + offset, sSize, rSize);  // swapped
-        outVec += block * inVec;
-      }
-    }
+          Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(y + dataStart, dataSize) +=
+              Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(outData, dataSize);
+        });
   }
 
   const BlasSymbolicCtx& sym;
