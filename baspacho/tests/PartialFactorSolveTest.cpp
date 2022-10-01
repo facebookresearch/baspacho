@@ -561,14 +561,16 @@ void testPartialFragmentedAddMv_Many(const std::function<OpsPtr()>& genOps) {
       Matrix<T> vecIn = Eigen::Map<Matrix<T>>(vecInData.data(), order, nRHS);
       Matrix<T> vecOut = Eigen::Map<Matrix<T>>(vecOutData.data(), order, nRHS);
       Matrix<T> vecRef = vecOut;
+      T alpha(3.5);
       vecRef.bottomRows(afterBar) +=
           mat.bottomRightCorner(afterBar, afterBar).template triangularView<Eigen::Lower>() *
-          vecIn.bottomRows(afterBar);
+          vecIn.bottomRows(afterBar) * alpha;
       vecRef.bottomRows(afterBar) += mat.bottomRightCorner(afterBar, afterBar)
                                          .template triangularView<Eigen::StrictlyLower>()
                                          .transpose() *
-                                     vecIn.bottomRows(afterBar);
-      solver.addMvFrom(data.data(), nocross, vecIn.data(), order, vecOut.data(), order, nRHS);
+                                     vecIn.bottomRows(afterBar) * alpha;
+      solver.addMvFrom(data.data(), nocross, vecIn.data(), order, vecOut.data(), order, nRHS,
+                       alpha);
 
       ASSERT_NEAR((vecOut - vecRef).norm() / vecRef.norm(), 0, Epsilon<T>::value2);
     }
