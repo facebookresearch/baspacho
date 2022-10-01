@@ -607,6 +607,39 @@ struct BlasSolveCtx : SolveCtx<T> {
                             T* y) override {
     const CoalescedBlockMatrixSkel& skel = sym.skel;
 
+    if (!sym.useThreads) {
+      for (int64_t s = spanBegin; s < spanEnd; s++) {
+        int64_t sBegin = skel.spanStart[s];
+        int64_t sSize = skel.spanStart[s + 1] - sBegin;
+        Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> outVecS(y + sBegin, sSize);
+        Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVecS(x + sBegin, sSize);
+
+        // diagonal
+        int64_t cPtr = skel.chainColPtr[s];
+        Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> dBlock(
+            data + skel.chainData[cPtr], sSize, sSize);
+        outVecS.noalias() += dBlock.template triangularView<Eigen::Lower>() * inVecS;
+        outVecS.noalias() +=
+            dBlock.template triangularView<Eigen::StrictlyLower>().adjoint() * inVecS;
+
+        // blocks below diag
+        for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {
+          int64_t r = skel.chainRowSpan[p];
+          int64_t rBegin = skel.spanStart[r];
+          int64_t rSize = skel.spanStart[r + 1] - rBegin;
+          int64_t offset = skel.chainData[p];
+          Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVecR(x + rBegin, rSize);
+          Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> block(
+              data + offset, sSize, rSize);  // swapped
+          outVecS.noalias() += block * inVecR;
+
+          Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> outVecR(y + rBegin, rSize);
+          outVecR.noalias() += block.transpose() * inVecS;
+        }
+      }
+      return;
+    }
+
     dispenso::TaskSet taskSet(sym.threadPool);
     dispenso::parallel_for(
         taskSet, dispenso::makeChunkedRange(spanBegin, spanEnd, 8L),
@@ -670,8 +703,6 @@ struct BlasSolveCtx : SolveCtx<T> {
               j++;
             }
             colIndex[j - 1] = newColIndex;
-            /*colIndex[0] = newColIndex;
-            std::sort(colIndex, colIndex + rangeSize);*/
 
             if (!beforeEnd) {
               rangeSize--;
@@ -685,21 +716,21 @@ struct BlasSolveCtx : SolveCtx<T> {
                                                                 sSize);
 
 #if 0
-        for (int64_t b = skel.boardRowPtr[s + 1] - 2, bEnd = skel.boardRowPtr[s]; b >= bEnd; b--) {
-          int64_t c = skel.boardColLump[b];
-          if (c < spanBegin) {
-            break;
-          }
+            for (int64_t b = skel.boardRowPtr[s + 1] - 2, bEnd = skel.boardRowPtr[s]; b >= bEnd; b--) {
+              int64_t c = skel.boardColLump[b];
+              if (c < spanBegin) {
+                break;
+              }
 
-          int64_t cBegin = skel.spanStart[c];
-          int64_t cSize = skel.spanStart[c + 1] - cBegin;
-          int64_t offset = skel.chainData[skel.chainColPtr[c] + skel.boardColOrd[b]];
+              int64_t cBegin = skel.spanStart[c];
+              int64_t cSize = skel.spanStart[c + 1] - cBegin;
+              int64_t offset = skel.chainData[skel.chainColPtr[c] + skel.boardColOrd[b]];
 
-          Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + cBegin, cSize);
-          Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> block(
-              data + offset, sSize, cSize);
-          outVec.noalias() += block * inVec;
-        }
+              Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(x + cBegin, cSize);
+              Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> block(
+                  data + offset, sSize, cSize);
+              outVec.noalias() += block * inVec;
+            }
 #endif
 
             // diagonal
@@ -727,6 +758,103 @@ struct BlasSolveCtx : SolveCtx<T> {
           Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(y + dataStart, dataSize) +=
               Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(outData, dataSize);
         });
+  }
+
+  virtual void fragmentedSolveLt(const T* data, int64_t spanBegin, int64_t spanEnd, T* y) override {
+    const CoalescedBlockMatrixSkel& skel = sym.skel;
+
+    if (!sym.useThreads) {
+      for (int64_t s = spanEnd - 1; s >= spanBegin; s--) {
+        int64_t sBegin = skel.spanStart[s];
+        int64_t sSize = skel.spanStart[s + 1] - sBegin;
+        int64_t cPtr = skel.chainColPtr[s];
+        Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> dVec(y + sBegin, sSize);
+
+        // blocks below diag
+        for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {
+          int64_t r = skel.chainRowSpan[p];
+          int64_t rBegin = skel.spanStart[r];
+          int64_t rSize = skel.spanStart[r + 1] - rBegin;
+          int64_t offset = skel.chainData[p];
+          Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(y + rBegin, rSize);
+          Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> block(
+              data + offset, sSize, rSize);  // swapped
+          dVec.noalias() -= block * inVec;
+        }
+
+        // diagonal
+        Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> dBlock(
+            data + skel.chainData[cPtr], sSize, sSize);
+        dBlock.template triangularView<Eigen::Upper>().template solveInPlace(dVec);
+      }
+      return;
+    }
+
+    for (int64_t subEnd = spanEnd; subEnd > spanBegin; subEnd -= 64) {
+      int64_t subBegin = std::max(subEnd - 64, spanBegin);
+
+      if (subEnd < skel.numSpans()) {
+        dispenso::TaskSet taskSet(sym.threadPool);
+        dispenso::parallel_for(
+            taskSet, dispenso::makeChunkedRange(subBegin, subEnd, 2L),
+            [&](int64_t thBegin, int64_t thEnd) {
+              BASPACHO_CHECK_LE(thEnd, thBegin + 2);
+
+              for (int64_t s = thEnd - 1; s >= thBegin; s--) {
+                int64_t sBegin = skel.spanStart[s];
+                int64_t sSize = skel.spanStart[s + 1] - sBegin;
+                T* dVecData = (T*)alloca(sizeof(T) * sSize);
+                Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> dVec(dVecData, sSize);
+                dVec.setZero();
+
+                // blocks below diag
+                for (int64_t p = skel.chainColPtr[s + 1] - 1; /* */; p--) {
+                  int64_t r = skel.chainRowSpan[p];
+                  if (r < subEnd) {
+                    break;
+                  }
+                  int64_t rBegin = skel.spanStart[r];
+                  int64_t rSize = skel.spanStart[r + 1] - rBegin;
+                  int64_t offset = skel.chainData[p];
+                  Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(y + rBegin, rSize);
+                  Eigen::Map<
+                      const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>>
+                      block(data + offset, sSize, rSize);  // swapped
+                  dVec.noalias() -= block * inVec;
+                }
+
+                Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(y + sBegin, sSize) += dVec;
+              }
+            });
+      }
+
+      for (int64_t s = subEnd - 1; s >= subBegin; s--) {
+        int64_t sBegin = skel.spanStart[s];
+        int64_t sSize = skel.spanStart[s + 1] - sBegin;
+        int64_t cPtr = skel.chainColPtr[s];
+        Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> dVec(y + sBegin, sSize);
+
+        // blocks below diag
+        for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {
+          int64_t r = skel.chainRowSpan[p];
+          if (r >= subEnd) {
+            break;
+          }
+          int64_t rBegin = skel.spanStart[r];
+          int64_t rSize = skel.spanStart[r + 1] - rBegin;
+          int64_t offset = skel.chainData[p];
+          Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec(y + rBegin, rSize);
+          Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> block(
+              data + offset, sSize, rSize);  // swapped
+          dVec.noalias() -= block * inVec;
+        }
+
+        // diagonal
+        Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> dBlock(
+            data + skel.chainData[cPtr], sSize, sSize);
+        dBlock.template triangularView<Eigen::Upper>().template solveInPlace(dVec);
+      }
+    }
   }
 
   const BlasSymbolicCtx& sym;

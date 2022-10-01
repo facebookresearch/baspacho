@@ -341,30 +341,36 @@ void Solver::internalSolveLtRange(SolveCtx<T>& slvCtx, const T* matData, int64_t
     denseOpsFromLump = 0;
   }
 
-  for (int64_t l = upToLump - 1; l >= denseOpsFromLump; l--) {
-    int64_t lumpStart = factorSkel.lumpStart[l];
-    int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
-    int64_t chainColBegin = factorSkel.chainColPtr[l];
+  int64_t numSpans = factorSkel.lumpToSpan[upToLump] - factorSkel.lumpToSpan[denseOpsFromLump];
+  if (numSpans == upToLump - denseOpsFromLump && slvCtx.hasFragmentedMV() /* && nRHS == 1 */) {
+    BASPACHO_CHECK_EQ(factorSkel.lumpToSpan[denseOpsFromLump], denseOpsFromLump);
+    slvCtx.fragmentedSolveLt(matData, denseOpsFromLump, upToLump, vecData);
+  } else {
+    for (int64_t l = upToLump - 1; l >= denseOpsFromLump; l--) {
+      int64_t lumpStart = factorSkel.lumpStart[l];
+      int64_t lumpSize = factorSkel.lumpStart[l + 1] - lumpStart;
+      int64_t chainColBegin = factorSkel.chainColPtr[l];
 
-    int64_t boardColBegin = factorSkel.boardColPtr[l];
-    int64_t boardColEnd = factorSkel.boardColPtr[l + 1];
-    int64_t belowDiagChainColOrd = factorSkel.boardChainColOrd[boardColBegin + 1];
-    int64_t numColChains = factorSkel.boardChainColOrd[boardColEnd - 1];
-    int64_t belowDiagOffset = factorSkel.chainData[chainColBegin + belowDiagChainColOrd];
-    int64_t numRowsBelowDiag =
-        factorSkel.chainRowsTillEnd[chainColBegin + numColChains - 1] -
-        factorSkel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
+      int64_t boardColBegin = factorSkel.boardColPtr[l];
+      int64_t boardColEnd = factorSkel.boardColPtr[l + 1];
+      int64_t belowDiagChainColOrd = factorSkel.boardChainColOrd[boardColBegin + 1];
+      int64_t numColChains = factorSkel.boardChainColOrd[boardColEnd - 1];
+      int64_t belowDiagOffset = factorSkel.chainData[chainColBegin + belowDiagChainColOrd];
+      int64_t numRowsBelowDiag =
+          factorSkel.chainRowsTillEnd[chainColBegin + numColChains - 1] -
+          factorSkel.chainRowsTillEnd[chainColBegin + belowDiagChainColOrd - 1];
 
-    if (numRowsBelowDiag > 0) {
-      int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
-      slvCtx.assembleVecT(vecData, stride, chainColPtr, numColChains - belowDiagChainColOrd);
+      if (numRowsBelowDiag > 0) {
+        int64_t chainColPtr = chainColBegin + belowDiagChainColOrd;
+        slvCtx.assembleVecT(vecData, stride, chainColPtr, numColChains - belowDiagChainColOrd);
 
-      slvCtx.gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize, vecData, lumpStart, stride,
-                   -1.0);
+        slvCtx.gemvT(matData, belowDiagOffset, numRowsBelowDiag, lumpSize, vecData, lumpStart,
+                     stride, -1.0);
+      }
+
+      int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
+      slvCtx.solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart, stride);
     }
-
-    int64_t diagBlockOffset = factorSkel.chainData[chainColBegin];
-    slvCtx.solveLt(matData, diagBlockOffset, lumpSize, vecData, lumpStart, stride);
   }
 
   if (SparseElimSolve) {

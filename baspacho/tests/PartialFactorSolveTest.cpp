@@ -591,3 +591,68 @@ TEST(Partial, PartialFragmentedAddMv_Blas_float) {
   testPartialFragmentedAddMv_Many<float>([] { return blasOps(); });
 }
 #endif
+
+template <typename T>
+void testPartialFragmentedSolveLt_Many(const std::function<OpsPtr()>& genOps) {
+  for (int i = 0; i < 20; i++) {
+    int numParams = 215;
+    auto colBlocks = randomCols(numParams, 0.03, 57 + i);
+    colBlocks = makeIndependentElimSet(colBlocks, 0, 150);
+    SparseStructure sortedSs = columnsToCscStruct(colBlocks);  //.transpose();
+
+    // test no-cross barrier - make sure the elim set is still present
+    int64_t nocross = (7 * i) % (210 - minNumSparseElimNodes) + minNumSparseElimNodes + 1;
+
+    vector<int64_t> paramSize = randomVec(sortedSs.ptrs.size() - 1, 2, 3, 47);
+
+    vector<int64_t> spanStart = paramSize;
+    spanStart.push_back(0);
+    cumSumVec(spanStart);
+    vector<int64_t> lumpToSpan(sortedSs.ptrs.size());
+    std::iota(lumpToSpan.begin(), lumpToSpan.end(), 0);
+    CoalescedBlockMatrixSkel factorSkel(spanStart, lumpToSpan, sortedSs.ptrs, sortedSs.inds);
+    ASSERT_EQ(factorSkel.spanOffsetInLump[nocross], 0);
+
+    vector<T> data = randomData<T>(factorSkel.dataSize(), -1.0, 1.0, 9 + i);
+    factorSkel.damp(data, T(0.0), T(5.0));
+
+    Matrix<T> mat = factorSkel.densify(data);
+    int order = factorSkel.order();
+    int barrierAt = factorSkel.spanStart[nocross];
+    int afterBar = order - barrierAt;
+
+    Solver solver(move(factorSkel), {}, {}, genOps());
+
+    for (int j = 0; j < 5; j++) {
+      int nRHS = 1;
+      vector<T> vecData = randomData<T>(order * nRHS, -1.0, 1.0, 49 + j + i);
+      Matrix<T> vec = Eigen::Map<Matrix<T>>(vecData.data(), order, nRHS);
+      Matrix<T> vecRef = vec;
+      vecRef.bottomRows(afterBar) = mat.bottomRightCorner(afterBar, afterBar)
+                                        .template triangularView<Eigen::Lower>()
+                                        .transpose()
+                                        .solve(vec.bottomRows(afterBar));
+      solver.solveLtFrom(data.data(), nocross, vec.data(), order, nRHS);
+
+      ASSERT_NEAR((vec - vecRef).norm() / vecRef.norm(), 0, Epsilon<T>::value2);
+    }
+  }
+}
+
+TEST(Partial, PartialFragmentedSolveLt_Ref_double) {
+  testPartialFragmentedSolveLt_Many<double>([] { return simpleOps(); });
+}
+
+TEST(Partial, PartialFragmentedSolveLt_Ref_float) {
+  testPartialFragmentedSolveLt_Many<float>([] { return simpleOps(); });
+}
+
+#ifdef BASPACHO_USE_BLAS
+TEST(Partial, PartialFragmentedSolveLt_Blas_double) {
+  testPartialFragmentedSolveLt_Many<double>([] { return blasOps(); });
+}
+
+TEST(Partial, PartialFragmentedSolveLt_Blas_float) {
+  testPartialFragmentedSolveLt_Many<float>([] { return blasOps(); });
+}
+#endif
