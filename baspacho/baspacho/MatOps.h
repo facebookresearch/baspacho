@@ -172,6 +172,11 @@ struct SolveCtx : SolveCtxBase {
     throw std::runtime_error("fragmentedMV: not supported");
   }
 
+  virtual void fragmentedSolveL(const T* /*data*/, int64_t /*spanBegin*/, int64_t /*spanEnd*/,
+                                T* /*y*/) {
+    throw std::runtime_error("fragmentedSolveLt: not supported");
+  }
+
   virtual void fragmentedSolveLt(const T* /*data*/, int64_t /*spanBegin*/, int64_t /*spanEnd*/,
                                  T* /*y*/) {
     throw std::runtime_error("fragmentedSolveLt: not supported");
