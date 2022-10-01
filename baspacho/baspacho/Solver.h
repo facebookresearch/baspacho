@@ -158,11 +158,11 @@ class Solver {
 
   template <typename T>
   void internalSolveLRange(SolveCtx<T>& slvCtx, const T* data, int64_t startSpanIndex,
-                           int64_t endSpanIndex, T* vecData, int64_t stride) const;
+                           int64_t endSpanIndex, T* vecData, int64_t stride, int nRHS) const;
 
   template <typename T>
   void internalSolveLtRange(SolveCtx<T>& slvCtx, const T* data, int64_t startSpanIndex,
-                            int64_t endSpanIndex, T* vecData, int64_t stride) const;
+                            int64_t endSpanIndex, T* vecData, int64_t stride, int nRHS) const;
 
   CoalescedBlockMatrixSkel factorSkel;
   std::vector<int64_t> sparseElimRanges;

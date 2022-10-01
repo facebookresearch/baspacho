@@ -219,8 +219,8 @@ void Solver::internalFactorRange(T* data, int64_t startSpanIndex, int64_t endSpa
 template <typename T>
 void Solver::solve(const T* matData, T* vecData, int64_t stride, int nRHS) const {
   SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
-  internalSolveLRange(*slvCtx, matData, 0, factorSkel.numSpans(), vecData, stride);
-  internalSolveLtRange(*slvCtx, matData, 0, factorSkel.numSpans(), vecData, stride);
+  internalSolveLRange(*slvCtx, matData, 0, factorSkel.numSpans(), vecData, stride, nRHS);
+  internalSolveLtRange(*slvCtx, matData, 0, factorSkel.numSpans(), vecData, stride, nRHS);
 }
 
 template <typename T>
@@ -237,35 +237,35 @@ template <typename T>
 void Solver::solveLUpTo(const T* matData, int64_t spanIndex, T* vecData, int64_t stride,
                         int nRHS) const {
   SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
-  internalSolveLRange(*slvCtx, matData, 0, spanIndex, vecData, stride);
+  internalSolveLRange(*slvCtx, matData, 0, spanIndex, vecData, stride, nRHS);
 }
 
 template <typename T>
 void Solver::solveLtUpTo(const T* matData, int64_t spanIndex, T* vecData, int64_t stride,
                          int nRHS) const {
   SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
-  internalSolveLtRange(*slvCtx, matData, 0, spanIndex, vecData, stride);
+  internalSolveLtRange(*slvCtx, matData, 0, spanIndex, vecData, stride, nRHS);
 }
 
 template <typename T>
 void Solver::solveLFrom(const T* matData, int64_t spanIndex, T* vecData, int64_t stride,
                         int nRHS) const {
   SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
-  internalSolveLRange(*slvCtx, matData, spanIndex, factorSkel.numSpans(), vecData, stride);
+  internalSolveLRange(*slvCtx, matData, spanIndex, factorSkel.numSpans(), vecData, stride, nRHS);
 }
 
 template <typename T>
 void Solver::solveLtFrom(const T* matData, int64_t spanIndex, T* vecData, int64_t stride,
                          int nRHS) const {
   SolveCtxPtr<T> slvCtx = symCtx->createSolveCtx<T>(nRHS, matData);
-  internalSolveLtRange(*slvCtx, matData, spanIndex, factorSkel.numSpans(), vecData, stride);
+  internalSolveLtRange(*slvCtx, matData, spanIndex, factorSkel.numSpans(), vecData, stride, nRHS);
 }
 
 static constexpr bool SparseElimSolve = true;
 
 template <typename T>
 void Solver::internalSolveLRange(SolveCtx<T>& slvCtx, const T* matData, int64_t startSpanIndex,
-                                 int64_t endSpanIndex, T* vecData, int64_t stride) const {
+                                 int64_t endSpanIndex, T* vecData, int64_t stride, int nRHS) const {
   BASPACHO_CHECK_GE(startSpanIndex, 0);
   BASPACHO_CHECK_LE(startSpanIndex, endSpanIndex);
   BASPACHO_CHECK_LT(endSpanIndex, (int64_t)factorSkel.spanOffsetInLump.size());
@@ -324,7 +324,8 @@ void Solver::internalSolveLRange(SolveCtx<T>& slvCtx, const T* matData, int64_t 
 
 template <typename T>
 void Solver::internalSolveLtRange(SolveCtx<T>& slvCtx, const T* matData, int64_t startSpanIndex,
-                                  int64_t endSpanIndex, T* vecData, int64_t stride) const {
+                                  int64_t endSpanIndex, T* vecData, int64_t stride,
+                                  int nRHS) const {
   BASPACHO_CHECK_GE(startSpanIndex, 0);
   BASPACHO_CHECK_LE(startSpanIndex, endSpanIndex);
   BASPACHO_CHECK_LT(endSpanIndex, (int64_t)factorSkel.spanOffsetInLump.size());
@@ -342,7 +343,7 @@ void Solver::internalSolveLtRange(SolveCtx<T>& slvCtx, const T* matData, int64_t
   }
 
   int64_t numSpans = factorSkel.lumpToSpan[upToLump] - factorSkel.lumpToSpan[denseOpsFromLump];
-  if (numSpans == upToLump - denseOpsFromLump && slvCtx.hasFragmentedMV() /* && nRHS == 1 */) {
+  if (numSpans == upToLump - denseOpsFromLump && slvCtx.hasFragmentedMV() && nRHS == 1) {
     BASPACHO_CHECK_EQ(factorSkel.lumpToSpan[denseOpsFromLump], denseOpsFromLump);
     slvCtx.fragmentedSolveLt(matData, denseOpsFromLump, upToLump, vecData);
   } else {
