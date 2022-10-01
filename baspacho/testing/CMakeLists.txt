@@ -4,4 +4,4 @@ add_library(testing
             TestingUtils.cpp)
 set_property(TARGET testing PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-target_link_libraries (testing BaSpaCho)
+target_link_libraries (testing ${BASPACHO_LIBRARY})

@@ -13,6 +13,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(BASPACHO_CXX_FLAGS -Wall -Wextra -pedantic -Werror)
 
 message("* Build type: " ${CMAKE_BUILD_TYPE})
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/BundleStaticLibrary.cmake")
+
+# general settings
+set(BASPACHO_BUILD_TESTS ON CACHE BOOL "If on (default), tests are build")
+set(BASPACHO_BUILD_EXAMPLES ON CACHE BOOL "If on (default), exampels/benchmarks are build")
 
 # some fancy colors for cmake messages
 if(NOT WIN32)
@@ -26,6 +31,7 @@ set(Magenta     "${Esc}[35m")
 set(Cyan        "${Esc}[36m")
 set(White       "${Esc}[37m")
 endif()
+
 
 # CUDA
 set(BASPACHO_USE_CUBLAS ON CACHE BOOL "If on, CUDA support is enabled")
@@ -99,6 +105,7 @@ if(BASPACHO_USE_CUBLAS)
   add_compile_definitions(BASPACHO_USE_CUBLAS)
 endif()
 
+
 # BLAS. a few possibilities are:
 # * ATLAS
 # * OpenBLAS
@@ -125,6 +132,7 @@ if(BASPACHO_USE_BLAS)
   add_compile_definitions(BASPACHO_USE_BLAS)
 endif()
 
+
 # amd, if using amd from SuiteSparse
 message("${Cyan}===============[ minimum degree reordering algorithm ]==================${ColourReset}")
 set(BASPACHO_USE_SUITESPARSE_AMD OFF CACHE BOOL "If on, will use AMD algorithm in SuiteSparse (must be installed)")
@@ -148,23 +156,25 @@ else()
 endif()
 
 
-# cholmod (for benchmarking comparison)
-message("${Cyan}============================[ CHOLMOD ]=================================${ColourReset}")
-find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
-          PATHS ${INCLUDE_INSTALL_DIR}
-          PATH_SUFFIXES suitesparse ufsparse)
-find_library(CHOLMOD_LIBRARIES cholmod
-             PATHS ${LIB_INSTALL_DIR})
-if((CHOLMOD_INCLUDE_DIR STREQUAL "CHOLMOD_INCLUDE_DIR-NOTFOUND")
-  OR (CHOLMOD_LIBRARIES STREQUAL "CHOLMOD_LIBRARIES-NOTFOUND"))
-  set(HAVE_CHOLMOD 0)
-  message("* Cholmod not found! Benchmarking tools will not support it")
-else()
-  set(HAVE_CHOLMOD 1)
-  message("* Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
-  message("* Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
-  add_compile_definitions(BASPACHO_HAVE_CHOLMOD)
-  include_directories(${CHOLMOD_INCLUDE_DIR})
+# cholmod (only needed for benchmarking comparison)
+if(BASPACHO_BUILD_EXAMPLES)
+  message("${Cyan}============================[ CHOLMOD ]=================================${ColourReset}")
+  find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
+            PATHS ${INCLUDE_INSTALL_DIR}
+            PATH_SUFFIXES suitesparse ufsparse)
+  find_library(CHOLMOD_LIBRARIES cholmod
+              PATHS ${LIB_INSTALL_DIR})
+  if((CHOLMOD_INCLUDE_DIR STREQUAL "CHOLMOD_INCLUDE_DIR-NOTFOUND")
+    OR (CHOLMOD_LIBRARIES STREQUAL "CHOLMOD_LIBRARIES-NOTFOUND"))
+    set(HAVE_CHOLMOD 0)
+    message("* Cholmod not found! Benchmarking tools will not support it")
+  else()
+    set(HAVE_CHOLMOD 1)
+    message("* Cholmod Source = " ${CHOLMOD_INCLUDE_DIR})
+    message("* Cholmod Libraries = " ${CHOLMOD_LIBRARIES})
+    add_compile_definitions(BASPACHO_HAVE_CHOLMOD)
+    include_directories(${CHOLMOD_INCLUDE_DIR})
+  endif()
 endif()
 
 
@@ -191,18 +201,20 @@ message("* Dispenso Library Dir = " ${dispenso_BINARY_DIR})
 
 
 # gtest
-message("${Cyan}=============================[ GTest ]==================================${ColourReset}")
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
-	)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-message("* GTest Source = " ${gtest_SOURCE_DIR})
-message("* GTest Library Dir = " ${gtest_BINARY_DIR})
-message("* GMock Source = " ${gmock_SOURCE_DIR})
-message("* GMock Library Dir = " ${gmock_BINARY_DIR})
-include(GoogleTest)
+if(BASPACHO_BUILD_TESTS)
+  message("${Cyan}=============================[ GTest ]==================================${ColourReset}")
+  FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
+    )
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+  message("* GTest Source = " ${gtest_SOURCE_DIR})
+  message("* GTest Library Dir = " ${gtest_BINARY_DIR})
+  message("* GMock Source = " ${gmock_SOURCE_DIR})
+  message("* GMock Library Dir = " ${gmock_BINARY_DIR})
+  include(GoogleTest)
+endif()
 
 
 # eigen
@@ -219,38 +231,51 @@ message("* Eigen Library Dir = " ${eigen_BINARY_DIR})
 include_directories(${eigen_SOURCE_DIR})
 
 
-# sophus (for testing on BA problem)
-message("${Cyan}=============================[ Sophus ]=================================${ColourReset}")
-FetchContent_Declare(
-  sophus
-  URL https://github.com/strasdat/Sophus/archive/8e1941677ef214aab0397608f42b18fbe1a19885.zip
-)
-if(NOT sophus_POPULATED)
-  FetchContent_Populate(sophus)
+# Sophus (only needed for BA problem in examples/benchmarks)
+if(BASPACHO_BUILD_EXAMPLES)
+  message("${Cyan}=============================[ Sophus ]=================================${ColourReset}")
+  FetchContent_Declare(
+    sophus
+    URL https://github.com/strasdat/Sophus/archive/8e1941677ef214aab0397608f42b18fbe1a19885.zip
+  )
+  if(NOT sophus_POPULATED)
+    FetchContent_Populate(sophus)
+  endif()
+  message("* Sophus Source = " ${sophus_SOURCE_DIR})
+  message("* Sophus Library Dir = " ${sophus_BINARY_DIR})
+  include_directories(${sophus_SOURCE_DIR})
+  add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 endif()
-message("* Sophus Source = " ${sophus_SOURCE_DIR})
-message("* Sophus Library Dir = " ${sophus_BINARY_DIR})
-include_directories(${sophus_SOURCE_DIR})
-add_compile_definitions(SOPHUS_USE_BASIC_LOGGING=1)
 
 
 # add root to include path
 include_directories("${PROJECT_SOURCE_DIR}")
 
 
-# unit tests
-enable_testing()
+# basic lib name depends on shared/static, so that
+# `BaSpaCho` is the bundled library if static
+if(BUILD_SHARED_LIBS)
+    set(BASPACHO_LIBRARY BaSpaCho)
+else()
+    set(BASPACHO_LIBRARY BaSpaCho_static)
+endif()
 
-function(add_baspacho_test TARGET)
-  add_executable(
-    "${TARGET}"
-    "${ARGN}"
-  )
-  target_link_libraries(
-    "${TARGET}" BaSpaCho testing gtest_main gmock
-  )
-  gtest_discover_tests("${TARGET}")
-endfunction()
+
+# unit tests
+if(BASPACHO_BUILD_TESTS)
+  enable_testing()
+
+  function(add_baspacho_test TARGET)
+    add_executable(
+      "${TARGET}"
+      "${ARGN}"
+    )
+    target_link_libraries(
+      "${TARGET}" ${BASPACHO_LIBRARY} testing gtest_main gmock
+    )
+    gtest_discover_tests("${TARGET}")
+  endfunction()
+endif()
 
 
 # add subfolders
