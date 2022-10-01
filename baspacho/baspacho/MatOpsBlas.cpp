@@ -601,10 +601,10 @@ struct BlasSolveCtx : SolveCtx<T> {
     }
   }
 
-  virtual bool hasFragmentedMV() override { return true; }
+  virtual bool hasFragmentedOps() override { return true; }
 
-  virtual void fragmentedMV(const T* data, const T* x, int64_t spanBegin, int64_t spanEnd,
-                            T* y) override {
+  virtual void fragmentedMV(const T* data, const T* x, int64_t spanBegin, int64_t spanEnd, T* y,
+                            T alpha) override {
     const CoalescedBlockMatrixSkel& skel = sym.skel;
 
     if (!sym.useThreads) {
@@ -618,9 +618,9 @@ struct BlasSolveCtx : SolveCtx<T> {
         int64_t cPtr = skel.chainColPtr[s];
         Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> dBlock(
             data + skel.chainData[cPtr], sSize, sSize);
-        outVecS.noalias() += dBlock.template triangularView<Eigen::Lower>() * inVecS;
+        outVecS.noalias() += dBlock.template triangularView<Eigen::Lower>() * inVecS * alpha;
         outVecS.noalias() +=
-            dBlock.template triangularView<Eigen::StrictlyLower>().adjoint() * inVecS;
+            dBlock.template triangularView<Eigen::StrictlyLower>().adjoint() * inVecS * alpha;
 
         // blocks below diag
         for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {
@@ -631,10 +631,10 @@ struct BlasSolveCtx : SolveCtx<T> {
           Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVecR(x + rBegin, rSize);
           Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> block(
               data + offset, sSize, rSize);  // swapped
-          outVecS.noalias() += block * inVecR;
+          outVecS.noalias() += block * inVecR * alpha;
 
           Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>> outVecR(y + rBegin, rSize);
-          outVecR.noalias() += block.transpose() * inVecS;
+          outVecR.noalias() += block.transpose() * inVecS * alpha;
         }
       }
       return;
@@ -756,7 +756,7 @@ struct BlasSolveCtx : SolveCtx<T> {
           }
 
           Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(y + dataStart, dataSize) +=
-              Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(outData, dataSize);
+              Eigen::Map<Eigen::Vector<T, Eigen::Dynamic>>(outData, dataSize) * alpha;
         });
   }
 

@@ -295,7 +295,7 @@ void Solver::internalSolveLRange(SolveCtx<T>& slvCtx, const T* matData, int64_t 
   }
 
   int64_t numSpans = factorSkel.lumpToSpan[upToLump] - factorSkel.lumpToSpan[denseOpsFromLump];
-  if (numSpans == upToLump - denseOpsFromLump && slvCtx.hasFragmentedMV() && nRHS == 1) {
+  if (numSpans == upToLump - denseOpsFromLump && slvCtx.hasFragmentedOps() && nRHS == 1) {
     BASPACHO_CHECK_EQ(factorSkel.lumpToSpan[denseOpsFromLump], denseOpsFromLump);
     slvCtx.fragmentedSolveL(matData, denseOpsFromLump, upToLump, vecData);
   } else {
@@ -349,7 +349,7 @@ void Solver::internalSolveLtRange(SolveCtx<T>& slvCtx, const T* matData, int64_t
   }
 
   int64_t numSpans = factorSkel.lumpToSpan[upToLump] - factorSkel.lumpToSpan[denseOpsFromLump];
-  if (numSpans == upToLump - denseOpsFromLump && slvCtx.hasFragmentedMV() && nRHS == 1) {
+  if (numSpans == upToLump - denseOpsFromLump && slvCtx.hasFragmentedOps() && nRHS == 1) {
     BASPACHO_CHECK_EQ(factorSkel.lumpToSpan[denseOpsFromLump], denseOpsFromLump);
     slvCtx.fragmentedSolveLt(matData, denseOpsFromLump, upToLump, vecData);
   } else {
@@ -409,9 +409,9 @@ void Solver::addMvFrom(const T* matData, int64_t spanIndex, const T* inVecData, 
   int64_t upToLump = factorSkel.lumpStart.size() - 1;
 
   int64_t numSpans = factorSkel.lumpToSpan[upToLump] - factorSkel.lumpToSpan[denseOpsFromLump];
-  if (numSpans == upToLump - denseOpsFromLump && slvCtx->hasFragmentedMV() && nRHS == 1) {
+  if (numSpans == upToLump - denseOpsFromLump && slvCtx->hasFragmentedOps() && nRHS == 1) {
     BASPACHO_CHECK_EQ(factorSkel.lumpToSpan[denseOpsFromLump], denseOpsFromLump);
-    slvCtx->fragmentedMV(matData, inVecData, denseOpsFromLump, upToLump, outVecData);
+    slvCtx->fragmentedMV(matData, inVecData, denseOpsFromLump, upToLump, outVecData, alpha);
     return;
   }
 
