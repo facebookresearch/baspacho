@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <cmath>
 #include "baspacho/baspacho/Utils.h"
 
 namespace BaSpaCho {
