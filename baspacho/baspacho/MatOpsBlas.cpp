@@ -434,7 +434,7 @@ struct BlasSolveCtx : SolveCtx<T> {
 
           Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize, lumpSize);
           OuterStridedCMajMatM<T> matC(C + lumpStart, lumpSize, nRHS, OuterStride(ldc));
-          matQ -= block * matC;
+          matQ.noalias() -= block * matC;
         }
       }
     } else {
@@ -463,7 +463,7 @@ struct BlasSolveCtx : SolveCtx<T> {
 
                 Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize, lumpSize);
                 OuterStridedCMajMatM<T> matC(C + lumpStart, lumpSize, nRHS, OuterStride(ldc));
-                matQ -= block * matC;
+                matQ.noalias() -= block * matC;
               }
             }
           });
@@ -490,7 +490,7 @@ struct BlasSolveCtx : SolveCtx<T> {
           int64_t blockPtr = skel.chainData[colPtr];
           Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize, lumpSize);
           OuterStridedCMajMatM<T> matQ(C + rowSpanStart, rowSpanSize, nRHS, OuterStride(ldc));
-          matC -= block.transpose() * matQ;
+          matC.noalias() -= block.transpose() * matQ;
         }
 
         int64_t diagDataPtr = skel.chainData[colStart];
@@ -516,7 +516,7 @@ struct BlasSolveCtx : SolveCtx<T> {
                 int64_t blockPtr = skel.chainData[colPtr];
                 Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize, lumpSize);
                 OuterStridedCMajMatM<T> matQ(C + rowSpanStart, rowSpanSize, nRHS, OuterStride(ldc));
-                matC -= block.transpose() * matQ;
+                matC.noalias() -= block.transpose() * matQ;
               }
 
               int64_t diagDataPtr = skel.chainData[colStart];
@@ -618,9 +618,7 @@ struct BlasSolveCtx : SolveCtx<T> {
         int64_t cPtr = skel.chainColPtr[s];
         Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> dBlock(
             data + skel.chainData[cPtr], sSize, sSize);
-        outVecS.noalias() += dBlock.template triangularView<Eigen::Lower>() * inVecS * alpha;
-        outVecS.noalias() +=
-            dBlock.template triangularView<Eigen::StrictlyLower>().adjoint() * inVecS * alpha;
+        outVecS.noalias() += dBlock.template selfadjointView<Eigen::Lower>() * inVecS * alpha;
 
         // blocks below diag
         for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {
@@ -738,9 +736,7 @@ struct BlasSolveCtx : SolveCtx<T> {
             Eigen::Map<const Eigen::Vector<T, Eigen::Dynamic>> inVec0(x + sBegin, sSize);
             Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
                 dBlock(data + skel.chainData[cPtr], sSize, sSize);
-            outVec.noalias() += dBlock.template triangularView<Eigen::Lower>() * inVec0;
-            outVec.noalias() +=
-                dBlock.template triangularView<Eigen::StrictlyLower>().adjoint() * inVec0;
+            outVec.noalias() += dBlock.template selfadjointView<Eigen::Lower>() * inVec0;
 
             // blocks below diag
             for (int64_t p = cPtr + 1, pEnd = skel.chainColPtr[s + 1]; p < pEnd; p++) {

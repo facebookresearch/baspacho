@@ -126,7 +126,7 @@ struct SimpleNumericCtx : CpuBaseNumericCtx<T> {
           int64_t jiDataPtr = skel.chainData[targetStartPtr + pos];
           OuterStridedMatM<T> jiBlock(data + jiDataPtr + targetSpanOffsetInLump, sjSize, siSize,
                                       OuterStride(targetLumpSize));
-          jiBlock -= jlBlock * ilBlock.transpose();
+          jiBlock.noalias() -= jlBlock * ilBlock.transpose();
         }
       }
     }
@@ -257,7 +257,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
                                                    lumpSize);
                 OuterStridedCMajMatM<T> matQ(C + rowSpanStart, rowSpanSize,
                                              nRHS, OuterStride(ldc));
-                matQ -= block * matC;
+                matQ.noalias() -= block * matC;
             }
 #endif
     }
@@ -285,7 +285,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
 
         Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize, lumpSize);
         OuterStridedCMajMatM<T> matC(C + lumpStart, lumpSize, nRHS, OuterStride(ldc));
-        matQ -= block * matC;
+        matQ.noalias() -= block * matC;
       }
     }
   }
@@ -310,7 +310,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
         int64_t blockPtr = skel.chainData[colPtr];
         Eigen::Map<const MatRMaj<T>> block(data + blockPtr, rowSpanSize, lumpSize);
         OuterStridedCMajMatM<T> matQ(C + rowSpanStart, rowSpanSize, nRHS, OuterStride(ldc));
-        matC -= block.transpose() * matQ;
+        matC.noalias() -= block.transpose() * matQ;
       }
 
       int64_t diagDataPtr = skel.chainData[colStart];
@@ -326,9 +326,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
     OuterStridedCMajMatK<T> matC(C + offC, n, nRHS, OuterStride(ldc));
     OuterStridedCMajMatM<T> matD(D + offC, n, nRHS, OuterStride(ldd));
 
-    matD += alpha * (MatRMaj<T>(matA.template triangularView<Eigen::Lower>()) * matC);
-    matD += alpha *
-            (MatRMaj<T>(matA.template triangularView<Eigen::StrictlyLower>()).transpose() * matC);
+    matD.noalias() += alpha * (MatRMaj<T>(matA.template selfadjointView<Eigen::Lower>()) * matC);
   }
 
   virtual void solveL(const T* data, int64_t offM, int64_t n, T* C, int64_t offC,
@@ -363,7 +361,7 @@ struct SimpleSolveCtx : SolveCtx<T> {
 
       Eigen::Map<const MatRMaj<T>> matA(A + rowOffset * nRHS, spanSize, nRHS);
       OuterStridedCMajMatM<T> matC(C + spanStart, spanSize, nRHS, OuterStride(ldc));
-      matC += matA;
+      matC.noalias() += matA;
     }
   }
 
