@@ -10,13 +10,12 @@
 #include <type_traits>
 
 /**
- * this workaround is only for compatibility with cuda architectures
- * <6.0, which lack atomic addition of double numbers
+ * this workaround is for compatibility with Cuda architectures
+ * before 6.0, which lack atomic addition of double numbers
  **/
-// #define CUDA_DOUBLE_ATOMIC_ADD_WORKAROUND
 #ifdef CUDA_DOUBLE_ATOMIC_ADD_WORKAROUND
 // workaround for double on <6 architectures
-[[maybe_unused]] __device__ static inline double atomicAdd(double* address, double val) {
+__device__ inline double atomicAddWorkaround(double* address, double val) {
   unsigned long long int* address_as_ull = (unsigned long long int*)address;
   unsigned long long int old = *address_as_ull, assumed;
   do {
@@ -27,6 +26,13 @@
   } while (assumed != old);
   return __longlong_as_double(old);
 }
+
+template <typename T>
+__device__ inline T atomicAddWorkaround(T* address, T val) {
+  return atomicAdd(address, val);
+}
+
+#define atomicAdd atomicAddWorkaround
 #endif
 
 // [atomic] A -= B * C.T

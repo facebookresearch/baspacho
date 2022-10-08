@@ -138,10 +138,11 @@ struct CudaOps : Ops {
 };
 
 template <typename TT, typename B>
-__global__ static inline void factor_lumps_kernel(
-    const int64_t* lumpStart, const int64_t* chainColPtr, const int64_t* chainData,
-    const int64_t* boardColPtr, const int64_t* boardChainColOrd, const int64_t* chainRowsTillEnd,
-    TT* dataB, int64_t lumpIndexStart, int64_t lumpIndexEnd, B batch) {
+__global__ static void factor_lumps_kernel(const int64_t* lumpStart, const int64_t* chainColPtr,
+                                           const int64_t* chainData, const int64_t* boardColPtr,
+                                           const int64_t* boardChainColOrd,
+                                           const int64_t* chainRowsTillEnd, TT* dataB,
+                                           int64_t lumpIndexStart, int64_t lumpIndexEnd, B batch) {
   if (!batch.verify()) {
     return;
   }
@@ -177,13 +178,15 @@ __global__ static inline void factor_lumps_kernel(
 }
 
 template <typename TT, typename B>
-__global__ static inline void factor_spans_kernel(
-    const int64_t* spanToLump, const int64_t* spanOffsetInLumpV, const int64_t* lumpToSpan,
-    const int64_t* spanStart,
+__global__ static void factor_spans_kernel(const int64_t* spanToLump,
+                                           const int64_t* spanOffsetInLumpV,
+                                           const int64_t* lumpToSpan, const int64_t* spanStart,
 
-    const int64_t* lumpStartV, const int64_t* chainColPtr, const int64_t* chainData,
-    const int64_t* boardColPtr, const int64_t* boardChainColOrd, const int64_t* chainRowsTillEnd,
-    TT* dataB, int64_t spanIndexStart, int64_t spanIndexEnd, B batch) {
+                                           const int64_t* lumpStartV, const int64_t* chainColPtr,
+                                           const int64_t* chainData, const int64_t* boardColPtr,
+                                           const int64_t* boardChainColOrd,
+                                           const int64_t* chainRowsTillEnd, TT* dataB,
+                                           int64_t spanIndexStart, int64_t spanIndexEnd, B batch) {
   if (!batch.verify()) {
     return;
   }
@@ -262,7 +265,7 @@ __device__ static inline void do_sparse_elim(const int64_t* chainColPtr, const i
 // nested loops). Not meant for performance, but as a simpler testing
 // version of the below "straigthened" kernel.
 template <typename TT, typename B>
-__global__ static inline void sparse_elim_2loops_kernel(
+__global__ static void sparse_elim_2loops_kernel(
     const int64_t* chainColPtr, const int64_t* lumpStart, const int64_t* chainRowSpan,
     const int64_t* spanStart, const int64_t* chainData, const int64_t* spanToLump,
     const int64_t* spanOffsetInLump, TT* dataB, int64_t lumpIndexStart, int64_t lumpIndexEnd,
@@ -296,7 +299,7 @@ __global__ static inline void sparse_elim_2loops_kernel(
 // 0..nb*(nb+1)/2-1 in the list of *pairs* of blocks in the column. Such
 // index if converted to the ordered pair di/dj
 template <typename TT, typename B>
-__global__ static inline void sparse_elim_straight_kernel(
+__global__ static void sparse_elim_straight_kernel(
     const int64_t* chainColPtr, const int64_t* lumpStart, const int64_t* chainRowSpan,
     const int64_t* spanStart, const int64_t* chainData, const int64_t* spanToLump,
     const int64_t* spanOffsetInLump, TT* dataB, int64_t lumpIndexStart, int64_t lumpIndexEnd,
