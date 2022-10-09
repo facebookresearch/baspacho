@@ -82,7 +82,7 @@ if(BASPACHO_USE_CUBLAS)
     endif()
 
     if(TORCH_RETURN_CODE EQUAL 0)
-      message("* CUDA architectures: '${RESULT}' (from torch, >=60)")
+      message("* CUDA architectures: '${RESULT}' (from torch)")
 		  if(RESULT STREQUAL "")
 				message(FATAL_ERROR "Torch architectures returned an empty result.")
 			endif()
