@@ -3,14 +3,12 @@ set(BaSpaCho_sources
     CoalescedBlockMatrix.cpp
     ComputationModel.cpp
     EliminationTree.cpp
+    MatOpsFast.cpp
     MatOpsRef.cpp
     Solver.cpp
     SparseStructure.cpp
     Utils.cpp)
-if(BASPACHO_USE_BLAS)
-    list(APPEND BaSpaCho_sources
-         MatOpsBlas.cpp)
-endif()
+
 if(BASPACHO_USE_CUBLAS)
     # separate recent and legacy cuda archs (which need atomicAdd's workaround)
     set(BASPACHO_LEGACY_CUDA_ARCHITECTURES "")

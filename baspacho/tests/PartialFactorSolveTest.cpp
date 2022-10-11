@@ -331,15 +331,13 @@ TEST(Partial, PartialAddMv_Ref_float) {
   testPartialAddMv_Many<float>([] { return simpleOps(); });
 }
 
-#ifdef BASPACHO_USE_BLAS
 TEST(Partial, PartialAddMv_Blas_double) {
-  testPartialAddMv_Many<double>([] { return blasOps(); });
+  testPartialAddMv_Many<double>([] { return fastOps(); });
 }
 
 TEST(Partial, PartialAddMv_Blas_float) {
-  testPartialAddMv_Many<float>([] { return blasOps(); });
+  testPartialAddMv_Many<float>([] { return fastOps(); });
 }
-#endif
 
 template <typename T>
 void testPseudoFactor_Many(const std::function<OpsPtr()>& genOps) {
@@ -402,15 +400,13 @@ TEST(Partial, testPseudoFactor_Ref_float) {
   testPseudoFactor_Many<float>([] { return simpleOps(); });
 }
 
-#ifdef BASPACHO_USE_BLAS
 TEST(Partial, testPseudoFactor_Blas_double) {
-  testPseudoFactor_Many<double>([] { return blasOps(); });
+  testPseudoFactor_Many<double>([] { return fastOps(); });
 }
 
 TEST(Partial, testPseudoFactor_Blas_float) {
-  testPseudoFactor_Many<float>([] { return blasOps(); });
+  testPseudoFactor_Many<float>([] { return fastOps(); });
 }
-#endif
 
 template <typename T>
 void testPartialSolveLFrom_Many(const std::function<OpsPtr()>& genOps) {
@@ -585,15 +581,13 @@ TEST(Partial, PartialFragmentedAddMv_Ref_float) {
   testPartialFragmentedAddMv_Many<float>([] { return simpleOps(); });
 }
 
-#ifdef BASPACHO_USE_BLAS
 TEST(Partial, PartialFragmentedAddMv_Blas_double) {
-  testPartialFragmentedAddMv_Many<double>([] { return blasOps(); });
+  testPartialFragmentedAddMv_Many<double>([] { return fastOps(); });
 }
 
 TEST(Partial, PartialFragmentedAddMv_Blas_float) {
-  testPartialFragmentedAddMv_Many<float>([] { return blasOps(); });
+  testPartialFragmentedAddMv_Many<float>([] { return fastOps(); });
 }
-#endif
 
 template <typename T>
 void testPartialFragmentedSolveL_Many(const std::function<OpsPtr()>& genOps) {
@@ -664,15 +658,13 @@ TEST(Partial, PartialFragmentedSolveL_Ref_float) {
   testPartialFragmentedSolveL_Many<float>([] { return simpleOps(); });
 }
 
-#ifdef BASPACHO_USE_BLAS
 TEST(Partial, PartialFragmentedSolveL_Blas_double) {
-  testPartialFragmentedSolveL_Many<double>([] { return blasOps(); });
+  testPartialFragmentedSolveL_Many<double>([] { return fastOps(); });
 }
 
 TEST(Partial, PartialFragmentedSolveL_Blas_float) {
-  testPartialFragmentedSolveL_Many<float>([] { return blasOps(); });
+  testPartialFragmentedSolveL_Many<float>([] { return fastOps(); });
 }
-#endif
 
 template <typename T>
 void testPartialFragmentedSolveLt_Many(const std::function<OpsPtr()>& genOps) {
@@ -745,12 +737,10 @@ TEST(Partial, PartialFragmentedSolveLt_Ref_float) {
   testPartialFragmentedSolveLt_Many<float>([] { return simpleOps(); });
 }
 
-#ifdef BASPACHO_USE_BLAS
 TEST(Partial, PartialFragmentedSolveLt_Blas_double) {
-  testPartialFragmentedSolveLt_Many<double>([] { return blasOps(); });
+  testPartialFragmentedSolveLt_Many<double>([] { return fastOps(); });
 }
 
 TEST(Partial, PartialFragmentedSolveLt_Blas_float) {
-  testPartialFragmentedSolveLt_Many<float>([] { return blasOps(); });
+  testPartialFragmentedSolveLt_Many<float>([] { return fastOps(); });
 }
-#endif

@@ -185,7 +185,7 @@ using SolverPtr = std::unique_ptr<Solver>;
  **/
 enum BackendType {
   BackendRef,  // reference implementation, not recommended
-  BackendBlas,
+  BackendFast,
   BackendCuda,
 };
 
@@ -209,11 +209,7 @@ struct ComputationModel;
 struct Settings {
   bool findSparseEliminationRanges = true;
   int numThreads = 16;
-#ifdef BASPACHO_USE_BLAS
-  BackendType backend = BackendBlas;
-#else
-  BackendType backend = BackendRef;
-#endif
+  BackendType backend = BackendFast;
   AddFillPolicy addFillPolicy = AddFillComplete;
   const ComputationModel* computationModel = nullptr;
 };

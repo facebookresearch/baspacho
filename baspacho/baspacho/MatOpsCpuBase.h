@@ -17,6 +17,13 @@ using OuterStride = Eigen::OuterStride<>;
 template <typename T>
 using OuterStridedMatM =
     Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 0, OuterStride>;
+template <typename T>
+using OuterStridedCMajMatM =
+    Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0, OuterStride>;
+template <typename T>
+using OuterStridedCMajMatK =
+    Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
+               OuterStride>;
 
 struct CpuBaseSymElimCtx : SymElimCtx {
   CpuBaseSymElimCtx() {}
@@ -111,8 +118,42 @@ struct CpuBaseSymbolicCtx : SymbolicCtx {
 
 template <typename T>
 struct CpuBaseNumericCtx : NumericCtx<T> {
-  CpuBaseNumericCtx(int64_t bufSize, int64_t numSpans)
-      : tempBuffer(bufSize), spanToChainOffset(numSpans) {}
+  CpuBaseNumericCtx(const CpuBaseSymbolicCtx& sym, int64_t bufSize, int64_t numSpans)
+      : sym(sym), tempBuffer(bufSize), spanToChainOffset(numSpans) {}
+
+  virtual void potrf(int64_t n, T* data, int64_t offA) override {
+    auto timer = sym.potrfStat.instance(sizeof(T), n);
+    sym.potrfBiggestN = std::max(sym.potrfBiggestN, n);
+
+    Eigen::Map<MatRMaj<T>> matA(data + offA, n, n);
+    Eigen::LLT<Eigen::Ref<MatRMaj<T>>> llt(matA);
+  }
+
+  virtual void trsm(int64_t n, int64_t k, T* data, int64_t offA, int64_t offB) override {
+    auto timer = sym.trsmStat.instance(sizeof(T), n, k);
+
+    using MatCMajD = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
+
+    // col-major's upper = (row-major's lower).transpose()
+    Eigen::Map<const MatCMajD> matA(data + offA, n, n);
+    Eigen::Map<MatRMaj<T>> matB(data + offB, k, n);
+    matA.template triangularView<Eigen::Upper>().template solveInPlace<Eigen::OnTheRight>(matB);
+  }
+
+  virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
+                            int64_t offset) override {
+    auto timer = sym.sygeStat.instance(sizeof(T), m, n, k);
+    BASPACHO_CHECK_LE(m * n, (int64_t)tempBuffer.size());
+
+    const T* AB = data + offset;
+    T* C = tempBuffer.data();
+    Eigen::Map<const MatRMaj<T>> matA(AB, m, k);
+    Eigen::Map<const MatRMaj<T>> matB(AB, n, k);
+    Eigen::Map<MatRMaj<T>> matC(C, n, m);
+    matC.noalias() = matB * matA.transpose();
+
+    sym.gemmCalls++;
+  }
 
   // helper for elimination, does
   // 1. potrf on diagonal block corresponding to a supernode (lump), and
@@ -332,8 +373,65 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
   }
 
   // temporary data
+  const CpuBaseSymbolicCtx& sym;
   std::vector<T> tempBuffer;
   std::vector<int64_t> spanToChainOffset;
+};
+
+
+template <typename T>
+struct CpuBaseSolveCtx : SolveCtx<T> {
+  CpuBaseSolveCtx(const CpuBaseSymbolicCtx& sym, int nRHS)
+      : sym(sym), nRHS(nRHS), tmpBuf(sym.skel.order() * nRHS) {}
+  virtual ~CpuBaseSolveCtx() override {}
+
+  virtual void symm(const T* data, int64_t offM, int64_t n, const T* C, int64_t offC, int64_t ldc,
+                    T* D, int64_t ldd, T alpha) override {
+    auto timer = sym.symmStat.instance();
+    Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
+    OuterStridedCMajMatK<T> matC(C + offC, n, nRHS, OuterStride(ldc));
+    OuterStridedCMajMatM<T> matD(D + offC, n, nRHS, OuterStride(ldd));
+
+    matD.noalias() += alpha * (MatRMaj<T>(matA.template selfadjointView<Eigen::Lower>()) * matC);
+  }
+
+  virtual void solveL(const T* data, int64_t offM, int64_t n, T* C, int64_t offC,
+                      int64_t ldc) override {
+    auto timer = sym.solveLStat.instance();
+    Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
+    OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
+    matA.template triangularView<Eigen::Lower>().solveInPlace(matC);
+  }
+
+  virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols, const T* A,
+                    int64_t offA, int64_t lda, T alpha) override {
+    auto timer = sym.solveGemvStat.instance();
+    Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
+    OuterStridedCMajMatK<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
+    Eigen::Map<MatRMaj<T>> matC(tmpBuf.data(), nRows, nRHS);
+    matC.noalias() = alpha * (matM * matA);
+  }
+
+  virtual void solveLt(const T* data, int64_t offM, int64_t n, T* C, int64_t offC,
+                       int64_t ldc) override {
+    auto timer = sym.solveLtStat.instance();
+    Eigen::Map<const MatRMaj<T>> matA(data + offM, n, n);
+    OuterStridedCMajMatM<T> matC(C + offC, n, nRHS, OuterStride(ldc));
+    matA.template triangularView<Eigen::Lower>().adjoint().solveInPlace(matC);
+  }
+
+  virtual void gemvT(const T* data, int64_t offM, int64_t nRows, int64_t nCols, T* A, int64_t offA,
+                     int64_t lda, T alpha) override {
+    auto timer = sym.solveGemvTStat.instance();
+    Eigen::Map<const MatRMaj<T>> matM(data + offM, nRows, nCols);
+    OuterStridedCMajMatM<T> matA(A + offA, nCols, nRHS, OuterStride(lda));
+    Eigen::Map<const MatRMaj<T>> matC(tmpBuf.data(), nRows, nRHS);
+    matA.noalias() += alpha * (matM.transpose() * matC);
+  }
+
+  const CpuBaseSymbolicCtx& sym;
+  int64_t nRHS;
+  std::vector<T> tmpBuf;
 };
 
 }  // end namespace BaSpaCho

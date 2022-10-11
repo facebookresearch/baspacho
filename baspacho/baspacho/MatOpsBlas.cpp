@@ -1113,6 +1113,6 @@ SolveCtxBase* BlasSymbolicCtx::createSolveCtxForType(std::type_index tIdx, int n
   }
 }
 
-OpsPtr blasOps(int numThreads) { return OpsPtr(new BlasOps(numThreads)); }
+OpsPtr fastOps(int numThreads) { return OpsPtr(new BlasOps(numThreads)); }
 
 }  // end namespace BaSpaCho
