@@ -32,7 +32,7 @@ struct OpStat {
 
     Instance& operator=(Instance&& that) noexcept { stat = that.stat; start = that.start; stat = nullptr; }
 
-    explicit Instance(Instance&& that) noexcept : stat(that.stat), start(that.start) { that.stat = nullptr; }
+    Instance(Instance&& that) noexcept : stat(that.stat), start(that.start) { that.stat = nullptr; }
 
     Instance(OpStat* stat, const Args&... args)
         : stat(stat), start(stat ? hrc::now() : TimePoint()), argsTuple(args...) {}
