@@ -124,7 +124,9 @@ void Solver::initElimination() {
     int64_t rPtr0 = factorSkel.boardRowPtr[l];
     int64_t rEnd0 = factorSkel.boardRowPtr[l + 1];
     BASPACHO_CHECK_EQ(factorSkel.boardColLump[rEnd0 - 1], l);
-    while (factorSkel.boardColLump[rPtr0] < denseOpsFromLump) rPtr0++;
+    while (factorSkel.boardColLump[rPtr0] < denseOpsFromLump) {
+      rPtr0++;
+    }
     BASPACHO_CHECK_LT(rPtr0,
                       rEnd0);  // will stop before end as l > denseOpsFromLump
     startElimRowPtr[l - denseOpsFromLump] = rPtr0;

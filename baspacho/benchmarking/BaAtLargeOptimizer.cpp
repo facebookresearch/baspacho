@@ -13,7 +13,7 @@
 #include "baspacho/testing/TestingUtils.h"
 
 using namespace BaSpaCho;
-using namespace testing;
+using namespace testing_utils;
 using namespace ba_at_large;
 using namespace std;
 using hrc = chrono::high_resolution_clock;

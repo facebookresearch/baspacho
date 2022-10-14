@@ -30,7 +30,7 @@ using OuterStridedCMajMatK =
                OuterStride>;
 
 struct SimpleSymbolicCtx : CpuBaseSymbolicCtx {
-  SimpleSymbolicCtx(const CoalescedBlockMatrixSkel& skel) : CpuBaseSymbolicCtx(skel) {}
+  explicit SimpleSymbolicCtx(const CoalescedBlockMatrixSkel& skel) : CpuBaseSymbolicCtx(skel) {}
 
   virtual NumericCtxBase* createNumericCtxForType(std::type_index tIdx, int64_t tempBufSize,
                                                   int batchSize) override;

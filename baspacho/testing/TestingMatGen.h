@@ -11,11 +11,11 @@
 #include <set>
 #include <vector>
 
-namespace BaSpaCho::testing {
+namespace BaSpaCho::testing_utils {
 
 //
 struct SparseMatGenerator {
-  SparseMatGenerator(int64_t size, int64_t seed = 37);
+  explicit SparseMatGenerator(int64_t size, int64_t seed = 37);
 
   void connectRanges(int64_t begin1, int64_t end1, int64_t begin2, int64_t end2, double fill,
                      int64_t maxOffset = std::numeric_limits<int64_t>::max());
@@ -42,4 +42,4 @@ struct SparseMatGenerator {
   std::vector<std::set<int64_t>> columns;
 };
 
-}  // end namespace BaSpaCho::testing
+}  // end namespace BaSpaCho::testing_utils

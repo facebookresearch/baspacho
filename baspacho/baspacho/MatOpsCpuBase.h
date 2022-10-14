@@ -41,7 +41,7 @@ struct CpuBaseSymElimCtx : SymElimCtx {
 
 // common code for ref and blas implementations
 struct CpuBaseSymbolicCtx : SymbolicCtx {
-  CpuBaseSymbolicCtx(const CoalescedBlockMatrixSkel& skel) : skel(skel) {}
+  explicit CpuBaseSymbolicCtx(const CoalescedBlockMatrixSkel& skel) : skel(skel) {}
 
   virtual PermutedCoalescedAccessor deviceAccessor() override {
     throw std::runtime_error("no device accessor can be create from cpu-only backed!");

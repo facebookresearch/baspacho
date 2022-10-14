@@ -17,7 +17,7 @@
 #include "baspacho/testing/TestingUtils.h"
 
 using namespace BaSpaCho;
-using namespace testing;
+using namespace testing_utils;
 using namespace std;
 using Vec1 = Eigen::Vector<double, 1>;
 using Mat11 = Eigen::Matrix<double, 1, 1>;

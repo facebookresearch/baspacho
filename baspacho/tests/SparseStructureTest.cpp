@@ -12,10 +12,10 @@
 #include "baspacho/baspacho/Utils.h"
 #include "baspacho/testing/TestingUtils.h"
 
-using namespace BaSpaCho;
-using namespace ::BaSpaCho::testing;
 using namespace std;
 using namespace ::testing;
+using namespace ::BaSpaCho::testing_utils;
+using namespace ::BaSpaCho;
 
 TEST(SparseStructure, Transpose) {
   /*

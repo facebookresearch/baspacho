@@ -14,7 +14,7 @@
 #include <string>
 #include "baspacho/baspacho/SparseStructure.h"
 
-namespace BaSpaCho::testing {
+namespace BaSpaCho::testing_utils {
 
 std::vector<int64_t> randomPermutation(size_t size, int64_t seed);
 
@@ -65,4 +65,4 @@ void naiveAddEliminationEntries(std::vector<std::set<int64_t>>& columns, int64_t
 std::vector<std::set<int64_t>> makeIndependentElimSet(std::vector<std::set<int64_t>>& columns,
                                                       int64_t start, int64_t end);
 
-}  // end namespace BaSpaCho::testing
+}  // end namespace BaSpaCho::testing_utils

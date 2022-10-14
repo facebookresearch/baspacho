@@ -47,7 +47,7 @@ struct BlasSymbolicCtx : CpuBaseSymbolicCtx {
 
 // Blas ops aiming at high performance using BLAS/LAPACK
 struct BlasOps : Ops {
-  BlasOps(int numThreads) : numThreads(numThreads) {}
+  explicit BlasOps(int numThreads) : numThreads(numThreads) {}
   virtual SymbolicCtxPtr createSymbolicCtx(const CoalescedBlockMatrixSkel& skel,
                                            const std::vector<int64_t>& /* permutation */) override {
     // todo: use settings
@@ -113,7 +113,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
       } else {
         struct ElimContext {
           std::vector<int64_t> spanToChainOffset;
-          ElimContext(int64_t numSpans) : spanToChainOffset(numSpans) {}
+          explicit ElimContext(int64_t numSpans) : spanToChainOffset(numSpans) {}
         };
         vector<ElimContext> contexts;
         dispenso::TaskSet taskSet(sym.threadPool);
@@ -826,12 +826,12 @@ struct BlasSolveCtx : CpuBaseSolveCtx<T> {
               std::pair<int64_t, int64_t>* colIndex = (std::pair<int64_t, int64_t>*)alloca(
                   sizeof(std::pair<int64_t, int64_t>) * (rangeSize + 1));
               int64_t added = 0;
-              for (int64_t i = 0; i < rangeSize; i++) {
-                int64_t s = i + rangeBegin;
-                int64_t b = boardRowPtr[i] = skel.boardRowPtr[s];
-                int64_t bEnd = boardRowPtrEnd[i] = skel.boardRowPtr[s + 1] - 1;
+              for (int64_t r = 0; r < rangeSize; r++) {
+                int64_t s = r + rangeBegin;
+                int64_t b = boardRowPtr[r] = skel.boardRowPtr[s];
+                int64_t bEnd = boardRowPtrEnd[r] = skel.boardRowPtr[s + 1] - 1;
                 if (b < bEnd && skel.boardColLump[b] < subBegin) {
-                  colIndex[added++] = {skel.boardColLump[b], i};
+                  colIndex[added++] = {skel.boardColLump[b], r};
                 }
               }
               rangeSize = added;
