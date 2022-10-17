@@ -150,9 +150,11 @@ void EliminationTree::computeSparseElimRanges(const vector<int64_t>& noCrossPoin
       while (k1 < rangeEnd && get<0>(unmergedHeightNode[k1]) == mergeHeight &&
              get<1>(unmergedHeightNode[k1]) <= maxSparseElimNodeSize) {
         int64_t p = parent[k1];
-        double fillAfterMerge = ((double)nodeRows[k1]) / (nodeRows[p] + nodeSize[p]);
-        if (fillAfterMerge > 0.8) {
-          numEasyMerge++;
+        if (p >= 0) {
+          double fillAfterMerge = ((double)nodeRows[k1]) / (nodeRows[p] + nodeSize[p]);
+          if (fillAfterMerge > 0.8) {
+            numEasyMerge++;
+          }
         }
         k1++;
       }
