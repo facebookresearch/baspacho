@@ -29,7 +29,7 @@ Solver::Solver(CoalescedBlockMatrixSkel&& factorSkel_, std::vector<int64_t>&& sp
       canFactorUpTo(canFactorUpTo_),
       ops(std::move(ops_)) {
   if (canFactorUpTo < 0) {
-    canFactorUpTo = factorSkel.order();
+    canFactorUpTo = factorSkel.numSpans();
   }
   symCtx = ops->createSymbolicCtx(factorSkel, permutation);
   for (int64_t l = 0; l + 1 < (int64_t)sparseElimRanges.size(); l++) {
