@@ -75,7 +75,7 @@ build/baspacho/benchmarking/bench -B 1_CHOLMOD
 ```
 Benchmarking on a problem from [Bundle Adjustment in the Large](https://grail.cs.washington.edu/projects/bal/)
 ```
-build/baspacho/benchmarking/BAL_bench ~/BAL/problem-871-527480-pre.txt
+build/baspacho/benchmarking/BAL_bench -i ~/BAL/problem-871-527480-pre.txt
 ```
 Show tests:
 ```
@@ -144,7 +144,7 @@ to fine-tune for your architecture.
 It's possible to benchmark on a bundle-adjustment problem from
 [Bundle Adjustment in the Large](https://grail.cs.washington.edu/projects/bal/) as
 ```
-build/baspacho/benchmarking/BAL_bench ~/BAL/problem-871-527480-pre.txt
+build/baspacho/benchmarking/BAL_bench -i ~/BAL/problem-871-527480-pre.txt
 ```
 ie. the solver is tested on a linear problem which is identical to the 
 Again, if installed, CHOLMOD is tested as a baseline, but only on the 'reduced'

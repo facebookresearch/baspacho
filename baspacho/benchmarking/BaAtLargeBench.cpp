@@ -41,7 +41,7 @@ void computeCost(Data& data) {
   cout << "tot cost: " << totCost << endl;
 }
 
-void testSolvers(Data& data) {
+void testSolvers(Data& data, int nPointParams, int nCameraParams) {
   int64_t numPts = data.points.size();
   int64_t numCams = data.cameras.size();
   int64_t totNumParams = numPts + numCams;
@@ -50,11 +50,11 @@ void testSolvers(Data& data) {
   vector<int64_t> paramSize(totNumParams);
   vector<set<int64_t>> colBlocks(totNumParams);
   for (int64_t i = 0; i < numPts; i++) {  // points go first
-    paramSize[i] = 3;
+    paramSize[i] = nPointParams;
     colBlocks[i].insert(i);
   }
   for (int64_t i = numPts; i < totNumParams; i++) {  // then cams
-    paramSize[i] = 6;
+    paramSize[i] = nCameraParams;
     colBlocks[i].insert(i);
   }
   for (auto& obs : data.observations) {
@@ -126,7 +126,7 @@ void testSolvers(Data& data) {
 
 #if defined(BASPACHO_USE_CUBLAS) || defined(BASPACHO_HAVE_CHOLMOD)
   // create cam-cam system
-  vector<int64_t> camSz(numCams, 6);
+  vector<int64_t> camSz(numCams, nCameraParams);
   SparseStructure elimPtSs = origSs.addIndependentEliminationFill(0, numPts);
   SparseStructure camCamSs = elimPtSs.extractRightBottom(numPts);
 #endif  // defined(BASPACHO_USE_CUBLAS) || defined(BASPACHO_HAVE_CHOLMOD)
@@ -229,7 +229,39 @@ void testSolvers(Data& data) {
 #endif  // BASPACHO_HAVE_CHOLMOD
 }
 
+void help() {
+  cout << "BAL_bench -i file.txt\n"
+       << " -c    num of [c]amera parameters (default: 9)\n"
+       << " -p    num of [p]oint parameters (default: 3)" << std::endl;
+}
+
 int main(int argc, char* argv[]) {
+  int nPointParams = 3;
+  int nCameraParams = 9;
+  std::string input;
+  for (int i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "-h")) {
+      help();
+      return 0;
+    }
+    if (!strcmp(argv[i], "-i") && i < argc - 1) {
+      input = argv[++i];
+    } else if (!strcmp(argv[i], "-c") && i < argc - 1) {
+      nCameraParams = std::stoi(argv[++i]);
+    } else if (!strcmp(argv[i], "-p") && i < argc - 1) {
+      nPointParams = std::stoi(argv[++i]);
+    } else {
+      std::cout << "Error: unknown argument: '" << argv[i] << "'" << std::endl;
+      help();
+      return 0;
+    }
+  }
+  if (input.empty()) {
+    std::cout << "Error: missing input file (-i file.txt)" << std::endl;
+    help();
+    return 0;
+  }
+
   if (argc <= 1) {
     cout << "Usage: prog bal_file.txt" << endl;
     return 1;
@@ -237,9 +269,9 @@ int main(int argc, char* argv[]) {
 
   cout << "Loading data..." << endl;
   Data data;
-  data.load(argv[1], false);
+  data.load(input, false);
 
-  testSolvers(data);
+  testSolvers(data, nPointParams, nCameraParams);
 
   return 0;
 }

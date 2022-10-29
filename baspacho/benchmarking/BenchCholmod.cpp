@@ -18,9 +18,20 @@ using namespace std;
 using hrc = chrono::high_resolution_clock;
 using tdelta = chrono::duration<double>;
 
+constexpr bool kPreApplyReordering = true;
+
 CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
-                                          const SparseStructure& ss,
+                                          const SparseStructure& ssOrig,
                                           const std::vector<int64_t>& nRHSs, int verbose) {
+  SparseStructure ss;
+  if (kPreApplyReordering) {
+    vector<int64_t> permutation = ssOrig.fillReducingPermutation();
+    vector<int64_t> invPerm = inversePermutation(permutation);
+    ss = ssOrig.symmetricPermutation(invPerm, false);
+  } else {
+    ss = ssOrig;
+  }
+
   BASPACHO_CHECK_EQ(paramSize.size(), ss.ptrs.size() - 1);
   vector<int64_t> rowPtr, colInd;
   vector<double> val;
@@ -60,7 +71,7 @@ CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
   cholmod_common cc_;
   cholmod_l_start(&cc_);
   cc_.nmethods = 1;
-  cc_.method[0].ordering = CHOLMOD_AMD;
+  cc_.method[0].ordering = kPreApplyReordering ? CHOLMOD_NATURAL : CHOLMOD_AMD;
   cc_.supernodal = CHOLMOD_AUTO;
   // cc_.supernodal = CHOLMOD_SIMPLICIAL;
   // cc_.supernodal = CHOLMOD_SUPERNODAL;
