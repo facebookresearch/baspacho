@@ -79,6 +79,8 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
 
     cout << "heating up factor..." << endl;
     solver->factor(matData.data());  // heat up
+
+    solver->enableStats();
     solver->resetStats();
     cout << "running real benchmark..." << endl;
 
@@ -109,6 +111,8 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
 
     cout << "heating up factor..." << endl;
     solver->factor(matData.data());  // heat up
+
+    solver->enableStats();
     solver->resetStats();
     cout << "running real benchmark..." << endl;
 
@@ -152,9 +156,11 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
       cout << "heating up factor..." << endl;
       DevMirror<double> matDataGpu(matData);
       solver->factor(matDataGpu.ptr);
-      solver->resetStats();
       cout << "running real benchmark..." << endl;
     }
+
+    solver->enableStats();
+    solver->resetStats();
 
     double factorTime;
     {
@@ -191,9 +197,11 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
       cout << "heating up factor..." << endl;
       DevMirror<double> matDataGpu(matData);
       solver->factor(matDataGpu.ptr);
-      solver->resetStats();
       cout << "running real benchmark..." << endl;
     }
+
+    solver->enableStats();
+    solver->resetStats();
 
     double factorTime;
     {

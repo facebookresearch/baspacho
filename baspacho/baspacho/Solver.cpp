@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "Solver.h"
+#include "baspacho/baspacho/Solver.h"
 #include <dispenso/parallel_for.h>
 #include <Eigen/Eigenvalues>
 #include <iostream>
@@ -564,6 +564,16 @@ void Solver::printStats() const {
        << "\n  solveGemvTStat: " << symCtx->solveGemvTStat.toString()
        << "\n  solveAssVStat: " << symCtx->solveAssVStat.toString()
        << "\n  solveAssVTStat: " << symCtx->solveAssVTStat.toString() << endl;
+}
+
+void Solver::enableStats(bool enable) {
+  for (int64_t l = 0; l < (int64_t)sparseElimRanges.size() - 1; l++) {
+    elimCtxs[l]->elimStat.enabled = enable;
+  }
+  symCtx->potrfStat.enabled = enable;
+  symCtx->trsmStat.enabled = enable;
+  symCtx->sygeStat.enabled = enable;
+  symCtx->asmblStat.enabled = enable;
 }
 
 void Solver::resetStats() {

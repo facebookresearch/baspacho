@@ -123,34 +123,6 @@ void saveAllStats() {
   }
 }
 
-// t ~= a + b*n + c*n^2 + d*n^3
-double potrfModel(double n) {
-  double c[] = {3.975137677492635046e-07, 0.0 /*-7.384080107915980689e-08*/,
-                5.034549574025795499e-09, 6.502293016861755153e-12};
-  return c[0] + n * (c[1] + n * (c[2] + n * c[3]));
-}
-
-double trsmModel(double n, double k) {
-  double c[] = {1.146889197744097553e-06,          6.405404911372597549e-07,
-                0.0 /*-1.310823260065062174e-09*/, 0.0 /*-2.734271880834972249e-10*/,
-                1.383456786664319804e-09,          2.752945944702002428e-11};
-  return c[0] + n * (c[1] + n * c[2]) + k * (c[3] + n * (c[4] + n * c[5]));
-}
-
-double sygeModel(double m, double n, double k) {
-  double c[] = {7.807840624901230139e-07, 0.0 /*-6.422313720003776029e-09*/,
-                5.625680355500814005e-10, 0.0 /*-2.622329776837938154e-08*/,
-                1.591634874952530293e-09, 2.316558505904654318e-11};
-  return c[0] + (m + n) * c[1] + (m * n) * c[2] +  //
-         k * (c[3] + (m + n) * c[4] + (m * n) * c[5]);
-}
-
-double asmblModel(double br, double bc) {
-  double c[] = {3.865027765792498186e-07, 3.542278666359479735e-08, 1.928966025421573037e-07,
-                3.78354960153969549e-09};
-  return c[0] + br * c[1] + bc * c[2] + br * bc * c[3];
-}
-
 BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings,
                              const vector<int64_t> nRHSs = {}, bool verbose = true,
                              bool collectStats = false) {
@@ -167,6 +139,9 @@ BenchResults benchmarkSolver(const SparseProblem& prob, const Settings& settings
   if (collectStats) {
     registerCallbacks(*solver, string(settings.backend == BackendCuda ? "cuda" : "cpu") + "_f" +
                                    to_string(8 * sizeof(double)));
+  }
+  if (verbose || collectStats) {
+    solver->enableStats();
   }
 
   double analysisTime = tdelta(hrc::now() - startAnalysis).count();
@@ -242,6 +217,9 @@ BenchResults benchmarkSolverBatched(const SparseProblem& prob, const Settings& s
   if (collectStats) {
     registerCallbacks(*solver, string(settings.backend == BackendCuda ? "cuda" : "cpu") + "_batch" +
                                    to_string(batchSize) + "_f" + to_string(8 * sizeof(double)));
+  }
+  if (verbose || collectStats) {
+    solver->enableStats();
   }
 
   // generate mock data, make positive def

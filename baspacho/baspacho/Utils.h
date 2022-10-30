@@ -24,13 +24,23 @@ using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using hrc = std::chrono::high_resolution_clock;
 using tdelta = std::chrono::duration<double>;
 
+// synchronization ops
+struct DefaultSyncOps {
+  static void sync() {}
+};
+
 // utility to collect timing stats
 template <typename... Args>
 struct OpStat {
+  template <typename SyncOps>
   struct Instance {
     Instance() : stat(nullptr) {}
 
-    Instance& operator=(Instance&& that) noexcept { stat = that.stat; start = that.start; stat = nullptr; }
+    Instance& operator=(Instance&& that) noexcept {
+      stat = that.stat;
+      start = that.start;
+      stat = nullptr;
+    }
 
     Instance(Instance&& that) noexcept : stat(that.stat), start(that.start) { that.stat = nullptr; }
 
@@ -51,6 +61,7 @@ struct OpStat {
       if (!stat) {
         return;
       }
+      SyncOps::sync();
       double runTime = tdelta(hrc::now() - start).count();
       stat->numRuns++;
       stat->lastTime = runTime;
@@ -80,7 +91,10 @@ struct OpStat {
     lastTime = 0;
   }
 
-  Instance instance(const Args&... args) { return enabled ? Instance(this, args...) : Instance(); }
+  template <typename SyncOps = DefaultSyncOps>
+  Instance<SyncOps> instance(const Args&... args) {
+    return enabled ? Instance<SyncOps>(this, args...) : Instance<SyncOps>();
+  }
 
   bool enabled = true;
   int64_t numRuns = 0;

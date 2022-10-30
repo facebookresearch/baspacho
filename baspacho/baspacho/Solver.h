@@ -47,6 +47,9 @@ class Solver {
   // return an accessor to be used by an on-device kernel (if supported by backend)
   PermutedCoalescedAccessor deviceAccessor() const { return symCtx->deviceAccessor(); }
 
+  // enable stat collection (default: disabled)
+  void enableStats(bool enabled = true);
+
   // print some statistics about timings
   void printStats() const;
 
