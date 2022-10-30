@@ -19,6 +19,12 @@ namespace BaSpaCho {
 // printable timestamp
 std::string timeStamp();
 
+// convert microseconds into a human readable string
+std::string microsecondsString(size_t ms, int precision = 2);
+
+// convert seconds into a human readable string
+std::string secondsToString(double secs, int precision = 2);
+
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 using hrc = std::chrono::high_resolution_clock;
@@ -79,8 +85,8 @@ struct OpStat {
 
   std::string toString() const {
     std::stringstream ss;
-    ss << "#=" << numRuns << ", time=" << totTime << "s, last=" << lastTime << "s, max=" << maxTime
-       << "s";
+    ss << "#=" << numRuns << ", time=" << secondsToString(totTime)
+       << ", last=" << secondsToString(lastTime) << ", max=" << secondsToString(maxTime);
     return ss.str();
   }
 

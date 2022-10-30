@@ -137,15 +137,15 @@ CholmodBenchResults benchmarkCholmodSolve(const vector<int64_t>& paramSize,
                 << " fill)" << std::endl;
       std::cout << "Timings and call stats:"
                 << "\n  gemm calls: " << cc_.cholmod_cpu_gemm_calls
-                << ", time: " << cc_.cholmod_cpu_gemm_time
+                << ", time: " << secondsToString(cc_.cholmod_cpu_gemm_time)
                 << "\n  syrk calls: " << cc_.cholmod_cpu_syrk_calls
-                << ", time: " << cc_.cholmod_cpu_syrk_time
+                << ", time: " << secondsToString(cc_.cholmod_cpu_syrk_time)
                 << "\n  potrf calls: " << cc_.cholmod_cpu_potrf_calls
-                << ", time: " << cc_.cholmod_cpu_potrf_time
+                << ", time: " << secondsToString(cc_.cholmod_cpu_potrf_time)
                 << "\n  trsm calls: " << cc_.cholmod_cpu_trsm_calls
-                << ", time: " << cc_.cholmod_cpu_trsm_time
-                << "\n  assemb1: " << cc_.cholmod_assemble_time
-                << ", assemb2: " << cc_.cholmod_assemble_time2 << std::endl;
+                << ", time: " << secondsToString(cc_.cholmod_cpu_trsm_time)
+                << "\n  assemb1: " << secondsToString(cc_.cholmod_assemble_time)
+                << ", assemb2: " << secondsToString(cc_.cholmod_assemble_time2) << std::endl;
     }
   }
 

@@ -90,10 +90,10 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
 
     solver->printStats();
     double elimTime = solver->internalGetElimCtx(0).elimStat.totTime;
-    cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
-    cout << "Total Factor Time....: " << factorTime << "s" << endl;
-    cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl << endl;
+    cout << "Total Analysis Time..: " << secondsToString(analysisTime) << endl;
+    cout << "Total Factor Time....: " << secondsToString(factorTime) << endl;
+    cout << "Point Schur-Elim Time: " << secondsToString(elimTime) << endl;
+    cout << "Cam-Cam Factor Time..: " << secondsToString(factorTime - elimTime) << endl << endl;
   }
 
   if (1) {
@@ -122,10 +122,10 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
 
     solver->printStats();
     double elimTime = solver->internalGetElimCtx(0).elimStat.totTime;
-    cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
-    cout << "Total Factor Time....: " << factorTime << "s" << endl;
-    cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl << endl;
+    cout << "Total Analysis Time..: " << secondsToString(analysisTime) << endl;
+    cout << "Total Factor Time....: " << secondsToString(factorTime) << endl;
+    cout << "Point Schur-Elim Time: " << secondsToString(elimTime) << endl;
+    cout << "Cam-Cam Factor Time..: " << secondsToString(factorTime - elimTime) << endl << endl;
   }
 
 #if defined(BASPACHO_USE_CUBLAS) || defined(BASPACHO_HAVE_CHOLMOD)
@@ -172,10 +172,10 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
 
     solver->printStats();
     double elimTime = solver->internalGetElimCtx(0).elimStat.totTime;
-    cout << "Total Analysis Time..: " << analysisTime << "s" << endl;
-    cout << "Total Factor Time....: " << factorTime << "s" << endl;
-    cout << "Point Schur-Elim Time: " << elimTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << factorTime - elimTime << "s" << endl << endl;
+    cout << "Total Analysis Time..: " << secondsToString(analysisTime) << endl;
+    cout << "Total Factor Time....: " << secondsToString(factorTime) << endl;
+    cout << "Point Schur-Elim Time: " << secondsToString(elimTime) << endl;
+    cout << "Cam-Cam Factor Time..: " << secondsToString(factorTime - elimTime) << endl << endl;
   }
 #endif  // BASPACHO_USE_CUBLAS
 
@@ -212,8 +212,8 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
     }
 
     solver->printStats();
-    cout << "Cam-Cam Analysis Time: " << analysisTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << factorTime << "s" << endl << endl;
+    cout << "Cam-Cam Analysis Time: " << secondsToString(analysisTime) << endl;
+    cout << "Cam-Cam Factor Time..: " << secondsToString(factorTime) << endl << endl;
   }
 #endif  // BASPACHO_USE_CUBLAS
 
@@ -228,10 +228,10 @@ void testSolvers(Data& data, int nPointParams, int nCameraParams) {
       cout << "running real benchmark..." << endl;
     }
     auto results = benchmarkCholmodSolve(camSz, camCamSs, {1, 10}, true);
-    cout << "Cam-Cam Analysis Time: " << results.analysisTime << "s" << endl;
-    cout << "Cam-Cam Factor Time..: " << results.factorTime << "s" << endl;
+    cout << "Cam-Cam Analysis Time: " << secondsToString(results.analysisTime) << endl;
+    cout << "Cam-Cam Factor Time..: " << secondsToString(results.factorTime) << endl;
     for (auto [nRHS, timing] : results.solveTimes) {
-      cout << "Cam-Cam Solve-" << nRHS << " Time.: " << timing << "s" << endl;
+      cout << "Cam-Cam Solve-" << nRHS << " Time.: " << secondsToString(timing) << endl;
     }
   }
 #endif  // BASPACHO_HAVE_CHOLMOD

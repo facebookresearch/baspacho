@@ -555,15 +555,20 @@ void Solver::printStats() const {
        << "\n  syrk/gemm(" << symCtx->syrkCalls << "+" << symCtx->gemmCalls
        << "): " << symCtx->sygeStat.toString() << "\n  asmbl: " << symCtx->asmblStat.toString()
        << endl;
-  cout << "Solve timings and call stats:"
-       << "\n  solveSparseLStat: " << symCtx->solveSparseLStat.toString()
-       << "\n  solveSparseLtStat: " << symCtx->solveSparseLtStat.toString()
-       << "\n  solveLStat: " << symCtx->solveLStat.toString()
-       << "\n  solveLtStat: " << symCtx->solveLtStat.toString()
-       << "\n  solveGemvStat: " << symCtx->solveGemvStat.toString()
-       << "\n  solveGemvTStat: " << symCtx->solveGemvTStat.toString()
-       << "\n  solveAssVStat: " << symCtx->solveAssVStat.toString()
-       << "\n  solveAssVTStat: " << symCtx->solveAssVTStat.toString() << endl;
+  // skip if no solve operation took place:
+  if (symCtx->solveSparseLStat.numRuns + symCtx->solveSparseLtStat.numRuns +
+          symCtx->solveLStat.numRuns + symCtx->solveLtStat.numRuns >
+      0) {
+    cout << "Solve timings and call stats:"
+         << "\n  solveSparseLStat: " << symCtx->solveSparseLStat.toString()
+         << "\n  solveSparseLtStat: " << symCtx->solveSparseLtStat.toString()
+         << "\n  solveLStat: " << symCtx->solveLStat.toString()
+         << "\n  solveLtStat: " << symCtx->solveLtStat.toString()
+         << "\n  solveGemvStat: " << symCtx->solveGemvStat.toString()
+         << "\n  solveGemvTStat: " << symCtx->solveGemvTStat.toString()
+         << "\n  solveAssVStat: " << symCtx->solveAssVStat.toString()
+         << "\n  solveAssVTStat: " << symCtx->solveAssVTStat.toString() << endl;
+  }
 }
 
 void Solver::enableStats(bool enable) {
