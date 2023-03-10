@@ -296,8 +296,7 @@ void Solver::internalSolveLRange(SolveCtx<T>& slvCtx, const T* matData, int64_t 
     denseOpsFromLump = startLump;
   }
 
-  int64_t numSpans = factorSkel.lumpToSpan[upToLump] - factorSkel.lumpToSpan[denseOpsFromLump];
-  if (numSpans == upToLump - denseOpsFromLump && slvCtx.hasFragmentedOps() && nRHS == 1) {
+  if (factorSkel.numSpans() == factorSkel.numLumps() && slvCtx.hasFragmentedOps() && nRHS == 1) {
     BASPACHO_CHECK_EQ(factorSkel.lumpToSpan[denseOpsFromLump], denseOpsFromLump);
     slvCtx.fragmentedSolveL(matData, denseOpsFromLump, upToLump, vecData);
   } else {
