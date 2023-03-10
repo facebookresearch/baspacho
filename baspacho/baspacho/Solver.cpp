@@ -648,8 +648,8 @@ SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& par
     CoalescedBlockMatrixSkel factorSkel(spanStart, lumpToSpan, ssT.ptrs, ssT.inds);
 
     std::vector<int64_t> sparseElimRangesCopy = sparseElimRanges;
-    return SolverPtr(new Solver(move(factorSkel), std::move(sparseElimRangesCopy),
-                                move(permutation), getBackend(settings),
+    return SolverPtr(new Solver(std::move(factorSkel), std::move(sparseElimRangesCopy),
+                                std::move(permutation), getBackend(settings),
                                 settings.addFillPolicy == AddFillNone ? 0 : givenSparseElimEnd));
   }
 
@@ -746,7 +746,8 @@ SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& par
   int64_t fullSparseElimEnd = fullSparseElimRanges.empty() ? 0 : fullSparseElimRanges.back();
 
   return SolverPtr(new Solver(
-      move(factorSkel), move(fullSparseElimRanges), move(fullInvPerm), getBackend(settings),
+      std::move(factorSkel), std::move(fullSparseElimRanges), std::move(fullInvPerm),
+      getBackend(settings),
       settings.addFillPolicy == AddFillForAutoElims ? fullSparseElimEnd : paramSize.size()));
 }
 
