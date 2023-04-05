@@ -333,7 +333,7 @@ std::vector<int64_t> SparseStructure::fillReducingPermutation() const {
 
 SparseStructure SparseStructure::extractRightBottom(int64_t startRow) {
   int64_t ord = order();
-  BASPACHO_CHECK_LT(startRow, ord);
+  BASPACHO_CHECK_LE(startRow, ord);
   BASPACHO_CHECK_GE(startRow, 0);
   int64_t newOrd = ord - startRow;
 
