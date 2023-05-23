@@ -13,15 +13,15 @@
 #include "baspacho/baspacho/Utils.h"
 
 #ifdef BASPACHO_USE_BLAS
-  #ifdef BASPACHO_USE_MKL
-    #include "mkl.h"
-    #define BLAS_INT MKL_INT
-    #define BASPACHO_USE_TRSM_WORAROUND 0
-  #else
-    #include "baspacho/baspacho/BlasDefs.h"
-    #define BASPACHO_USE_TRSM_WORAROUND 1
-  #endif
-#endif // BASPACHO_USE_BLAS
+#ifdef BASPACHO_USE_MKL
+#include "mkl.h"
+#define BLAS_INT MKL_INT
+#define BASPACHO_USE_TRSM_WORAROUND 0
+#else
+#include "baspacho/baspacho/BlasDefs.h"
+#define BASPACHO_USE_TRSM_WORAROUND 1
+#endif
+#endif  // BASPACHO_USE_BLAS
 
 namespace BaSpaCho {
 
@@ -150,7 +150,7 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
 
   virtual void saveSyrkGemm(int64_t m, int64_t n, int64_t k, const T* data,
                             int64_t offset) override;
-#endif //BASPACHO_USE_BLAS
+#endif  // BASPACHO_USE_BLAS
 
   virtual void prepareAssemble(int64_t targetLump) override {
     const CoalescedBlockMatrixSkel& skel = sym.skel;
@@ -355,7 +355,7 @@ void BlasNumericCtx<float>::saveSyrkGemm(int64_t m, int64_t n, int64_t k, const 
     sym.gemmCalls++;
   }
 }
-#endif //BASPACHO_USE_BLAS
+#endif  // BASPACHO_USE_BLAS
 
 using OuterStride = Eigen::OuterStride<>;
 template <typename T>
@@ -371,8 +371,7 @@ using OuterStridedCMajMatK =
 
 template <typename T>
 struct BlasSolveCtx : CpuBaseSolveCtx<T> {
-  BlasSolveCtx(const BlasSymbolicCtx& sym, int nRHS)
-      : CpuBaseSolveCtx<T>(sym, nRHS), sym(sym) {}
+  BlasSolveCtx(const BlasSymbolicCtx& sym, int nRHS) : CpuBaseSolveCtx<T>(sym, nRHS), sym(sym) {}
   virtual ~BlasSolveCtx() override {}
 
   virtual void sparseElimSolveL(const SymElimCtx& elimData, const T* data, int64_t lumpsBegin,
@@ -538,7 +537,7 @@ struct BlasSolveCtx : CpuBaseSolveCtx<T> {
 
   virtual void gemv(const T* data, int64_t offM, int64_t nRows, int64_t nCols, const T* A,
                     int64_t offA, int64_t lda, T alpha) override;
-#endif //BASPACHO_USE_BLAS
+#endif  // BASPACHO_USE_BLAS
 
   static inline void stridedTransAdd(T* dst, int64_t dstStride, const T* src, int64_t srcStride,
                                      int64_t rSize, int64_t cSize) {
@@ -839,9 +838,9 @@ struct BlasSolveCtx : CpuBaseSolveCtx<T> {
               colIndex[rangeSize] = {std::numeric_limits<int64_t>::max(), 0};
 
               while (rangeSize) {
-                auto [c, i] = colIndex[0];
-                int64_t s = i + rangeBegin;
-                int64_t b = boardRowPtr[i];
+                auto [c, k] = colIndex[0];
+                int64_t s = k + rangeBegin;
+                int64_t b = boardRowPtr[k];
 
                 if (c >= spanBegin) {
                   int64_t sBegin = skel.spanStart[s];
@@ -862,9 +861,9 @@ struct BlasSolveCtx : CpuBaseSolveCtx<T> {
 
                 b++;
                 bool beforeEnd = (b < boardRowPtrEnd[i]) && (skel.boardColLump[b] < subBegin);
-                boardRowPtr[i] = b;
+                boardRowPtr[k] = b;
                 std::pair<int64_t, int64_t> newColIndex(
-                    beforeEnd ? skel.boardColLump[b] : std::numeric_limits<int64_t>::max() - 1, i);
+                    beforeEnd ? skel.boardColLump[b] : std::numeric_limits<int64_t>::max() - 1, k);
 
                 // re-sort column indices
                 int64_t j = 1;
@@ -1100,7 +1099,7 @@ void BlasSolveCtx<float>::gemvT(const float* data, int64_t offM, int64_t nRows, 
   cblas_sgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, nCols, nRHS, nRows, alpha, data + offM,
               nCols, tmpBuf.data(), nRHS, 1.0, A + offA, lda);
 }
-#endif //BASPACHO_USE_BLAS
+#endif  // BASPACHO_USE_BLAS
 
 NumericCtxBase* BlasSymbolicCtx::createNumericCtxForType(std::type_index tIdx, int64_t tempBufSize,
                                                          int batchSize) {
