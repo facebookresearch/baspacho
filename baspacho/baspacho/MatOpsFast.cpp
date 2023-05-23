@@ -860,7 +860,7 @@ struct BlasSolveCtx : CpuBaseSolveCtx<T> {
                 }
 
                 b++;
-                bool beforeEnd = (b < boardRowPtrEnd[i]) && (skel.boardColLump[b] < subBegin);
+                bool beforeEnd = (b < boardRowPtrEnd[k]) && (skel.boardColLump[b] < subBegin);
                 boardRowPtr[k] = b;
                 std::pair<int64_t, int64_t> newColIndex(
                     beforeEnd ? skel.boardColLump[b] : std::numeric_limits<int64_t>::max() - 1, k);
