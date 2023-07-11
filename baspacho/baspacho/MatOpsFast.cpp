@@ -128,17 +128,21 @@ struct BlasNumericCtx : CpuBaseNumericCtx<T> {
       }
     } else {
       if (!sym.useThreads) {
+        vector<T> reusableTmpBuf;
         for (int64_t sRel = 0L; sRel < numElimRows; sRel++) {
-          eliminateVerySparseRowChain(elim, skel, data, sRel);
+          eliminateVerySparseRowChain(elim, skel, data, sRel, reusableTmpBuf);
         }
       } else {
         dispenso::TaskSet taskSet(sym.threadPool);
-        dispenso::parallel_for(taskSet, dispenso::makeChunkedRange(0L, numElimRows, 5L),
-                               [&](int64_t sBegin, int64_t sEnd) {
-                                 for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
-                                   eliminateVerySparseRowChain(elim, skel, data, sRel);
-                                 }
-                               });
+        vector<vector<T>> contexts;
+        dispenso::parallel_for(
+            taskSet, contexts, [=]() -> vector<T> { return vector<T>(); },
+            dispenso::makeChunkedRange(0L, numElimRows, 5L),
+            [&](vector<T>& reusableTmpBuf, int64_t sBegin, int64_t sEnd) {
+              for (int64_t sRel = sBegin; sRel < sEnd; sRel++) {
+                eliminateVerySparseRowChain(elim, skel, data, sRel, reusableTmpBuf);
+              }
+            });
       }
     }
   }

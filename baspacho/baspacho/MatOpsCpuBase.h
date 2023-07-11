@@ -320,7 +320,7 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
 
   static void eliminateVerySparseRowChain(const CpuBaseSymElimCtx& elim,
                                           const CoalescedBlockMatrixSkel& skel, T* data,
-                                          int64_t sRel) {
+                                          int64_t sRel, std::vector<T>& reusableTmpBuf) {
     int64_t s = sRel + elim.spanRowBegin;
     if (elim.rowPtr[sRel] == elim.rowPtr[sRel + 1]) {
       return;
@@ -352,8 +352,8 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
       Eigen::Map<MatRMaj<T>> chainSubMat(data + dataOffset, nRowsChain, lumpSize);
       Eigen::Map<MatRMaj<T>> chainOnwardSubMat(data + dataOffset, nRowsOnward, lumpSize);
 
-      T* tempBuffer = (T*)alloca(sizeof(T) * nRowsOnward * nRowsChain);
-      Eigen::Map<MatRMaj<T>> prod(tempBuffer, nRowsOnward, nRowsChain);
+      reusableTmpBuf.resize(nRowsOnward * nRowsChain);
+      Eigen::Map<MatRMaj<T>> prod(reusableTmpBuf.data(), nRowsOnward, nRowsChain);
       prod.noalias() = chainOnwardSubMat * chainSubMat.transpose();
 
       // assemble blocks, iterating on chain and below chains
@@ -366,7 +366,7 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
         int64_t chainOffset = skel.chainData[bisectStart + pos];
         T* targetData = data + spanOffsetInLump + chainOffset;
 
-        stridedMatSub(targetData, targetLumpSize, tempBuffer + nRowsChain * relRow, nRowsChain,
+        stridedMatSub(targetData, targetLumpSize, prod.data() + nRowsChain * relRow, nRowsChain,
                       s2_size, nRowsChain);
       }
     }
@@ -377,7 +377,6 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
   std::vector<T> tempBuffer;
   std::vector<int64_t> spanToChainOffset;
 };
-
 
 template <typename T>
 struct CpuBaseSolveCtx : SolveCtx<T> {
