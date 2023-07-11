@@ -11,14 +11,15 @@
 #include "baspacho/baspacho/Utils.h"
 
 #ifndef NO_BASPACHO_CHECKS
-  #define BASPACHO_CHECKS
-#endif // NO_BASPACHO_CHECKS
+#define BASPACHO_CHECKS
+#endif  // NO_BASPACHO_CHECKS
 
-#define BASPACHO_CHECK_WHAT(a, msg)                                             \
-  if (!(a)) {                                                                   \
-    std::cerr << "[" << ::BaSpaCho::timeStamp() << " " __FILE__ ":" << __LINE__ \
-              << "] Check failed: " << msg << std::endl;                        \
-    exit(1);                                                                    \
+#define BASPACHO_CHECK_WHAT(a, msg)                                                             \
+  if (!(a)) {                                                                                   \
+    throw std::runtime_error((std::stringstream()                                               \
+                              << "[" << ::BaSpaCho::timeStamp() << " " __FILE__ ":" << __LINE__ \
+                              << "] Check failed: " << msg)                                     \
+                                 .str());                                                       \
   }
 
 #if defined(BASPACHO_CHECKS) && !defined(__CUDACC__)
