@@ -14,12 +14,13 @@
 #define BASPACHO_CHECKS
 #endif  // NO_BASPACHO_CHECKS
 
-#define BASPACHO_CHECK_WHAT(a, msg)                                                             \
-  if (!(a)) {                                                                                   \
-    throw std::runtime_error((std::stringstream()                                               \
-                              << "[" << ::BaSpaCho::timeStamp() << " " __FILE__ ":" << __LINE__ \
-                              << "] Check failed: " << msg)                                     \
-                                 .str());                                                       \
+#define BASPACHO_CHECK_WHAT(a, msg)       \
+  if (!(a)) {                             \
+    std::stringstream _s_;                \
+    _s_ << "[" << ::BaSpaCho::timeStamp()          \
+        << " " __FILE__ ":" << __LINE__            \
+        << "] Check failed: " << msg)              \
+    throw std::runtime_error(_s_.str());  \
   }
 
 #if defined(BASPACHO_CHECKS) && !defined(__CUDACC__)
