@@ -16,6 +16,16 @@
 
 namespace BaSpaCho {
 
+// throw exception with debug message
+void throwError(const char* file, int line, const char* msg);
+
+template <typename V1, typename V2>
+void throwError(const char* file, int line, const char* msg, const V1& v1, const V2& v2) {
+  std::stringstream ss;
+  ss << msg << " (" << v1 << ", " << v2 << ")";
+  throwError(file, line, ss.str().c_str());
+};
+
 // printable timestamp
 std::string timeStamp();
 

@@ -30,6 +30,12 @@ string timeStamp() {
   return ss.str();
 }
 
+void throwError(const char* file, int line, const char* msg) {
+  std::stringstream s;
+  s << "[" << timeStamp() << " " << file << ":" << line << "] Check failed: " << msg;
+  throw std::runtime_error(s.str());
+}
+
 string microsecondsString(size_t microseconds, int precision) {
   ostringstream os;
   if (microseconds < 1000) {
