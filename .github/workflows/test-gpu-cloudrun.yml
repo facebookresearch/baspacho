@@ -1,0 +1,190 @@
+name: GPU Tests (Cloud Run)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_benchmarks:
+        description: 'Run benchmarks after tests'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  GCP_PROJECT: baspacho-gpu-ci
+  GCP_REGION: us-central1
+  JOB_NAME: baspacho-gpu-tests
+  AR_REMOTE_REPO: ghcr-remote
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Compute dependency hash
+      id: deps-hash
+      run: |
+        # Hash files that affect the base image
+        DEPS_HASH=$(cat Dockerfile.gpu-base scripts/run-gpu-tests.sh CMakeLists.txt | sha256sum | cut -c1-16)
+        echo "hash=$DEPS_HASH" >> $GITHUB_OUTPUT
+        echo "Dependency hash: $DEPS_HASH"
+
+    - name: Check if base image exists
+      id: check-image
+      run: |
+        # Check if image with this hash already exists
+        if docker manifest inspect ghcr.io/${{ github.repository }}/gpu-base:${{ steps.deps-hash.outputs.hash }} > /dev/null 2>&1; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "Base image already exists, skipping build"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "Base image needs to be built"
+        fi
+
+    - name: Free up disk space
+      if: steps.check-image.outputs.exists != 'true'
+      run: |
+        # Remove large unused packages to free up space for Docker build
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+        df -h
+
+    - name: Set up Docker Buildx
+      if: steps.check-image.outputs.exists != 'true'
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to GHCR
+      if: steps.check-image.outputs.exists != 'true'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push base image
+      if: steps.check-image.outputs.exists != 'true'
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: Dockerfile.gpu-base
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}/gpu-base:${{ steps.deps-hash.outputs.hash }}
+          ghcr.io/${{ github.repository }}/gpu-base:latest
+        cache-from: |
+          type=registry,ref=ghcr.io/${{ github.repository }}/gpu-base:latest
+        cache-to: type=inline
+
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.GCP_PROJECT }}
+
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+    - name: Create or update Cloud Run job
+      run: |
+        # Check if job exists
+        if gcloud run jobs describe ${{ env.JOB_NAME }} --region=${{ env.GCP_REGION }} > /dev/null 2>&1; then
+          echo "Updating existing job..."
+          gcloud run jobs update ${{ env.JOB_NAME }} \
+            --region=${{ env.GCP_REGION }} \
+            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.AR_REMOTE_REPO }}/ghcr.io/${{ github.repository }}/gpu-base:${{ steps.deps-hash.outputs.hash }} \
+            --set-env-vars="GITHUB_SHA=${{ github.sha }},GITHUB_REPOSITORY=${{ github.repository }}" \
+            --cpu=4 \
+            --memory=16Gi \
+            --max-retries=2 \
+            --task-timeout=45m \
+            --gpu=1 \
+            --gpu-type=nvidia-l4 \
+            --no-gpu-zonal-redundancy
+        else
+          echo "Creating new job..."
+          gcloud run jobs create ${{ env.JOB_NAME }} \
+            --region=${{ env.GCP_REGION }} \
+            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.AR_REMOTE_REPO }}/ghcr.io/${{ github.repository }}/gpu-base:${{ steps.deps-hash.outputs.hash }} \
+            --set-env-vars="GITHUB_SHA=${{ github.sha }},GITHUB_REPOSITORY=${{ github.repository }}" \
+            --cpu=4 \
+            --memory=16Gi \
+            --max-retries=2 \
+            --task-timeout=45m \
+            --gpu=1 \
+            --gpu-type=nvidia-l4 \
+            --execution-environment=gen2 \
+            --no-gpu-zonal-redundancy
+        fi
+
+    - name: Execute Cloud Run job
+      id: execute
+      run: |
+        echo "Starting Cloud Run job execution..."
+        EXECUTION_NAME=$(gcloud run jobs execute ${{ env.JOB_NAME }} \
+          --region=${{ env.GCP_REGION }} \
+          --async \
+          --format='value(metadata.name)')
+
+        echo "Execution: $EXECUTION_NAME"
+        echo "execution_name=$EXECUTION_NAME" >> $GITHUB_OUTPUT
+
+        # Poll for completion
+        # The "Completed" condition has status: True (success), False (failed), or Unknown (still running)
+        echo "Waiting for execution to complete..."
+        while true; do
+          COMPLETED_STATUS=$(gcloud run jobs executions describe "$EXECUTION_NAME" \
+            --region=${{ env.GCP_REGION }} \
+            --format='value(status.conditions[0].status)')
+
+          if [ "$COMPLETED_STATUS" = "True" ]; then
+            echo "Job completed successfully!"
+            break
+          elif [ "$COMPLETED_STATUS" = "False" ]; then
+            echo "Job failed!"
+            exit 1
+          fi
+
+          echo "Status: $COMPLETED_STATUS - waiting..."
+          sleep 10
+        done
+
+    - name: Get job logs
+      if: always()
+      run: |
+        echo "=== Cloud Run Job Logs ==="
+        gcloud beta run jobs executions logs read ${{ steps.execute.outputs.execution_name }} \
+          --region=${{ env.GCP_REGION }} \
+          --limit=1000 || echo "Could not retrieve logs"
+
+    - name: Generate summary
+      if: always()
+      run: |
+        {
+          echo "## GPU Test Results"
+          echo ""
+          echo "- **Commit:** \`${{ github.sha }}\`"
+          echo "- **GPU:** NVIDIA L4"
+          echo "- **Region:** ${{ env.GCP_REGION }}"
+          echo ""
+          if [ "${{ job.status }}" = "success" ]; then
+            echo ":white_check_mark: All GPU tests passed!"
+          else
+            echo ":x: GPU tests failed"
+          fi
+        } >> $GITHUB_STEP_SUMMARY

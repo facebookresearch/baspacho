@@ -1,0 +1,105 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  # Linux CPU-only build and tests
+  linux-cpu:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopenblas-dev cmake build-essential
+
+    - name: Configure CMake
+      run: |
+        cmake -S . -B build \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DBASPACHO_USE_CUBLAS=OFF \
+          -DBASPACHO_USE_METAL=OFF \
+          -DBASPACHO_USE_OPENCL=OFF \
+          -DBASPACHO_BUILD_TESTS=ON \
+          -DBASPACHO_BUILD_EXAMPLES=ON
+
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} -j"$(nproc)"
+
+    - name: Run Tests
+      run: ctest --test-dir build --output-on-failure -j"$(nproc)"
+
+  # Linux with OpenCL (CPU backend via pocl)
+  linux-opencl:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopenblas-dev cmake build-essential \
+          opencl-headers ocl-icd-opencl-dev pocl-opencl-icd libclblast-dev
+
+    - name: Configure CMake
+      run: |
+        cmake -S . -B build \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DBASPACHO_USE_CUBLAS=OFF \
+          -DBASPACHO_USE_METAL=OFF \
+          -DBASPACHO_USE_OPENCL=ON \
+          -DBASPACHO_BUILD_TESTS=ON \
+          -DBASPACHO_BUILD_EXAMPLES=OFF
+
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} -j"$(nproc)"
+
+    - name: Run Tests (OpenCL via PoCL CPU backend)
+      run: ctest --test-dir build --output-on-failure -j"$(nproc)"
+
+  # macOS CPU tests (Metal requires actual hardware)
+  macos-cpu:
+    runs-on: macos-14  # Apple Silicon
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        brew install openblas llvm
+
+    - name: Configure CMake
+      run: |
+        LLVM_PREFIX="$(brew --prefix llvm)"
+        OPENBLAS_PREFIX="$(brew --prefix openblas)"
+        export PATH="${LLVM_PREFIX}/bin:$PATH"
+        export LDFLAGS="-L${OPENBLAS_PREFIX}/lib"
+        export CPPFLAGS="-I${OPENBLAS_PREFIX}/include"
+        cmake -S . -B build \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DBASPACHO_USE_CUBLAS=OFF \
+          -DBASPACHO_USE_METAL=ON \
+          -DBASPACHO_USE_OPENCL=OFF \
+          -DBASPACHO_BUILD_TESTS=ON \
+          -DBASPACHO_BUILD_EXAMPLES=ON \
+          -DBLA_VENDOR=OpenBLAS \
+          -DCMAKE_PREFIX_PATH="${OPENBLAS_PREFIX}"
+
+    - name: Build
+      run: |
+        LLVM_PREFIX="$(brew --prefix llvm)"
+        export PATH="${LLVM_PREFIX}/bin:$PATH"
+        cmake --build build --config ${{ env.BUILD_TYPE }} -j"$(sysctl -n hw.ncpu)"
+
+    - name: Run CPU Tests (Metal tests require real GPU)
+      run: ctest --test-dir build -E "Metal|Cuda|OpenCL" --output-on-failure -j"$(sysctl -n hw.ncpu)"

@@ -1,0 +1,51 @@
+# BaSpaCho GPU CI Base Image
+# Multi-stage build for CUDA-enabled testing on Cloud Run
+
+FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies and Google Cloud SDK
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    libopenblas-dev \
+    ca-certificates \
+    curl \
+    gnupg \
+    apt-transport-https \
+    && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+       > /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+       | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
+    && apt-get update && apt-get install -y --no-install-recommends google-cloud-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install CMake 3.28+ (required by BaSpaCho)
+RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz \
+    | tar -xz -C /usr/local --strip-components=1
+
+# Install sccache for build caching with GCS backend
+RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
+    | tar -xz -C /usr/local/bin --strip-components=1 sccache-v0.8.2-x86_64-unknown-linux-musl/sccache
+
+# Configure sccache to use GCS
+ENV SCCACHE_GCS_BUCKET=baspacho-sccache
+ENV SCCACHE_GCS_RW_MODE=READ_WRITE
+ENV CMAKE_C_COMPILER_LAUNCHER=sccache
+ENV CMAKE_CXX_COMPILER_LAUNCHER=sccache
+ENV CMAKE_CUDA_COMPILER_LAUNCHER=sccache
+
+# Set CUDA environment
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH="${CUDA_HOME}/bin:${PATH}"
+ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
+
+# Create working directory
+WORKDIR /workspace
+
+# Copy the run script
+COPY scripts/run-gpu-tests.sh /run-gpu-tests.sh
+RUN chmod +x /run-gpu-tests.sh
+
+ENTRYPOINT ["/run-gpu-tests.sh"]
