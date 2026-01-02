@@ -10,6 +10,7 @@
 #include <memory>
 #include <unordered_set>
 #include "baspacho/baspacho/CoalescedBlockMatrix.h"
+#include "baspacho/baspacho/CsrTypes.h"
 #include "baspacho/baspacho/MatOps.h"
 #include "baspacho/baspacho/SparseStructure.h"
 
@@ -143,6 +144,38 @@ class Solver {
     BASPACHO_CHECK_LT(i, elimCtxs.size());
     return *elimCtxs[i];
   }
+
+  /**
+   * Load values from CSR format into internal data buffer.
+   *
+   * Maps block values from CSR order (row-major within blocks, blocks in
+   * CSR traversal order) to BaSpaCho's internal coalesced format.
+   *
+   * @param csrRowStart  CSR row pointers [numBlocks+1]
+   * @param csrColInds   CSR column indices [numBlockNonzeros]
+   * @param blockSizes   Size of each block [numBlocks]
+   * @param csrValues    Values in CSR order (row-major within blocks)
+   * @param data         Output data buffer (must be sized to dataSize())
+   */
+  template <typename T>
+  void loadFromCsr(const int64_t* csrRowStart, const int64_t* csrColInds,
+                   const int64_t* blockSizes, const T* csrValues, T* data) const;
+
+  /**
+   * Extract values to CSR format from internal data buffer.
+   *
+   * Inverse of loadFromCsr - extracts block values from internal format
+   * to CSR order.
+   *
+   * @param csrRowStart  CSR row pointers [numBlocks+1]
+   * @param csrColInds   CSR column indices [numBlockNonzeros]
+   * @param blockSizes   Size of each block [numBlocks]
+   * @param data         Input data buffer
+   * @param csrValues    Output CSR values (must be pre-sized)
+   */
+  template <typename T>
+  void extractToCsr(const int64_t* csrRowStart, const int64_t* csrColInds,
+                    const int64_t* blockSizes, const T* data, T* csrValues) const;
 
  private:
   void initElimination();

@@ -751,4 +751,95 @@ SolverPtr createSolver(const Settings& settings, const std::vector<int64_t>& par
       settings.addFillPolicy == AddFillForAutoElims ? fullSparseElimEnd : paramSize.size()));
 }
 
+template <typename T>
+void Solver::loadFromCsr(const int64_t* csrRowStart, const int64_t* csrColInds,
+                         const int64_t* blockSizes, const T* csrValues, T* data) const {
+  // Get the accessor for mapping block positions
+  // The accessor takes original (unpermuted) indices and handles permutation internally
+  auto acc = accessor();
+
+  int64_t numBlocks = permutation.size();
+  int64_t valOffset = 0;  // Current offset in csrValues
+
+  // Iterate through CSR structure (original ordering)
+  for (int64_t origRow = 0; origRow < numBlocks; origRow++) {
+    int64_t rowSize = blockSizes[origRow];
+
+    for (int64_t ptr = csrRowStart[origRow]; ptr < csrRowStart[origRow + 1]; ptr++) {
+      int64_t origCol = csrColInds[ptr];
+      int64_t colSize = blockSizes[origCol];
+      int64_t blockElements = rowSize * colSize;
+
+      // Get internal block position - accessor handles permutation and returns flip flag
+      auto [offset, stride, flipped] = acc.blockOffset(origRow, origCol);
+
+      // Copy values from CSR to internal format
+      // CSR is row-major within blocks
+      // When flipped, the block is stored transposed internally
+      for (int64_t r = 0; r < rowSize; r++) {
+        for (int64_t c = 0; c < colSize; c++) {
+          if (flipped) {
+            // Block is transposed in internal storage
+            data[offset + c * stride + r] = csrValues[valOffset + r * colSize + c];
+          } else {
+            data[offset + r * stride + c] = csrValues[valOffset + r * colSize + c];
+          }
+        }
+      }
+
+      valOffset += blockElements;
+    }
+  }
+}
+
+template <typename T>
+void Solver::extractToCsr(const int64_t* csrRowStart, const int64_t* csrColInds,
+                          const int64_t* blockSizes, const T* data, T* csrValues) const {
+  // Get the accessor for mapping block positions
+  // The accessor takes original (unpermuted) indices and handles permutation internally
+  auto acc = accessor();
+
+  int64_t numBlocks = permutation.size();
+  int64_t valOffset = 0;  // Current offset in csrValues
+
+  // Iterate through CSR structure (original ordering)
+  for (int64_t origRow = 0; origRow < numBlocks; origRow++) {
+    int64_t rowSize = blockSizes[origRow];
+
+    for (int64_t ptr = csrRowStart[origRow]; ptr < csrRowStart[origRow + 1]; ptr++) {
+      int64_t origCol = csrColInds[ptr];
+      int64_t colSize = blockSizes[origCol];
+      int64_t blockElements = rowSize * colSize;
+
+      // Get internal block position - accessor handles permutation and returns flip flag
+      auto [offset, stride, flipped] = acc.blockOffset(origRow, origCol);
+
+      // Copy values from internal format to CSR
+      // When flipped, the block is stored transposed internally
+      for (int64_t r = 0; r < rowSize; r++) {
+        for (int64_t c = 0; c < colSize; c++) {
+          if (flipped) {
+            // Block is transposed in internal storage
+            csrValues[valOffset + r * colSize + c] = data[offset + c * stride + r];
+          } else {
+            csrValues[valOffset + r * colSize + c] = data[offset + r * stride + c];
+          }
+        }
+      }
+
+      valOffset += blockElements;
+    }
+  }
+}
+
+// Explicit template instantiations
+template void Solver::loadFromCsr<float>(const int64_t*, const int64_t*, const int64_t*,
+                                         const float*, float*) const;
+template void Solver::loadFromCsr<double>(const int64_t*, const int64_t*, const int64_t*,
+                                          const double*, double*) const;
+template void Solver::extractToCsr<float>(const int64_t*, const int64_t*, const int64_t*,
+                                          const float*, float*) const;
+template void Solver::extractToCsr<double>(const int64_t*, const int64_t*, const int64_t*,
+                                           const double*, double*) const;
+
 }  // end namespace BaSpaCho

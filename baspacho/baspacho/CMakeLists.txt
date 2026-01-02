@@ -2,6 +2,7 @@
 set(BaSpaCho_sources
     CoalescedBlockMatrix.cpp
     ComputationModel.cpp
+    CsrSolver.cpp
     EliminationTree.cpp
     MatOpsFast.cpp
     MatOpsRef.cpp
