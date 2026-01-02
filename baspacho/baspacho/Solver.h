@@ -183,14 +183,30 @@ using SolverPtr = std::unique_ptr<Solver>;
 
 /**
  * The backend type selectes the engine that will be used for numerical operations. Note that
- * device (Cuda) engines will expect memory allocated on the device, and will crash when provided
- * data on the CPU. Ref/Blas engines in the other hand will only work with CPU data.
+ * device (Cuda/Metal) engines will expect memory allocated on the device, and will crash when
+ * provided data on the CPU. Ref/Blas engines in the other hand will only work with CPU data.
  **/
 enum BackendType {
-  BackendRef,  // reference implementation, not recommended
-  BackendFast,
-  BackendCuda,
+  BackendRef,     // reference implementation, not recommended
+  BackendFast,    // CPU with BLAS (recommended for CPU)
+  BackendCuda,    // NVIDIA GPU with cuBLAS (float and double)
+  BackendMetal,   // Apple Metal GPU backend (macOS/iOS, float only)
+  BackendOpenCL,  // OpenCL GPU backend with CLBlast (portable, float and double)
+  BackendAuto,    // Automatically select best available backend
 };
+
+/**
+ * @brief Detect the best available backend for the current system.
+ *
+ * Priority order:
+ * 1. CUDA (if compiled with BASPACHO_USE_CUBLAS and GPU available)
+ * 2. Metal (if compiled with BASPACHO_USE_METAL on macOS with Apple Silicon)
+ * 3. OpenCL (if compiled with BASPACHO_USE_OPENCL and GPU available)
+ * 4. Fast (CPU with BLAS, always available)
+ *
+ * @return BackendType The detected best backend (never returns BackendAuto or BackendRef)
+ */
+BackendType detectBestBackend();
 
 /**
  * Policy on fill adding to sparse matrix structure. Note that this controls the factor's sparse
