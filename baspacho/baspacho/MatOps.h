@@ -220,4 +220,8 @@ OpsPtr fastOps(int numThreads = 16);
 OpsPtr cudaOps();
 #endif
 
+#ifdef BASPACHO_USE_METAL
+OpsPtr metalOps();
+#endif
+
 }  // end namespace BaSpaCho

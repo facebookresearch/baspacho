@@ -110,6 +110,34 @@ if(BASPACHO_USE_CUBLAS)
   add_compile_definitions(BASPACHO_USE_CUBLAS)
 endif()
 
+# METAL (macOS/iOS GPU backend)
+set(BASPACHO_USE_METAL OFF CACHE BOOL "If on, Metal support is enabled (macOS/iOS only)")
+
+if(BASPACHO_USE_METAL)
+  message("${Cyan}==============================[ Metal ]==================================${ColourReset}")
+
+  if(NOT APPLE)
+    message(FATAL_ERROR "Metal backend is only supported on macOS/iOS")
+  endif()
+
+  # Find Metal frameworks
+  find_library(METAL_FRAMEWORK Metal REQUIRED)
+  find_library(MPS_FRAMEWORK MetalPerformanceShaders REQUIRED)
+  find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+
+  message("* Metal Framework: ${METAL_FRAMEWORK}")
+  message("* MPS Framework: ${MPS_FRAMEWORK}")
+  message("* Foundation Framework: ${FOUNDATION_FRAMEWORK}")
+
+  # Note: We do NOT call enable_language(OBJCXX) here because it causes
+  # cmake to treat ALL .m files as Objective-C++, which breaks projects
+  # that embed BaSpaCho and have their own Objective-C code (like IREE).
+  # Instead, we explicitly set compile flags for .mm files in the
+  # baspacho/baspacho/CMakeLists.txt.
+
+  add_compile_definitions(BASPACHO_USE_METAL)
+endif()
+
 # BLAS. a few possibilities are:
 # * ATLAS
 # * OpenBLAS

@@ -593,18 +593,45 @@ void Solver::resetStats() {
   symCtx->asmblStat.reset();
 }
 
+BackendType detectBestBackend() {
+  // Priority: CUDA > Metal > Fast (CPU)
+#ifdef BASPACHO_USE_CUBLAS
+  // TODO: Could add runtime CUDA device detection here
+  return BackendCuda;
+#elif defined(BASPACHO_USE_METAL)
+  // Metal is available on macOS with Apple Silicon
+  return BackendMetal;
+#else
+  return BackendFast;
+#endif
+}
+
 OpsPtr getBackend(const Settings& settings) {
-  if (settings.backend == BackendFast) {
+  BackendType backend = settings.backend;
+
+  // Handle auto-detection
+  if (backend == BackendAuto) {
+    backend = detectBestBackend();
+  }
+
+  if (backend == BackendFast) {
     return fastOps(settings.numThreads);
-  } else if (settings.backend == BackendCuda) {
+  } else if (backend == BackendCuda) {
 #ifdef BASPACHO_USE_CUBLAS
     return cudaOps();
 #else
     std::cerr << "Baspacho: CUDA not enabled at compile time" << std::endl;
     abort();
 #endif
+  } else if (backend == BackendMetal) {
+#ifdef BASPACHO_USE_METAL
+    return metalOps();
+#else
+    std::cerr << "Baspacho: Metal not enabled at compile time" << std::endl;
+    abort();
+#endif
   }
-  BASPACHO_CHECK(settings.backend == BackendRef);
+  BASPACHO_CHECK(backend == BackendRef);
   return simpleOps();
 }
 
