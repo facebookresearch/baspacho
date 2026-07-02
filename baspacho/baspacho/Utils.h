@@ -140,7 +140,7 @@ bool isWeaklyIncreasing(const std::vector<T>& v, std::size_t begin, std::size_t 
   return i == e;
 }
 
-#ifdef __CUDACC__
+#if defined(__CUDACC__) || defined(__HIPCC__)
 #define __BASPACHO_HOST_DEVICE__ __host__ __device__
 #else
 #define __BASPACHO_HOST_DEVICE__

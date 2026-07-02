@@ -248,7 +248,7 @@ class FactorStore : public FactorStoreBase {
     std::tuple<Eigen::Vector<double, Variables::TangentDim>...> maxRelErr(
         (Eigen::Vector<double, Variables::TangentDim>::Zero())...);
 
-    const int nCheck = std::min(boundFactors.size(), 100UL);
+    const int nCheck = (int)std::min(boundFactors.size(), (size_t)100);
     bool stop = false;
     for (size_t k = 0; k < nCheck; k++) {
       auto& factor = std::get<0>(boundFactors[k]);

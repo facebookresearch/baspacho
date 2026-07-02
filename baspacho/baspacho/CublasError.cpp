@@ -38,8 +38,11 @@ const char* cublasGetErrorEnum(cublasStatus_t error) {
     case CUBLAS_STATUS_NOT_SUPPORTED:
       return "CUBLAS_STATUS_NOT_SUPPORTED";
 
+#ifndef USE_HIP
+    // hipBLAS does not have a separate LICENSE_ERROR; it maps to NOT_SUPPORTED
     case CUBLAS_STATUS_LICENSE_ERROR:
       return "CUBLAS_STATUS_LICENSE_ERROR";
+#endif
 
     default:
       return "CUBLAS_UNKNOWN_ERROR";
@@ -80,12 +83,12 @@ const char* cusparseGetErrorEnum(cusparseStatus_t error) {
     case CUSPARSE_STATUS_ZERO_PIVOT:
       return "CUSPARSE_STATUS_ZERO_PIVOT";
 
-#if CUDART_VERSION >= 10000
+#if defined(USE_HIP) || CUDART_VERSION >= 10000
     case CUSPARSE_STATUS_NOT_SUPPORTED:
       return "CUSPARSE_STATUS_NOT_SUPPORTED";
 #endif
 
-#if CUDART_VERSION >= 11000
+#if defined(USE_HIP) || CUDART_VERSION >= 11000
     case CUSPARSE_STATUS_INSUFFICIENT_RESOURCES:
       return "CUSPARSE_STATUS_INSUFFICIENT_RESOURCES";
 #endif
@@ -131,10 +134,14 @@ const char* cusolverGetErrorEnum(cusolverStatus_t error) {
     case CUSOLVER_STATUS_ZERO_PIVOT:
       return "CUSOLVER_STATUS_ZERO_PIVOT";
 
+#ifndef USE_HIP
+    // hipSOLVER does not have a separate INVALID_LICENSE; it maps to UNKNOWN
     case CUSOLVER_STATUS_INVALID_LICENSE:
       return "CUSOLVER_STATUS_INVALID_LICENSE";
+#endif
 
-#if CUDART_VERSION >= 10000
+// hipSOLVER does not have IRS (iterative refinement) status codes
+#if !defined(USE_HIP) && CUDART_VERSION >= 10000
     case CUSOLVER_STATUS_IRS_PARAMS_NOT_INITIALIZED:
       return "CUSOLVER_STATUS_IRS_PARAMS_NOT_INITIALIZED";
 
@@ -157,7 +164,7 @@ const char* cusolverGetErrorEnum(cusolverStatus_t error) {
       return "CUSOLVER_STATUS_IRS_INFOS_NOT_INITIALIZED";
 #endif
 
-#if CUDART_VERSION >= 11000
+#if !defined(USE_HIP) && CUDART_VERSION >= 11000
     case CUSOLVER_STATUS_IRS_PARAMS_INVALID_PREC:
       return "CUSOLVER_STATUS_IRS_PARAMS_INVALID_PREC";
 

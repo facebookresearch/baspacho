@@ -5,7 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 #include <dispenso/parallel_for.h>
 #include <chrono>
 #include "baspacho/baspacho/DebugMacros.h"
@@ -545,9 +549,9 @@ struct BlasSolveCtx : CpuBaseSolveCtx<T> {
 
   static inline void stridedTransAdd(T* dst, int64_t dstStride, const T* src, int64_t srcStride,
                                      int64_t rSize, int64_t cSize) {
-    for (uint j = 0; j < rSize; j++) {
+    for (unsigned int j = 0; j < (unsigned int)rSize; j++) {
       T* pDst = dst + j;
-      for (uint i = 0; i < cSize; i++) {
+      for (unsigned int i = 0; i < (unsigned int)cSize; i++) {
         *pDst += src[i];
         pDst += dstStride;
       }
@@ -582,9 +586,9 @@ struct BlasSolveCtx : CpuBaseSolveCtx<T> {
 
   static inline void stridedTransSet(T* dst, int64_t dstStride, const T* src, int64_t srcStride,
                                      int64_t rSize, int64_t cSize) {
-    for (uint j = 0; j < rSize; j++) {
+    for (unsigned int j = 0; j < (unsigned int)rSize; j++) {
       T* pDst = dst + j;
-      for (uint i = 0; i < cSize; i++) {
+      for (unsigned int i = 0; i < (unsigned int)cSize; i++) {
         *pDst = src[i];
         pDst += dstStride;
       }

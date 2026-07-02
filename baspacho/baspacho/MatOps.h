@@ -7,7 +7,9 @@
 
 #pragma once
 
+#ifndef _WIN32
 #include <cxxabi.h>
+#endif
 #include <memory>
 #include <typeindex>
 #include "baspacho/baspacho/CoalescedBlockMatrix.h"
@@ -186,10 +188,14 @@ struct SolveCtx : SolveCtxBase {
 // introspection shortcuts
 template <typename T>
 std::string prettyTypeName(const T& t) {
+#ifdef _WIN32
+  return typeid(t).name();
+#else
   char* c_str = abi::__cxa_demangle(typeid(t).name(), nullptr, nullptr, nullptr);
   std::string retv(c_str);
   free(c_str);
   return retv;
+#endif
 }
 
 template <typename T>

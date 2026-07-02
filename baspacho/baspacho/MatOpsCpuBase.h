@@ -211,8 +211,8 @@ struct CpuBaseNumericCtx : NumericCtx<T> {
 
   static inline void stridedMatSub(T* dst, int64_t dstStride, const T* src, int64_t srcStride,
                                    int64_t rSize, int64_t cSize) {
-    for (uint j = 0; j < rSize; j++) {
-      for (uint i = 0; i < cSize; i++) {
+    for (unsigned int j = 0; j < (unsigned int)rSize; j++) {
+      for (unsigned int i = 0; i < (unsigned int)cSize; i++) {
         dst[i] -= src[i];
       }
       dst += dstStride;

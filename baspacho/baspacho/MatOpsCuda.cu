@@ -5,8 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+// NVCC diagnostic suppressions (no-op on HIP)
+#ifndef __HIP_PLATFORM_AMD__
 #pragma nv_diag_suppress 20236
 #pragma nv_diag_suppress 20012
+#endif
 
 #include <chrono>
 #include <iostream>

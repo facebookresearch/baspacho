@@ -25,7 +25,12 @@ string timeStamp() {
   const time_t t_c = system_clock::to_time_t(now);
   stringstream ss;
   struct tm local_tm;
-  ss << put_time(localtime_r(&t_c, &local_tm), "%T") << "." << setfill('0') << setw(3)
+#ifdef _WIN32
+  localtime_s(&local_tm, &t_c);
+#else
+  localtime_r(&t_c, &local_tm);
+#endif
+  ss << put_time(&local_tm, "%T") << "." << setfill('0') << setw(3)
      << ms.count();
   return ss.str();
 }

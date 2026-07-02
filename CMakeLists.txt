@@ -32,11 +32,31 @@ if(NOT WIN32)
   set(White "${Esc}[37m")
 endif()
 
-# CUDA
-set(BASPACHO_USE_CUBLAS ON CACHE BOOL "If on, CUDA support is enabled")
+# GPU backend selection: CUDA or HIP (mutually exclusive)
+option(USE_HIP "Build with HIP for AMD GPUs" OFF)
+set(BASPACHO_USE_CUBLAS ON CACHE BOOL "If on, CUDA support is enabled (ignored if USE_HIP=ON)")
 set(BASPACHO_CUDA_ARCHS "detect" CACHE STRING "List of cuda architecture (eg '60;62;75'), or 'detect', or 'torch'")
 
-if(BASPACHO_USE_CUBLAS)
+if(USE_HIP)
+  # HIP/ROCm build
+  message("${Cyan}===============================[ HIP ]==================================${ColourReset}")
+  # enable_language(HIP) auto-detects the host GPU arch (and errors on a
+  # no-GPU build host); pass -DCMAKE_HIP_ARCHITECTURES=... to override.
+  enable_language(HIP)
+  message("* HIP architectures: ${CMAKE_HIP_ARCHITECTURES}")
+
+  # Find ROCm libraries
+  find_package(hipblas REQUIRED)
+  find_package(hipsolver REQUIRED)
+  find_package(hipsparse REQUIRED)
+
+  add_compile_definitions(USE_HIP)
+  add_compile_definitions(BASPACHO_USE_CUBLAS)
+
+  # HIP compile options
+  set(HIP_HIPCC_FLAGS -Wall -Wextra)
+
+elseif(BASPACHO_USE_CUBLAS)
   message("${Cyan}==============================[ CUDA ]==================================${ColourReset}")
   enable_language(CUDA)
   include(CheckLanguage)

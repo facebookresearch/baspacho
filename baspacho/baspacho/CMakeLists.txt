@@ -9,7 +9,11 @@ set(BaSpaCho_sources
     SparseStructure.cpp
     Utils.cpp)
 
-if(BASPACHO_USE_CUBLAS)
+if(USE_HIP)
+    # HIP build: compile .cu files as HIP
+    list(APPEND BaSpaCho_sources CublasError.cpp MatOpsCuda.cu)
+    set_source_files_properties(MatOpsCuda.cu PROPERTIES LANGUAGE HIP)
+elseif(BASPACHO_USE_CUBLAS)
     # separate recent and legacy cuda archs (which need atomicAdd's workaround)
     set(BASPACHO_LEGACY_CUDA_ARCHITECTURES "")
     set(BASPACHO_RECENT_CUDA_ARCHITECTURES "")
@@ -34,7 +38,16 @@ target_link_libraries(${BASPACHO_LIBRARY}
                       dispenso
                       ${BLAS_LIBRARIES})
 
-if(BASPACHO_USE_CUBLAS)
+if(USE_HIP)
+    # Link HIP libraries
+    target_link_libraries(${BASPACHO_LIBRARY}
+                          hip::host
+                          roc::hipblas
+                          roc::hipsolver
+                          roc::hipsparse)
+    set_target_properties(${BASPACHO_LIBRARY} PROPERTIES HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}")
+    target_compile_options(${BASPACHO_LIBRARY} PRIVATE $<$<COMPILE_LANGUAGE:HIP>:${HIP_HIPCC_FLAGS}>)
+elseif(BASPACHO_USE_CUBLAS)
     # if compiling for legacy, create a target for Cuda code with enabled workaround
     if(BASPACHO_LEGACY_CUDA_ARCHITECTURES)
         add_library(BaSpaCho_legacy_cuda_archs OBJECT MatOpsCuda.cu)

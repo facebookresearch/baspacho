@@ -7,6 +7,7 @@
 
 #include "baspacho/testing/TestingUtils.h"
 #include <algorithm>
+#include <numeric>
 #include <random>
 #include "baspacho/baspacho/DebugMacros.h"
 

@@ -7,6 +7,10 @@
 
 #pragma once
 
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+#include <hip/hip_runtime.h>
+#endif
+
 #include <type_traits>
 
 /**
